@@ -1,8 +1,8 @@
 /**
  * PlayerHud — one player's HUD column, anchored at the mock HUD GROUP
- * origin with rows at the mock's local offsets: WAVE (y=0) and AMMO (y=40);
- * the SCORE row (y=20) arrives with B6. P1's container is rotated 180° so
- * the whole column reads right-side-up from the top edge.
+ * origin with rows at the mock's local offsets: WAVE (y=0), SCORE (y=20), and
+ * AMMO (y=40). P1's container is rotated 180° so the whole column reads
+ * right-side-up from the top edge.
  */
 import Phaser from 'phaser';
 import { CSS, FONTS } from '../tokens';
@@ -19,6 +19,7 @@ export class PlayerHud {
   private ammo: number = AMMO.max;
   private readonly ammoValue: Phaser.GameObjects.Text;
   private readonly waveValue: Phaser.GameObjects.Text;
+  private readonly scoreValue: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene, cfg: PlayerHudConfig) {
     const labelStyle = { fontFamily: FONTS.body, fontSize: '11px', color: CSS.chromeMuted };
@@ -37,13 +38,16 @@ export class PlayerHud {
     };
 
     const [waveLabel, waveValue] = row('WAVE', HUD_ROWS.wave, CSS.ink);
+    const [scoreLabel, scoreValue] = row('SCORE', HUD_ROWS.score, CSS.accent);
     const [ammoLabel, ammoValue] = row('AMMO', HUD_ROWS.ammo, cfg.colorCss);
     this.waveValue = waveValue;
+    this.scoreValue = scoreValue;
     this.ammoValue = ammoValue;
+    this.scoreValue.setText('0');
     this.ammoValue.setText(String(this.ammo));
 
     scene.add
-      .container(cfg.x, cfg.y, [waveLabel, waveValue, ammoLabel, ammoValue])
+      .container(cfg.x, cfg.y, [waveLabel, waveValue, scoreLabel, scoreValue, ammoLabel, ammoValue])
       .setAngle(cfg.angle);
 
     scene.time.addEvent({
@@ -60,6 +64,10 @@ export class PlayerHud {
 
   setWave(n: number): void {
     this.waveValue.setText(String(n));
+  }
+
+  setScore(n: number): void {
+    this.scoreValue.setText(String(n));
   }
 
   canFire(): boolean {

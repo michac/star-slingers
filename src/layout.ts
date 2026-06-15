@@ -280,8 +280,38 @@ export const HUD_P2 = { x: 16, y: 655, angle: 0 } as const;
 /** Mock HUD group row offsets (local y): WAVE 0, SCORE 20, AMMO 40. */
 export const HUD_ROWS = {
   wave: 0,
-  score: 20, // reserved — built in B6
+  score: 20, // built in B6
   ammo: 40,
+} as const;
+
+/**
+ * Scoring (B6) presentation — toughness-weighted points + the floating "+N"
+ * popup. Lives here (not waves.ts) because it's presentation, not difficulty:
+ * points = spec.hits × perHit (1-hit=10, 2-hit=20, 3-hit=30); only the final
+ * pop scores. The popup grows-and-fades in place (orientation-neutral so it
+ * reads the same from both seats); the HUD number is the canonical read.
+ */
+export const SCORE = {
+  perHit: 10, // points = spec.hits × perHit (toughness-weighted)
+  popup: { riseScale: 1.4, durationMs: 650, fontPx: 18 }, // floating "+N"
+} as const;
+
+/**
+ * Wave-clear star-shower (B7 visual): confetti rains down across the field's
+ * top on every wave clear. One persistent ADD-blend emitter (created once in
+ * Explosions, never per-event); tints are sourced from tokens.ts inside
+ * Explosions per the "all color comes from tokens" rule.
+ */
+export const STAR_SHOWER = {
+  count: 90, // total particles per shower, spread across the X positions
+  lifespan: { min: 1100, max: 1800 }, // long fall — confetti drifts the field
+  speed: { min: 40, max: 130 }, // initial spread before gravity takes over
+  angleDeg: { min: 55, max: 125 }, // downward fan (Phaser: 90 = straight down)
+  gravityY: 140, // pulls the confetti down the field
+  scale: { start: 0.85, end: 0.2 },
+  // X positions across the field's top where bursts seed (y just above frame).
+  spreadX: [40, 100, 160, 220, 280, 330] as const,
+  seedY: -8,
 } as const;
 
 export const AMMO = {

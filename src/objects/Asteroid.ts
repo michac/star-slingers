@@ -10,7 +10,7 @@
  */
 import Phaser from 'phaser';
 import { CSS, FONTS } from '../tokens';
-import { APPROACH_X, GAME_WIDTH, STATION } from '../layout';
+import { APPROACH_X, GAME_WIDTH, SCORE, STATION } from '../layout';
 import { type AsteroidSpec } from '../waves';
 import { TEX } from './textures';
 
@@ -112,14 +112,19 @@ export class Asteroid {
     this.pop();
   }
 
-  takeHit(): void {
-    if (this.popping || !this.active) return;
+  /** A rocket hit. Returns the points earned: 0 while it only chips (or is
+   *  already popping/inactive), spec.hits × SCORE.perHit on the pop. Scoring is
+   *  driven purely from here — consume() (station-reached) calls pop() directly
+   *  and never scores. */
+  takeHit(): number {
+    if (this.popping || !this.active) return 0;
     this.hitsLeft -= 1;
     if (this.hitsLeft <= 0) {
       this.pop();
-    } else {
-      this.refreshLabel();
+      return this._spec.hits * SCORE.perHit;
     }
+    this.refreshLabel();
+    return 0;
   }
 
   private pop(): void {

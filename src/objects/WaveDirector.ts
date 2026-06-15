@@ -44,7 +44,9 @@ export class WaveDirector {
     /** Called once the last wave clears — the scene starts the boss (B5). */
     private readonly onRunCleared: () => void,
     /** The shared asteroid burst (B29), forwarded into every Asteroid. */
-    private readonly boom: (x: number, y: number, radius: number) => void
+    private readonly boom: (x: number, y: number, radius: number) => void,
+    /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
+    private readonly celebrate: () => void
   ) {
     const specs1 = asteroidsFor(WAVES[0]);
     // One wrapper per physical lane slot, alive for the whole run (later
@@ -135,6 +137,7 @@ export class WaveDirector {
   private onWaveCleared(): void {
     this.state = 'breather';
     this.station.restoreShield(); // celebration: rings regrow one-by-one
+    this.celebrate(); // B7: star-shower across the field on every wave clear
     if (this.waveIndex + 1 >= WAVES.length) {
       // Short beat so the restore cue lands, then hand off to the final boss
       // (B5) — this replaced the placeholder victory card.

@@ -66,6 +66,9 @@ await page.screenshot({ path: 'smoke-drift.png' });
 // entered the field, fire a head-on rocket, and assert the scene's
 // cumulative hit counter ticks up. Toughness-agnostic and tuning-proof.
 const hitsBefore = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.hits());
+// Scoring seam (B6): the shared score starts at 0 and must climb once a pop lands.
+const scoreBefore = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.score());
+if (scoreBefore !== 0) throw new Error(`score test: expected 0 at boot, got ${scoreBefore}`);
 
 // Wait for some asteroid to be on-screen and pick the toughest such one.
 // Return {i} only when found — a bare index 0 is falsy and -1 is truthy, so
@@ -100,6 +103,36 @@ await page.waitForFunction(
 const hitsAfter = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.hits());
 console.log(`hit test: hit counter ${hitsBefore} -> ${hitsAfter}`);
 await page.screenshot({ path: 'smoke-hit.png' });
+
+// ---- scoring test (B6) ----
+// Only the final pop scores, so a single hit on a multi-hit rock leaves the
+// score at 0. Pick an active rock and fire spec.hits head-on rockets at it
+// (spaced so each lands separately); the pop must drive the shared score > 0.
+const si = await page.waitForFunction(
+  () => {
+    const scene = window.__game.scene.keys['Sandbox'];
+    const i = scene.asteroids.findIndex((a) => a.active && !a.popping && a.sprite.x <= 320);
+    return i >= 0 ? { i } : false;
+  },
+  undefined,
+  { timeout: 30000 }
+).then((h) => h.jsonValue()).then((v) => v.i);
+const hp = await page.evaluate((i) => window.__game.scene.keys['Sandbox'].asteroids[i].spec.hits, si);
+for (let k = 0; k < hp; k++) {
+  await page.evaluate((i) => {
+    const scene = window.__game.scene.keys['Sandbox'];
+    const t = scene.asteroids[i].sprite;
+    scene.rockets.fire('rocket-p1', t.x - 80, t.y, 400, 0);
+  }, si);
+  await page.waitForTimeout(250); // let the rocket reach the rock before the next
+}
+await page.waitForFunction(
+  () => window.__game.scene.keys['Sandbox'].__debug.score() > 0,
+  undefined,
+  { timeout: 5000 }
+);
+const scoreAfter = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.score());
+console.log(`score test: score ${scoreBefore} -> ${scoreAfter} (a ${hp}-hit pop is worth ${hp * 10}) => ${scoreAfter > 0 ? 'OK' : 'FAIL'}`);
 
 // ---- homing test (B14) ----
 // Enable P1 homing, lock an active rock, and fire an OFF-AXIS rocket whose

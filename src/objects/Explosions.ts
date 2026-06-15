@@ -14,12 +14,13 @@
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
-import { EXPLOSION } from '../layout';
+import { EXPLOSION, STAR_SHOWER } from '../layout';
 import { TEX } from './textures';
 
 export class Explosions {
   private readonly shardEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly sparkEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly showerEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
 
   constructor(private readonly scene: Phaser.Scene) {
     this.shardEmitter = scene.add
@@ -46,6 +47,24 @@ export class Explosions {
         emitting: false,
       })
       .setDepth(EXPLOSION.depth);
+
+    // Wave-clear confetti (B7): one persistent shared emitter, like the pop
+    // ones — created once, never per-event. Longer-lived, downward gravity,
+    // wider scale, and a confetti tint cycle across the two player colors + the
+    // accent so the shower reads as celebratory rather than as another burst.
+    this.showerEmitter = scene.add
+      .particles(0, 0, TEX.spark, {
+        lifespan: { ...STAR_SHOWER.lifespan },
+        speed: { ...STAR_SHOWER.speed },
+        angle: { min: STAR_SHOWER.angleDeg.min, max: STAR_SHOWER.angleDeg.max },
+        scale: { start: STAR_SHOWER.scale.start, end: STAR_SHOWER.scale.end },
+        alpha: { start: 1, end: 0 },
+        gravityY: STAR_SHOWER.gravityY,
+        tint: [COLORS.p1, COLORS.p2, COLORS.accent],
+        blendMode: 'ADD',
+        emitting: false,
+      })
+      .setDepth(EXPLOSION.depth);
   }
 
   /** Detonate at (x, y); flash + shockwave size off the asteroid's real radius. */
@@ -54,6 +73,16 @@ export class Explosions {
     this.shockwave(x, y, radius);
     this.shardEmitter.emitParticleAt(x, y, EXPLOSION.debris.count);
     this.sparkEmitter.emitParticleAt(x, y, EXPLOSION.sparks.count);
+  }
+
+  /** Wave-clear celebration (B7): rain confetti down over the whole playfield,
+   *  seeding a batch at a spread of X positions across the field's top. */
+  starShower(): void {
+    const xs = STAR_SHOWER.spreadX;
+    const per = Math.ceil(STAR_SHOWER.count / xs.length);
+    for (const x of xs) {
+      this.showerEmitter.emitParticleAt(x, STAR_SHOWER.seedY, per);
+    }
   }
 
   /** A white core disc under a transient magenta glow that blows out fast. */

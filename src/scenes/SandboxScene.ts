@@ -14,6 +14,7 @@ import { RocketPool } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
 import { Asteroid } from '../objects/Asteroid';
 import { PlayerHud } from '../objects/PlayerHud';
+import { ScoreKeeper } from '../objects/Score';
 import { Station } from '../objects/Station';
 import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
@@ -28,6 +29,7 @@ export class SandboxScene extends Phaser.Scene {
   private rockets!: RocketPool;
   private explosions!: Explosions;
   private station!: Station;
+  private scoreKeeper!: ScoreKeeper;
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
   private failOverlay!: Overlay;
@@ -48,6 +50,7 @@ export class SandboxScene extends Phaser.Scene {
     this.explosions = new Explosions(this); // one shared burst system (B29)
     const hud1 = new PlayerHud(this, { ...HUD_P1, colorCss: CSS.p1 });
     const hud2 = new PlayerHud(this, { ...HUD_P2, colorCss: CSS.p2 });
+    this.scoreKeeper = new ScoreKeeper(this, [hud1, hud2]); // shared score (B6)
     const banner = new WaveBanner(this);
     this.failOverlay = new Overlay(this, FAIL_CONFIG);
     this.victoryOverlay = new Overlay(this, VICTORY_CONFIG);
@@ -68,7 +71,8 @@ export class SandboxScene extends Phaser.Scene {
       [hud1, hud2],
       banner,
       () => this.bossEncounter.start(),
-      (x, y, r) => this.explosions.boom(x, y, r)
+      (x, y, r) => this.explosions.boom(x, y, r),
+      () => this.explosions.starShower() // B7: wave-clear celebration
     );
     this.asteroids = this.waveDirector.asteroids;
 
@@ -144,6 +148,7 @@ export class SandboxScene extends Phaser.Scene {
         state: () => this.waveDirector.stateName,
         wave: () => this.waveDirector.waveNumber,
         hits: () => this.hitCount,
+        score: () => this.scoreKeeper.value,
         setHoming: (player: number, on: boolean) => this.homingToggles[player - 1]?.set(on),
         startBoss: () => {
           this.waveDirector.endRunNow();
@@ -283,7 +288,8 @@ export class SandboxScene extends Phaser.Scene {
     const asteroid = target.getData('ref') as Asteroid | undefined;
     if (!rocket.getData('isRocket') || !asteroid) return;
     this.rockets.recycle(rocket);
-    asteroid.takeHit();
+    const pts = asteroid.takeHit();
+    if (pts > 0) this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
     this.hitCount += 1;
   };
 

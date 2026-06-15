@@ -373,6 +373,27 @@ site per repo, so a subpath — not a second site — is the model). The game at
   runs off-Windows too; Windows path behaviour unchanged. Final tuning of the 2.5×→1× scale still wants
   a Pixel 6 pass (`npm run deploy`), since the references were locked on-device.
 
+## B6 scoring + B7 wave-clear shower (2026-06-15)
+- Landed together as one "the run feels rewarding" beat. **Scoring (B6):** a shared, live-only score
+  on both HUDs' (already-reserved) SCORE row, **toughness-weighted** — `spec.hits × 10`, only the final
+  pop scores, station-reached rocks score nothing. Driven purely from the rocket-hit path:
+  `Asteroid.takeHit()` now **returns** the points (0 on a chip, `hits × perHit` on the pop); `consume()`
+  (station contact) still calls `pop()` directly and never scores. New `ScoreKeeper` (`objects/Score.ts`)
+  holds the total, mirrors both HUDs, and throws an accent **`+N`** popup that **grows-and-fades in place**
+  — orientation-neutral on purpose (a rising number reads upside-down for the top seat). No persistence;
+  `scene.restart()` resets to 0. Boss left unscored (its gauges carry the climax). New `SCORE` block in
+  `layout.ts`; `__debug.score()` added.
+- **Wave-clear shower (B7 visual):** confetti in the two player colors + accent rains across the field on
+  **every** wave clear (top of `WaveDirector.onWaveCleared`, so the wave-4→boss hand-off celebrates too).
+  One persistent shared ADD emitter in `Explosions.ts` (`starShower()`), fired via a `celebrate()` callback
+  threaded exactly like the existing `boom` callback. New `STAR_SHOWER` block; tints from `tokens.ts`.
+  Emission biased **downward** (angle fan 55–125°) after a first headless pass showed a full-360° spread
+  shot half the confetti up off the top edge — the downward fan reads as rain over the playfield.
+- Verify: typecheck + build + smoke green. `smoke.mjs` gained a scoring assertion (score **0 at boot**,
+  **>0 after a pop** — fires `spec.hits` rockets to guarantee a pop, since one hit on a multi-hit rock
+  scores 0). Headless screenshots confirmed the SCORE row on both HUDs and the falling confetti. Final
+  shower tuning wants a Pixel 6 pass; audio + haptics stay queued in B7.
+
 ## Open questions
 All moved to [`backlog.md`](backlog.md) (2026-06-06): **lanes** → resolved by the v5 funnel
 (shared field); **shield rendering** (chunky segments vs smooth arc) → folded into B1 and

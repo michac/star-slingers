@@ -119,6 +119,21 @@ a rocket's history on `recycle()`. New polish item; rel. **B7** (juice).
 
 ---
 
+## Wave-clear star-shower (B7 visual) — `done` (2026-06-15) ✅
+
+Shipped straight in the game (no shelf prototype — it reuses the `Explosions`
+particle system the B29 pass already established). Beating a wave rains **confetti**
+in the two player colors + accent across the field's top, fanning **downward** over
+the whole playfield. One **persistent shared ADD emitter** (created once, never
+per-event — same discipline as the asteroid burst), `Explosions.starShower()` emits a
+batch at a spread of X positions; fired via a `celebrate()` callback threaded
+`SandboxScene → WaveDirector` (the `boom` callback's template). Fires on **every**
+wave clear, including the wave-4→boss hand-off. Tuning in `STAR_SHOWER` (`layout.ts`);
+tints from `tokens.ts`. Final density/fall tuning wants a Pixel 6 pass. (The **audio +
+haptics** half of the wave-clear juice stays queued in backlog **B7**.)
+
+---
+
 ## Queue — to prototype next
 
 _(nothing queued — add the next effect here when we pick it)_
