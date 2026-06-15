@@ -22,6 +22,7 @@ Draft material: ships juke on approach and shoot at the station; shots telegraph
 
 ### B7 · Sound & juice — `idea` [draft]
 Draft material: *thwip* on release; chunky *boom* + sparkle on breaks; shield-segment shatter + worried shake; phone vibration on boss hits; star-shower + cheer on wave clear.
+**Visual half largely delivered by the 2026-06-15 polish pass** — the explosion (B29: flash/shockwave/debris/sparks on breaks), the shield shatter flare + worried shake, and the shot trail are all in. B7 now narrows to **audio** (thwip / boom / cheer), **haptics** (phone vibration), and the **wave-clear celebration** (star-shower).
 
 ### B8 · 5-year-old fairness levers — `partly done` ★ flagged by playtest 1
 The 5yo had real trouble hitting things — leading the target is the core skill and it's hard at 5. **The primary lever shipped as B14 (homing toggle, done 2026-06-09)** — per-player, opt-in, so it only eases his aim. Remaining backups still open: a slower lane so there's always an easy side, telegraphed shots. Sandbox knobs already exist in `src/layout.ts` (asteroid speed/size, rocket maxSpeed) and `src/waves.ts` (difficulty targets). Cuts both ways — keep difficulty interesting for the 9yo too. **Next playtest:** does homing land for the 5yo, and is the gentle-assist turn-rate (`HOMING.turnRateDeg` in `src/layout.ts`) tuned right?
