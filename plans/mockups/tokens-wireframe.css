@@ -1,0 +1,68 @@
+/* ============================================================
+   tokens-wireframe.css — neutral grayscale skin.
+   This file is the THEMING API: every style variant ships its own
+   tokens-<style>.css defining the same variables and paint rules.
+   Geometry lives in the HTML; paint lives here. No inline styles.
+   ============================================================ */
+
+:root {
+  /* fonts */
+  --font-display: 'Courier New', monospace;
+  --font-body: system-ui, sans-serif;
+
+  /* page chrome */
+  --page-bg: #16161c;
+  --chrome-ink: #d6d9e0;
+  --chrome-muted: #8a8f9b;
+  --accent: #d6d9e0;
+  --title-glow: none;
+
+  /* scene */
+  --scene-bg: #101015;
+  --line: #9aa0ae;          /* universal wireframe stroke */
+  --line-dim: #4c505c;
+  --p1: #e8ecf4;            /* TOP player */
+  --p2: #b0b6c4;            /* BOTTOM player */
+  --danger: #c7ccd8;
+  --ink: #f0f2f7;
+}
+
+/* ---- backdrop ---- */
+.bg-wash { fill: none; }
+.stars .star { fill: var(--line-dim); }
+
+/* ---- station + shield (left wall, 3 concentric rings = 3 HP) ---- */
+.hull          { fill: none; stroke: var(--line); stroke-width: 2; }
+.hull-detail   { fill: none; stroke: var(--line-dim); stroke-width: 1.5; }
+.hull-window   { fill: var(--line); }
+/* Solid, not dashed: 3 nested dashed rings read as noise (matches src/tokens.ts). */
+.shield        { fill: none; stroke: var(--line); stroke-width: 4; opacity: .8; }
+
+/* ---- enemies ---- */
+.rock          { fill: none; stroke: var(--danger); stroke-width: 2; }
+.crater        { fill: none; stroke: var(--line-dim); stroke-width: 1.5; }
+.hit-count     { fill: var(--ink); font-size: 14px; }
+.ship-body     { fill: none; stroke: var(--danger); stroke-width: 1.5; }
+.ship-cockpit  { fill: var(--line-dim); }
+.ship-cockpit-core { fill: var(--ink); }
+.laser         { fill: var(--danger); }
+
+/* ---- sling controls (anchor dot + pull-range arc, not a literal slingshot) ---- */
+.sling-anchor-p1 { fill: var(--p1); }
+.sling-anchor-p2 { fill: var(--p2); }
+.sling-range-p1  { fill: none; stroke: var(--p1); stroke-width: 2;
+                   stroke-dasharray: 3 6; stroke-linecap: round; opacity: .65; }
+.sling-range-p2  { fill: none; stroke: var(--p2); stroke-width: 2;
+                   stroke-dasharray: 3 6; stroke-linecap: round; opacity: .65; }
+.sling-pull      { stroke: var(--p1); stroke-width: 2.5; stroke-linecap: round; opacity: .9; }
+.sling-touch     { fill: var(--p1); fill-opacity: .3; stroke: var(--p1); stroke-width: 1.5; }
+.rocket          { fill: var(--p1); }
+.trajectory      { fill: none; stroke: var(--p1); stroke-width: 2;
+                   stroke-dasharray: 2 7; stroke-linecap: round; opacity: .8; }
+
+/* ---- per-player HUDs (P1's group is rotated 180° in the markup) ---- */
+.hud-label { fill: var(--chrome-muted); font-size: 11px; }
+.hud-value { fill: var(--ink); font-size: 16px; }
+.hud-score { fill: var(--accent); font-size: 16px; }
+.ammo-p1   { fill: var(--p1); font-size: 16px; }
+.ammo-p2   { fill: var(--p2); font-size: 16px; }

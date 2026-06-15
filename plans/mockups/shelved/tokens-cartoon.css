@@ -1,0 +1,92 @@
+/* ============================================================
+   tokens-cartoon.css — "Chunky Flat Cartoon" skin.
+   Bold simple shapes, THICK dark outlines, bright saturated
+   toy-like fills, soft rounded corners, flat color (one shade step).
+   Friendly and readable for a 5-year-old; enemies look mischievous,
+   not scary. Display font: Fredoka (rounded). No inline styles.
+   ============================================================ */
+
+:root {
+  /* fonts */
+  --font-display: 'Fredoka', 'Baloo 2', system-ui, sans-serif;
+  --font-body: 'Fredoka', system-ui, sans-serif;
+
+  /* page chrome */
+  --page-bg: #2b2150;
+  --chrome-ink: #fff7e6;
+  --chrome-muted: #b7a9e8;
+  --accent: #ffd23f;
+  --title-glow: 0 3px 0 #1a1330, 0 0 0 transparent;
+
+  /* the bold cartoon outline used everywhere */
+  --outline: #20143a;
+
+  /* scene */
+  --scene-bg: #4a8fd6;        /* sky-blue play space (cheerful) */
+  --line: #20143a;            /* thick dark outline */
+  --line-dim: #3a2a66;
+
+  --p1: #38d4ff;              /* TOP player — sky cyan */
+  --p1-shade: #0fa9e0;
+  --p2: #ffc233;              /* BOTTOM player — sunny yellow/orange */
+  --p2-shade: #ff9d2e;
+  --danger: #ff4d52;          /* cherry-red enemies */
+  --danger-shade: #d62f3e;
+  --station: #18c7b6;         /* teal station */
+  --station-shade: #0e9a8d;
+  --shield: #9bf6ff;
+  --ink: #fff7e6;
+}
+
+/* ---- backdrop ---- */
+.bg-wash { fill: var(--scene-bg); }
+.stars .star { fill: #fff7e6; }
+
+/* ---- station + shield (left wall) — teal, thick outline ---- */
+.hull          { fill: var(--station); stroke: var(--outline); stroke-width: 5;
+                 stroke-linejoin: round; }
+.hull-detail   { fill: var(--station-shade); stroke: var(--outline); stroke-width: 2.5; }
+.hull-window   { fill: var(--shield); stroke: var(--outline); stroke-width: 3; }
+.shield        { fill: none; stroke: var(--shield); stroke-width: 11;
+                 stroke-linecap: round; opacity: .9; }
+.shield-divider{ stroke: var(--outline); stroke-width: 9; stroke-linecap: round; }
+
+/* a soft cartoon under-stroke for the shield (thicker dark backing) */
+.shield-glow .shield { paint-order: stroke; }
+
+/* ---- enemies — cherry-red mischievous rocks & ships ---- */
+.rock          { fill: var(--danger); stroke: var(--outline); stroke-width: 5;
+                 stroke-linejoin: round; }
+.crater        { fill: var(--danger-shade); stroke: none; }
+.hit-count     { fill: var(--ink); font-size: 17px; font-weight: 700;
+                 paint-order: stroke; stroke: var(--outline); stroke-width: 3;
+                 stroke-linejoin: round; }
+.ship-body     { fill: var(--danger); stroke: var(--outline); stroke-width: 4.5;
+                 stroke-linejoin: round; }
+.ship-cockpit  { fill: #fff7e6; stroke: var(--outline); stroke-width: 2.5; }   /* googly eye white */
+.ship-cockpit-core { fill: var(--outline); }                                   /* googly pupil */
+.laser         { fill: var(--p2); stroke: var(--outline); stroke-width: 2; }
+
+/* ---- slingshots + shots — chunky toy wood ---- */
+.sling-frame   { stroke: #8a5a2b; stroke-width: 9; fill: none; stroke-linecap: round;
+                 paint-order: stroke; }
+.sling-band-p1 { stroke: var(--p1); stroke-width: 5; fill: none; stroke-linecap: round; }
+.sling-band-p2 { stroke: var(--p2); stroke-width: 5; fill: none; stroke-linecap: round; }
+.rocket        { fill: var(--p1); stroke: var(--outline); stroke-width: 2.5;
+                 stroke-linejoin: round; }
+.trajectory    { fill: none; stroke: var(--ink); stroke-width: 4;
+                 stroke-dasharray: 1 11; stroke-linecap: round; opacity: .95; }
+
+/* outline pass for the slingshot frame so the wood reads as cartoon */
+.slot-p1 .sling-frame, .slot-p2 .sling-frame { stroke-linejoin: round; }
+
+/* ---- HUD — bright chunky pills of text ---- */
+.ammo-p1   { fill: var(--p1); font-size: 18px; font-weight: 700;
+             paint-order: stroke; stroke: var(--outline); stroke-width: 3.5; stroke-linejoin: round; }
+.ammo-p2   { fill: var(--p2); font-size: 18px; font-weight: 700;
+             paint-order: stroke; stroke: var(--outline); stroke-width: 3.5; stroke-linejoin: round; }
+.hud-label { fill: var(--chrome-muted); font-size: 13px; font-weight: 600; letter-spacing: .5px; }
+.hud-value { fill: var(--ink); font-size: 24px; font-weight: 700;
+             paint-order: stroke; stroke: var(--outline); stroke-width: 3.5; stroke-linejoin: round; }
+.hud-score { fill: var(--accent); font-size: 24px; font-weight: 700;
+             paint-order: stroke; stroke: var(--outline); stroke-width: 3.5; stroke-linejoin: round; }

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Slingers — UI Mock v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --space-0:#070617;
+    --p1:#3fe0ff;      /* TOP player    */
+    --p2:#ffb13b;      /* BOTTOM player */
+    --danger:#ff4d7d;
+    --shield:#8af7ff;
+    --rock:#8a7d6b;
+    --rock-dark:#5d5345;
+    --ink:#eafaff;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:
+      radial-gradient(900px 600px at 15% -10%, #2a1a55 0%, transparent 55%),
+      radial-gradient(700px 700px at 100% 110%, #102a4d 0%, transparent 55%),
+      var(--space-0);
+    color:var(--ink);
+    font-family:'Fredoka',sans-serif;
+    min-height:100%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;padding:24px 12px 36px;
+  }
+  .title{font-family:'Audiowide',cursive;font-size:22px;letter-spacing:1px;color:var(--ink);text-shadow:0 0 18px rgba(63,224,255,.45);text-align:center;}
+  .title small{display:block;font-family:'Fredoka';font-size:11px;letter-spacing:2px;color:#7d8bbd;margin-top:4px;text-transform:uppercase;}
+  .caption{text-align:center;max-width:460px;line-height:1.55;font-size:14px;color:#b9c2e8;}
+  .caption b{color:var(--ink);font-weight:600;}
+
+  .phone{
+    position:relative;width:min(92vw,360px);aspect-ratio:360/740;
+    border-radius:42px;padding:10px;
+    background:linear-gradient(160deg,#1b1c2e,#070713);
+    box-shadow:0 0 0 2px #2c2e44,0 30px 80px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+  .screen{position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;background:linear-gradient(110deg,#0c0b26 0%,#0a0a1c 55%,#0a0814 100%);}
+  svg{display:block;width:100%;height:100%;}
+
+  .controls{display:flex;gap:10px;}
+  .btn{font-family:'Fredoka';font-weight:600;font-size:13px;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);padding:8px 16px;border-radius:999px;cursor:pointer;transition:all .15s ease;}
+  .btn:hover{background:rgba(63,224,255,.14);border-color:var(--p1);}
+
+  .label-tag{font-family:'Fredoka';font-weight:600;font-size:9.5px;fill:#0a0a1c;}
+  .label-bg{fill:#eafaff;opacity:.92;}
+  .leader{stroke:#eafaff;stroke-width:1;opacity:.5;stroke-dasharray:2 2;}
+  .labels-off .annot{display:none;}
+
+  @keyframes jukeY{0%{transform:translateY(-9px);}50%{transform:translateY(11px);}100%{transform:translateY(-9px);}}
+  @keyframes driftX{from{transform:translateX(7px);}to{transform:translateX(-9px);}}
+  @keyframes twinkle{0%,100%{opacity:.25;}50%{opacity:1;}}
+  @keyframes laserL{0%{transform:translateX(0);opacity:0;}20%{opacity:1;}100%{transform:translateX(-120px);opacity:0;}}
+  @keyframes shieldpulse{0%,100%{opacity:.55;}50%{opacity:.9;}}
+  .jukeY{animation:jukeY 3.0s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+  .jukeY2{animation:jukeY 2.3s ease-in-out infinite;transform-box:fill-box;transform-origin:center;}
+  .driftX{animation:driftX 3.6s ease-in-out infinite alternate;transform-box:fill-box;}
+  .driftX2{animation:driftX 4.8s ease-in-out infinite alternate;transform-box:fill-box;}
+  .star{animation:twinkle 2.6s ease-in-out infinite;}
+  .bolt{animation:laserL 1.6s ease-in infinite;transform-box:fill-box;}
+  .bolt2{animation:laserL 1.9s ease-in infinite .5s;transform-box:fill-box;}
+  .shieldarc{animation:shieldpulse 2.8s ease-in-out infinite;}
+</style>
+</head>
+<body>
+  <div class="title">STAR SLINGERS<small>UI Mockup v2 · Players top &amp; bottom</small></div>
+
+  <div class="phone">
+    <div class="screen">
+      <svg id="scene" viewBox="0 0 360 740" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <radialGradient id="nebula" cx="40%" cy="50%" r="80%">
+            <stop offset="0%" stop-color="#241a55" stop-opacity=".5"/>
+            <stop offset="100%" stop-color="#0a0a1c" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="hullg" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#2bd3a8"/>
+            <stop offset="100%" stop-color="#147a64"/>
+          </linearGradient>
+          <linearGradient id="rocketg" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#fff"/>
+            <stop offset="100%" stop-color="#3fe0ff"/>
+          </linearGradient>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <rect width="360" height="740" fill="url(#nebula)"/>
+        <g fill="#dfe9ff">
+          <circle class="star" cx="220" cy="120" r="1.4"/>
+          <circle class="star" cx="300" cy="90" r="1" style="animation-delay:.6s"/>
+          <circle class="star" cx="330" cy="360" r="1.6" style="animation-delay:1.1s"/>
+          <circle class="star" cx="250" cy="640" r="1" style="animation-delay:.3s"/>
+          <circle class="star" cx="200" cy="560" r="1.2" style="animation-delay:1.4s"/>
+          <circle class="star" cx="320" cy="540" r="1" style="animation-delay:.9s"/>
+          <circle class="star" cx="160" cy="380" r="1.1" style="animation-delay:1.7s"/>
+          <circle class="star" cx="290" cy="270" r="1.3" style="animation-delay:.2s"/>
+        </g>
+
+        <!-- ===== STATION (left long side) ===== -->
+        <path d="M0,230 h26 a18 18 0 0 1 18 18 v244 a18 18 0 0 1 -18 18 H0 Z" fill="url(#hullg)"/>
+        <path d="M0,230 h26 a18 18 0 0 1 18 18 v244 a18 18 0 0 1 -18 18 H0 Z" fill="none" stroke="#0c2b24" stroke-width="2"/>
+        <g fill="#0c2b24">
+          <circle cx="22" cy="290" r="6"/><circle cx="22" cy="330" r="6"/>
+          <circle cx="22" cy="410" r="6"/><circle cx="22" cy="450" r="6"/>
+        </g>
+        <rect x="14" y="356" width="16" height="28" rx="4" fill="#bafff0"/>
+
+        <!-- ===== SHIELD ARC (vertical, bulging right, 3 segments) ===== -->
+        <g class="shieldarc" filter="url(#glow)">
+          <path d="M0,250 A120 120 0 0 1 0,490" fill="none" stroke="var(--shield)" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+        </g>
+        <g stroke="#0a0a1c" stroke-width="5">
+          <line x1="100" y1="306" x2="108" y2="309"/>
+          <line x1="100" y1="431" x2="108" y2="434"/>
+        </g>
+
+        <!-- ===== ENEMIES (sweep right -> left) ===== -->
+        <!-- asteroid 1 -->
+        <g class="driftX"><g transform="translate(285,330)">
+          <circle r="21" fill="var(--rock)"/><circle r="21" fill="none" stroke="#3a342a" stroke-width="2"/>
+          <circle cx="-6" cy="-5" r="5" fill="var(--rock-dark)"/><circle cx="8" cy="4" r="4" fill="var(--rock-dark)"/>
+          <text y="6" text-anchor="middle" font-family="Audiowide" font-size="14" fill="#fff">2</text>
+        </g></g>
+        <!-- asteroid 2 -->
+        <g class="driftX2"><g transform="translate(312,520)">
+          <circle r="13" fill="var(--rock)"/><circle r="13" fill="none" stroke="#3a342a" stroke-width="2"/>
+          <circle cx="3" cy="-3" r="3" fill="var(--rock-dark)"/>
+        </g></g>
+
+        <!-- enemy ship 1 (points left, jukes, shoots toward station) -->
+        <g class="jukeY"><g transform="translate(278,210)">
+          <path d="M-15,0 L11,-11 L4,0 L11,11 Z" fill="var(--danger)" stroke="#ffd0dd" stroke-width="1.2"/>
+          <circle cx="2" r="3.5" fill="#2a0b16"/><circle cx="2" r="1.8" fill="#ffe4ec"/>
+          <rect class="bolt" x="-26" y="-1.6" width="14" height="3.2" rx="1.6" fill="#ff4d7d"/>
+        </g></g>
+        <!-- enemy ship 2 -->
+        <g class="jukeY2"><g transform="translate(305,455)">
+          <path d="M-12,0 L9,-9 L3,0 L9,9 Z" fill="var(--danger)" stroke="#ffd0dd" stroke-width="1"/>
+          <circle cx="1.5" r="3" fill="#2a0b16"/>
+          <rect class="bolt2" x="-22" y="-1.4" width="12" height="2.8" rx="1.4" fill="#ff4d7d"/>
+        </g></g>
+
+        <!-- ===== TOP PLAYER (P1, drawn back) ===== -->
+        <g stroke-linecap="round">
+          <!-- handle from top edge + fork opening down -->
+          <path d="M180,18 L180,52 M180,52 L164,80 M180,52 L196,80" stroke="#5a4a7a" stroke-width="5" fill="none"/>
+          <!-- stretched band up to pulled-back pouch -->
+          <path d="M164,80 L180,42 M196,80 L180,42" stroke="var(--p1)" stroke-width="2.5"/>
+          <!-- nocked rocket, pointing into field -->
+          <g transform="translate(180,46) rotate(35)"><path d="M0,-9 L4,2 L0,5 L-4,2 Z" fill="url(#rocketg)"/></g>
+        </g>
+        <text x="206" y="40" font-family="Audiowide" font-size="14" fill="var(--p1)">5</text>
+        <!-- dotted trajectory toward ship 1 -->
+        <path d="M180,50 Q236,118 264,196" fill="none" stroke="#bdefff" stroke-width="2" stroke-dasharray="2 7" stroke-linecap="round" opacity=".8"/>
+
+        <!-- ===== BOTTOM PLAYER (P2, at rest) ===== -->
+        <g stroke-linecap="round">
+          <path d="M180,722 L180,688 M180,688 L164,660 M180,688 L196,660" stroke="#5a4a7a" stroke-width="5" fill="none"/>
+          <path d="M164,660 Q180,672 196,660" stroke="var(--p2)" stroke-width="2.5" fill="none" opacity=".85"/>
+        </g>
+        <text x="206" y="712" font-family="Audiowide" font-size="14" fill="var(--p2)">5</text>
+
+        <!-- ===== HUD (top-left, above station) ===== -->
+        <text x="16" y="40" font-family="Fredoka" font-weight="600" font-size="12" fill="#8b96c7">WAVE</text>
+        <text x="16" y="62" font-family="Audiowide" font-size="20" fill="#eafaff">3</text>
+        <text x="16" y="96" font-family="Fredoka" font-weight="600" font-size="12" fill="#8b96c7">SCORE</text>
+        <text x="16" y="118" font-family="Audiowide" font-size="20" fill="#3fe0ff" filter="url(#glow)">1240</text>
+
+        <!-- ================= ANNOTATIONS ================= -->
+        <g class="annot">
+          <line class="leader" x1="44" y1="370" x2="96" y2="370"/>
+          <g transform="translate(100,364)"><rect class="label-bg" x="0" y="-11" width="118" height="16" rx="8"/><text class="label-tag" x="7" y="1">station you protect</text></g>
+
+          <line class="leader" x1="118" y1="370" x2="150" y2="320"/>
+          <g transform="translate(154,314)"><rect class="label-bg" x="0" y="-11" width="156" height="16" rx="8"/><text class="label-tag" x="7" y="1">shield arc · 3 segments left</text></g>
+
+          <line class="leader" x1="262" y1="330" x2="240" y2="296"/>
+          <g transform="translate(150,290)"><rect class="label-bg" x="0" y="-11" width="156" height="16" rx="8"/><text class="label-tag" x="7" y="1">asteroid · "2" = hits to break</text></g>
+
+          <line class="leader" x1="270" y1="200" x2="208" y2="170"/>
+          <g transform="translate(36,164)"><rect class="label-bg" x="0" y="-11" width="176" height="16" rx="8"/><text class="label-tag" x="7" y="1">enemy ship · jukes &amp; shoots</text></g>
+
+          <line class="leader" x1="200" y1="90" x2="234" y2="90"/>
+          <g transform="translate(238,84)"><rect class="label-bg" x="0" y="-11" width="108" height="16" rx="8"/><text class="label-tag" x="7" y="1">P1 (top) · drags down</text></g>
+
+          <line class="leader" x1="200" y1="660" x2="234" y2="640"/>
+          <g transform="translate(238,634)"><rect class="label-bg" x="0" y="-11" width="112" height="16" rx="8"/><text class="label-tag" x="7" y="1">P2 (bottom) · drags up</text></g>
+
+          <!-- battle direction -->
+          <g opacity=".85">
+            <path d="M300,580 L150,580" stroke="#ff9bbb" stroke-width="2" stroke-dasharray="6 5" fill="none"/>
+            <path d="M150,580 l10,-6 v12 z" fill="#ff9bbb"/>
+            <g transform="translate(168,560)"><rect class="label-bg" x="0" y="-11" width="150" height="16" rx="8" fill="#ffd9e4"/><text class="label-tag" x="7" y="1">enemies sweep toward station</text></g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="controls"><button class="btn" id="toggle">Hide labels</button></div>
+  <p class="caption">Static layout mock — not playable. <b style="color:#3fe0ff">P1 sits at the top</b>, <b style="color:#ffb13b">P2 at the bottom</b>, facing each other. The station runs down the left wall behind its shield arc; <b style="color:#ff4d7d">asteroids and juking ships sweep in from the right</b>. Each player lobs shots across to intercept.</p>
+
+<script>
+  const svg=document.getElementById('scene'),btn=document.getElementById('toggle');
+  btn.addEventListener('click',()=>{svg.classList.toggle('labels-off');btn.textContent=svg.classList.contains('labels-off')?'Show labels':'Hide labels';});
+</script>
+</body>
+</html>

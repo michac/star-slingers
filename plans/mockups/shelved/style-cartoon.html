@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Slingers — Chunky Flat Cartoon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/mock.css">
+<link rel="stylesheet" href="tokens-cartoon.css">
+</head>
+<body>
+  <div class="title">STAR SLINGERS<small>Chunky Flat Cartoon · bold toy shapes</small></div>
+
+  <div class="phone">
+    <div class="screen">
+      <!--
+        CANONICAL LAYOUT — viewBox 360x740 (≈ Pixel 6 portrait).
+        Style variants: copy this file, swap the tokens link, and re-skin.
+        You may redraw art INSIDE the slot <g> elements (and add <defs>),
+        but keep every slot's transform/position, the class hooks, and the
+        annotation block untouched so layout parity holds across variants.
+      -->
+      <svg id="scene" viewBox="0 0 360 740" preserveAspectRatio="xMidYMid slice">
+
+        <defs>
+          <!-- soft sky wash so the flat scene-bg has a gentle vertical lift -->
+          <linearGradient id="skyWash" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#5ba0e6"/>
+            <stop offset="50%" stop-color="#4a8fd6"/>
+            <stop offset="100%" stop-color="#3d7cc4"/>
+          </linearGradient>
+          <!-- one-shade-step toy fills via simple linear gradients (flat-ish) -->
+          <linearGradient id="rocketCartoon" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#9bf6ff"/>
+            <stop offset="55%" stop-color="#38d4ff"/>
+            <stop offset="55%" stop-color="#0fa9e0"/>
+            <stop offset="100%" stop-color="#0fa9e0"/>
+          </linearGradient>
+        </defs>
+
+        <rect class="bg-wash" width="360" height="740" fill="url(#skyWash)"/>
+        <g class="stars">
+          <circle class="star" cx="220" cy="120" r="2.4"/>
+          <circle class="star" cx="300" cy="90"  r="1.8"/>
+          <circle class="star" cx="330" cy="360" r="2.8"/>
+          <circle class="star" cx="250" cy="640" r="1.8"/>
+          <circle class="star" cx="200" cy="560" r="2.2"/>
+          <circle class="star" cx="320" cy="540" r="1.8"/>
+          <circle class="star" cx="160" cy="380" r="2"/>
+          <circle class="star" cx="290" cy="270" r="2.3"/>
+        </g>
+
+        <!-- ===== SLOT: station (left long side) ===== -->
+        <g class="slot-station">
+          <path class="hull" d="M0,230 h26 a18 18 0 0 1 18 18 v244 a18 18 0 0 1 -18 18 H0 Z"/>
+          <g class="hull-details">
+            <circle class="hull-detail" cx="22" cy="290" r="6"/>
+            <circle class="hull-detail" cx="22" cy="330" r="6"/>
+            <circle class="hull-detail" cx="22" cy="410" r="6"/>
+            <circle class="hull-detail" cx="22" cy="450" r="6"/>
+            <rect class="hull-window" x="14" y="356" width="16" height="28" rx="8"/>
+          </g>
+        </g>
+
+        <!-- ===== SLOT: shield arc (vertical, bulging right, 3 segments) ===== -->
+        <g class="slot-shield">
+          <g class="shield-glow">
+            <path class="shield" d="M0,250 A120 120 0 0 1 0,490"/>
+          </g>
+          <g class="shield-dividers">
+            <line class="shield-divider" x1="99" y1="304" x2="110" y2="311"/>
+            <line class="shield-divider" x1="99" y1="429" x2="110" y2="436"/>
+          </g>
+        </g>
+
+        <!-- ===== SLOT: enemies (sweep right -> left) ===== -->
+        <g class="slot-enemies">
+          <!-- asteroid 1: tough, shows hits-to-break — chunky cherry blob -->
+          <g class="driftX"><g class="asteroid" transform="translate(285,330)">
+            <circle class="rock" r="22"/>
+            <circle class="crater" cx="-6" cy="-5" r="5"/>
+            <circle class="crater" cx="8" cy="4" r="4"/>
+            <text class="hit-count display-text" y="6" text-anchor="middle">2</text>
+          </g></g>
+          <!-- asteroid 2: small -->
+          <g class="driftX2"><g class="asteroid" transform="translate(312,520)">
+            <circle class="rock" r="14"/>
+            <circle class="crater" cx="3" cy="-3" r="3.5"/>
+          </g></g>
+          <!-- enemy ship 1: points left, jukes, shoots toward station; mischievous googly eye -->
+          <g class="jukeY"><g class="ship" transform="translate(278,210)">
+            <path class="ship-body" d="M-16,0 L11,-12 Q15,0 11,12 L-16,0 Q-10,0 -16,0 Z"/>
+            <circle class="ship-cockpit" cx="2" r="4.5"/>
+            <circle class="ship-cockpit-core" cx="3" cy="1" r="2.2"/>
+            <rect class="bolt laser" x="-28" y="-2.2" width="16" height="4.4" rx="2.2"/>
+          </g></g>
+          <!-- enemy ship 2 -->
+          <g class="jukeY2"><g class="ship" transform="translate(305,455)">
+            <path class="ship-body" d="M-13,0 L9,-10 Q12,0 9,10 L-13,0 Q-8,0 -13,0 Z"/>
+            <circle class="ship-cockpit" cx="1.5" r="4"/>
+            <circle class="ship-cockpit-core" cx="2.5" cy="1" r="2"/>
+            <rect class="bolt2 laser" x="-24" y="-2" width="14" height="4" rx="2"/>
+          </g></g>
+        </g>
+
+        <!-- ===== SLOT: P1 slingshot (top edge, drawn back, aiming at ship 1) ===== -->
+        <g class="slot-p1">
+          <path class="sling-frame" d="M180,18 L180,52 M180,52 L164,80 M180,52 L196,80"/>
+          <path class="sling-band-p1" d="M164,80 L180,42 M196,80 L180,42"/>
+          <g class="rocket-nock" transform="translate(180,46) rotate(35)">
+            <path class="rocket" d="M0,-10 Q5,-2 4,3 Q0,7 -4,3 Q-5,-2 0,-10 Z"/>
+          </g>
+          <text class="ammo-p1 display-text" x="206" y="42">5</text>
+          <path class="trajectory" d="M180,50 Q236,118 264,196"/>
+        </g>
+
+        <!-- ===== SLOT: P2 slingshot (bottom edge, at rest) ===== -->
+        <g class="slot-p2">
+          <path class="sling-frame" d="M180,722 L180,688 M180,688 L164,660 M180,688 L196,660"/>
+          <path class="sling-band-p2" d="M164,660 Q180,672 196,660"/>
+          <text class="ammo-p2 display-text" x="206" y="714">5</text>
+        </g>
+
+        <!-- ===== SLOT: HUD (top-left, above station) ===== -->
+        <g class="slot-hud">
+          <text class="hud-label body-text" x="16" y="40">WAVE</text>
+          <text class="hud-value display-text" x="16" y="64">3</text>
+          <text class="hud-label body-text" x="16" y="98">SCORE</text>
+          <text class="hud-score display-text" x="16" y="122">1240</text>
+        </g>
+
+        <!-- ===== ANNOTATIONS (do not modify in style variants) ===== -->
+        <g class="annot">
+          <line class="leader" x1="44" y1="370" x2="96" y2="370"/>
+          <g transform="translate(100,364)"><rect class="label-bg" x="0" y="-11" width="118" height="16" rx="8"/><text class="label-tag" x="7" y="1">station you protect</text></g>
+
+          <line class="leader" x1="118" y1="370" x2="150" y2="320"/>
+          <g transform="translate(154,314)"><rect class="label-bg" x="0" y="-11" width="156" height="16" rx="8"/><text class="label-tag" x="7" y="1">shield arc · 3 segments left</text></g>
+
+          <line class="leader" x1="262" y1="330" x2="240" y2="296"/>
+          <g transform="translate(150,290)"><rect class="label-bg" x="0" y="-11" width="156" height="16" rx="8"/><text class="label-tag" x="7" y="1">asteroid · "2" = hits to break</text></g>
+
+          <line class="leader" x1="270" y1="200" x2="208" y2="170"/>
+          <g transform="translate(36,164)"><rect class="label-bg" x="0" y="-11" width="176" height="16" rx="8"/><text class="label-tag" x="7" y="1">enemy ship · jukes &amp; shoots</text></g>
+
+          <line class="leader" x1="200" y1="90" x2="234" y2="90"/>
+          <g transform="translate(238,84)"><rect class="label-bg" x="0" y="-11" width="108" height="16" rx="8"/><text class="label-tag" x="7" y="1">P1 (top) · drags down</text></g>
+
+          <line class="leader" x1="200" y1="660" x2="234" y2="640"/>
+          <g transform="translate(238,634)"><rect class="label-bg" x="0" y="-11" width="112" height="16" rx="8"/><text class="label-tag" x="7" y="1">P2 (bottom) · drags up</text></g>
+
+          <g class="annot-flow">
+            <path class="leader" d="M300,580 L150,580"/>
+            <path class="label-bg" d="M150,580 l10,-6 v12 z"/>
+            <g transform="translate(168,560)"><rect class="label-bg" x="0" y="-11" width="150" height="16" rx="8"/><text class="label-tag" x="7" y="1">enemies sweep toward station</text></g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="controls"><button class="btn" id="toggle">Hide labels</button></div>
+  <p class="caption">Static layout mock — not playable. <b>P1 sits at the top</b>, <b>P2 at the bottom</b>, facing each other. The station runs down the left wall behind its shield arc; <b>asteroids and juking ships sweep in from the right</b>. Each player lobs shots across to intercept.</p>
+
+  <script src="../shared/mock.js"></script>
+</body>
+</html>

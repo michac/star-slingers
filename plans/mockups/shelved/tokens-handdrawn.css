@@ -1,0 +1,87 @@
+/* ============================================================
+   tokens-handdrawn.css — "Soft Hand-Drawn Storybook" skin.
+   Warm muted crayon palette on a cozy night-sky paper backdrop.
+   Wobbly outlines (crayon turbulence filter from the HTML <defs>),
+   rounded organic shapes, hand-drawn sparkle stars.
+   Geometry lives in the HTML; paint lives here. No inline styles.
+   ============================================================ */
+
+:root {
+  /* fonts — handwritten storybook */
+  --font-display: 'Gochi Hand', 'Patrick Hand', cursive;
+  --font-body: 'Patrick Hand', 'Gochi Hand', cursive;
+
+  /* page chrome */
+  --page-bg: #211d2e;
+  --chrome-ink: #f3e6cf;
+  --chrome-muted: #b59f9a;
+  --accent: #ffd28a;
+  --title-glow: 0 2px 0 rgba(0,0,0,.35);
+
+  /* scene */
+  --scene-bg: #2a2440;       /* dark-but-cozy night-sky paper */
+  --paper-deep: #221d36;
+  --line: #f0e3c8;           /* warm crayon stroke */
+  --line-dim: #9a8aa8;
+  --p1: #ffd98a;             /* TOP player — warm honey */
+  --p2: #ffb38a;             /* BOTTOM player — soft peach */
+  --danger: #ef8a86;         /* muted coral */
+  --shieldc: #b8e6d8;        /* soft mint glow */
+  --rock: #c9a888;           /* warm clay */
+  --rock-dark: #8f7458;
+  --ink: #fff4dd;
+  --crayon: url(#crayon);    /* turbulence filter handle */
+}
+
+/* ---- backdrop: cozy painted night sky ---- */
+.bg-wash { fill: url(#skywash); }
+
+/* hand-drawn sparkle stars (4-point twinkle marks via stroke) */
+.stars .star {
+  fill: var(--ink);
+  stroke: #fff;
+  stroke-width: .5;
+  filter: url(#crayonSoft);
+}
+
+/* ---- station + shield (left wall) ---- */
+.hull          { fill: url(#hullpaper); stroke: #6b4f3a; stroke-width: 3.5;
+                 stroke-linejoin: round; filter: var(--crayon); }
+.hull-detail   { fill: #7a5a40; stroke: #4f3a28; stroke-width: 2;
+                 filter: var(--crayon); }
+.hull-window   { fill: #fbe9b8; stroke: #6b4f3a; stroke-width: 2;
+                 stroke-linejoin: round; filter: var(--crayon); }
+.shield        { fill: none; stroke: var(--shieldc); stroke-width: 7;
+                 stroke-linecap: round; stroke-dasharray: 30 22;
+                 opacity: .85; filter: url(#crayonGlow); }
+.shield-divider{ stroke: var(--scene-bg); stroke-width: 9; stroke-linecap: round; }
+
+/* ---- enemies ---- */
+.rock          { fill: var(--rock); stroke: #5e472f; stroke-width: 3;
+                 stroke-linejoin: round; filter: var(--crayon); }
+.crater        { fill: var(--rock-dark); stroke: none; filter: var(--crayon); }
+.hit-count     { fill: #3a2a1c; font-size: 18px; }
+.ship-body     { fill: var(--danger); stroke: #8f3f3c; stroke-width: 2.5;
+                 stroke-linejoin: round; filter: var(--crayon); }
+.ship-cockpit  { fill: #fff4dd; stroke: #8f3f3c; stroke-width: 1.5; }
+.ship-cockpit-core { fill: #8f3f3c; }
+.laser         { fill: #ffcaa0; stroke: #d98a5a; stroke-width: 1; filter: var(--crayon); }
+
+/* ---- slingshots + shots ---- */
+.sling-frame   { stroke: #8a6a4a; stroke-width: 6; fill: none;
+                 stroke-linecap: round; filter: var(--crayon); }
+.sling-band-p1 { stroke: var(--p1); stroke-width: 3.5; fill: none;
+                 stroke-linecap: round; filter: var(--crayon); }
+.sling-band-p2 { stroke: var(--p2); stroke-width: 3.5; fill: none;
+                 stroke-linecap: round; opacity: .9; filter: var(--crayon); }
+.rocket        { fill: var(--p1); stroke: #b88a3a; stroke-width: 1.5;
+                 stroke-linejoin: round; filter: var(--crayon); }
+.trajectory    { fill: none; stroke: var(--ink); stroke-width: 3;
+                 stroke-dasharray: 1.5 9; stroke-linecap: round; opacity: .75; }
+
+/* ---- HUD ---- */
+.ammo-p1   { fill: var(--p1); font-size: 20px; }
+.ammo-p2   { fill: var(--p2); font-size: 20px; }
+.hud-label { fill: var(--chrome-muted); font-size: 14px; letter-spacing: .5px; }
+.hud-value { fill: var(--ink); font-size: 28px; }
+.hud-score { fill: var(--accent); font-size: 28px; }

@@ -1,0 +1,81 @@
+/* ============================================================
+   tokens-vector.css — "Classic Asteroids" vector-monitor skin (v3).
+   1979 vector CRT: pure black, unfilled stroked polygons, thin
+   glowing lines. White = primary, phosphor-green = P1, amber = P2.
+   No fills anywhere except text, window/dish cores, and laser bolts.
+   ============================================================ */
+
+:root {
+  /* fonts */
+  --font-display: 'Share Tech Mono', 'Courier New', monospace;
+  --font-body: 'Share Tech Mono', 'Courier New', monospace;
+
+  /* page chrome */
+  --page-bg: #000000;
+  --chrome-ink: #f4fff4;
+  --chrome-muted: #6f8f6f;
+  --accent: #ffffff;
+  --title-glow: 0 0 6px rgba(255,255,255,.55), 0 0 16px rgba(120,255,140,.25);
+
+  /* scene */
+  --scene-bg: #000000;
+  --line: #f2fff4;          /* vector white phosphor */
+  --line-dim: #4a6a4a;
+  --p1: #66ff8a;            /* TOP player — phosphor green */
+  --p2: #ffb43a;            /* BOTTOM player — amber */
+  --danger: #ffffff;        /* enemies stay white-line in classic vector */
+  --ink: #f2fff4;
+}
+
+/* ---- backdrop: pure black void ---- */
+.bg-wash { fill: #000000; }
+.stars .star { fill: var(--line); }
+
+/* faint CRT phosphor glow on every stroked element */
+.hull, .hull-detail, .hull-window,
+.rock, .crater, .ship-body,
+.sling-range-p1, .sling-range-p2, .sling-pull, .sling-touch,
+.sling-anchor-p1, .sling-anchor-p2,
+.trajectory, .rocket, .laser,
+.hit-count, .ammo-p1, .ammo-p2,
+.hud-value, .hud-score, .shield {
+  filter: url(#vglow);
+}
+.shield-glow { filter: url(#vglow-soft); }
+
+/* ---- station + shield (left wall, concentric half-rings) ---- */
+.hull          { fill: none; stroke: var(--line); stroke-width: 1.8; stroke-linejoin: round; }
+.hull-detail   { fill: none; stroke: var(--line-dim); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.hull-window   { fill: var(--line); }   /* window/dish cores glow as solid phosphor dots */
+.shield        { fill: none; stroke: var(--p1); stroke-width: 2;
+                 stroke-linecap: round; stroke-dasharray: 6 9; opacity: .85; }
+.shield-divider{ stroke: var(--scene-bg); stroke-width: 6; }
+
+/* ---- enemies: unfilled angular polygons ---- */
+.rock          { fill: none; stroke: var(--danger); stroke-width: 1.8; stroke-linejoin: round; }
+.crater        { fill: none; stroke: var(--line-dim); stroke-width: 1.4; }
+.hit-count     { fill: var(--ink); font-size: 14px; }
+.ship-body     { fill: none; stroke: var(--danger); stroke-width: 1.6; stroke-linejoin: round; }
+.ship-cockpit  { fill: none; stroke: var(--line-dim); stroke-width: 1.4; }
+.ship-cockpit-core { fill: var(--ink); }
+.laser         { fill: var(--p2); }   /* enemy fire reads as a hot amber dash */
+
+/* ---- sling controls (anchor dot + pull-range arc, not a literal slingshot) ---- */
+.sling-anchor-p1 { fill: var(--p1); stroke: var(--p1); stroke-width: 1; }
+.sling-anchor-p2 { fill: var(--p2); stroke: var(--p2); stroke-width: 1; }
+.sling-range-p1  { fill: none; stroke: var(--p1); stroke-width: 1.6;
+                   stroke-dasharray: 3 7; stroke-linecap: round; opacity: .7; }
+.sling-range-p2  { fill: none; stroke: var(--p2); stroke-width: 1.6;
+                   stroke-dasharray: 3 7; stroke-linecap: round; opacity: .7; }
+.sling-pull      { stroke: var(--p1); stroke-width: 1.8; stroke-linecap: round; opacity: .95; }
+.sling-touch     { fill: var(--p1); fill-opacity: .18; stroke: var(--p1); stroke-width: 1.4; }
+.rocket          { fill: var(--p1); stroke: var(--p1); stroke-width: 1; }
+.trajectory      { fill: none; stroke: var(--p1); stroke-width: 1.5;
+                   stroke-dasharray: 2 7; stroke-linecap: round; opacity: .75; }
+
+/* ---- per-player HUDs (P1's group is rotated 180° in the markup) ---- */
+.hud-label { fill: var(--chrome-muted); font-size: 11px; letter-spacing: 1px; }
+.hud-value { fill: var(--ink); font-size: 16px; }
+.hud-score { fill: var(--p1); font-size: 16px; }
+.ammo-p1   { fill: var(--p1); font-size: 16px; }
+.ammo-p2   { fill: var(--p2); font-size: 16px; }

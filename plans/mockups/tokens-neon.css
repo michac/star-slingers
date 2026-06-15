@@ -1,0 +1,97 @@
+/* ============================================================
+   tokens-neon.css — Neon Arcade / Synthwave skin (v3 theming API).
+   Deep purple-black space, hot glowing strokes:
+   cyan P1, amber-orange P2, magenta enemies, fat feGaussianBlur glow.
+   Pizza-Hut-cabinet-in-1985 energy. Geometry lives in the HTML;
+   all paint lives here. No inline styles.
+   ============================================================ */
+
+:root {
+  /* fonts */
+  --font-display: 'Audiowide', 'Courier New', monospace;
+  --font-body: 'Audiowide', system-ui, sans-serif;
+
+  /* page chrome */
+  --page-bg: #070417;
+  --chrome-ink: #f2e9ff;
+  --chrome-muted: #9d7fd6;
+  --accent: #ff5ec7;
+  --title-glow: 0 0 6px #38f6ff, 0 0 18px rgba(56,246,255,.6),
+                0 0 34px rgba(255,94,199,.45);
+
+  /* scene */
+  --scene-bg: #0a0626;
+  --line: #ff5ec7;          /* hot magenta wireframe stroke */
+  --line-dim: #6a3fb0;
+  --p1: #38f6ff;            /* TOP player — hot cyan */
+  --p2: #ffb13b;            /* BOTTOM player — amber-orange */
+  --danger: #ff2e88;        /* magenta enemies */
+  --ink: #fdf4ff;
+}
+
+/* ---- page chrome backdrop: synthwave nebula + horizon glow ---- */
+body {
+  background:
+    radial-gradient(900px 620px at 18% -12%, #43156e 0%, transparent 58%),
+    radial-gradient(760px 760px at 100% 112%, #0e2a6b 0%, transparent 56%),
+    radial-gradient(600px 400px at 50% 120%, #ff2e88 0%, transparent 55%),
+    var(--page-bg);
+}
+.screen {
+  background:
+    radial-gradient(120% 80% at 50% 116%, rgba(255,46,136,.22) 0%, transparent 60%),
+    linear-gradient(180deg, #150a3a 0%, #0a0626 52%, #07061e 100%);
+}
+.btn:hover { background: rgba(56,246,255,.16); border-color: var(--p1); }
+
+/* ---- backdrop inside scene ---- */
+.bg-wash { fill: url(#neon-neb); }
+.stars .star { fill: #bfefff; filter: url(#neon-glow-sm); }
+
+/* ---- station (half-disc ring station) + shield (left wall) ---- */
+.hull          { fill: url(#neon-hull); stroke: #38f6ff; stroke-width: 2;
+                 filter: url(#neon-glow-sm); }
+.hull-detail   { fill: none; stroke: #38f6ff; stroke-width: 1.5; }
+.hull-window   { fill: #bffcff; filter: url(#neon-glow-sm); }
+.shield        { fill: none; stroke: url(#neon-shield); stroke-width: 5;
+                 stroke-linecap: round; opacity: .9; }
+.shield-glow   { filter: url(#neon-glow); }
+.shield-divider{ stroke: #0a0626; stroke-width: 7; }
+
+/* ---- enemies ---- */
+.rock          { fill: #2a0e3e; stroke: var(--danger); stroke-width: 2.5;
+                 filter: url(#neon-glow-sm); }
+.crater        { fill: none; stroke: #ff7ab3; stroke-width: 1.5; }
+.hit-count     { fill: var(--ink); font-size: 14px; }
+.ship-body     { fill: #2a0a22; stroke: var(--danger); stroke-width: 1.8;
+                 filter: url(#neon-glow-sm); }
+.ship-cockpit  { fill: #ffd0e6; }
+.ship-cockpit-core { fill: #fff; }
+.laser         { fill: #ff2e88; filter: url(#neon-glow-sm); }
+
+/* ---- sling controls (anchor dot + pull-range arc, not a literal slingshot) ---- */
+.sling-anchor-p1 { fill: var(--p1); stroke: #bffcff; stroke-width: 1.5;
+                   filter: url(#neon-glow-sm); }
+.sling-anchor-p2 { fill: var(--p2); stroke: #ffe6bf; stroke-width: 1.5;
+                   filter: url(#neon-glow-sm); }
+.sling-range-p1  { fill: none; stroke: var(--p1); stroke-width: 2.5;
+                   stroke-dasharray: 3 7; stroke-linecap: round; opacity: .8;
+                   filter: url(#neon-glow-sm); }
+.sling-range-p2  { fill: none; stroke: var(--p2); stroke-width: 2.5;
+                   stroke-dasharray: 3 7; stroke-linecap: round; opacity: .8;
+                   filter: url(#neon-glow-sm); }
+.sling-pull      { stroke: var(--p1); stroke-width: 2.8; stroke-linecap: round;
+                   opacity: .95; filter: url(#neon-glow-sm); }
+.sling-touch     { fill: var(--p1); fill-opacity: .28; stroke: var(--p1);
+                   stroke-width: 1.8; filter: url(#neon-glow-sm); }
+.rocket          { fill: url(#neon-rocket); filter: url(#neon-glow-sm); }
+.trajectory      { fill: none; stroke: var(--p1); stroke-width: 2;
+                   stroke-dasharray: 2 7; stroke-linecap: round; opacity: .85;
+                   filter: url(#neon-glow-sm); }
+
+/* ---- per-player HUDs (P1's group is rotated 180° in the markup) ---- */
+.hud-label { fill: var(--chrome-muted); font-size: 11px; letter-spacing: 1px; }
+.hud-value { fill: var(--ink); font-size: 16px; filter: url(#neon-glow-sm); }
+.hud-score { fill: var(--accent); font-size: 16px; filter: url(#neon-glow); }
+.ammo-p1   { fill: var(--p1); font-size: 16px; filter: url(#neon-glow-sm); }
+.ammo-p2   { fill: var(--p2); font-size: 16px; filter: url(#neon-glow-sm); }

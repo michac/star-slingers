@@ -1,0 +1,93 @@
+/* ============================================================
+   tokens-pixel.css — Retro Pixel Art skin (8/16-bit, NES-ish).
+   Limited palette, hard-stepped shapes, crisp edges, dithered
+   star field. No gradients, no blur. Paint only; geometry in HTML.
+   ============================================================ */
+
+:root {
+  /* fonts — pixel display face, small sizes */
+  --font-display: 'Press Start 2P', 'Courier New', monospace;
+  --font-body: 'Press Start 2P', 'Courier New', monospace;
+
+  /* page chrome — NES dark palette */
+  --page-bg: #0b0b1a;
+  --chrome-ink: #e8e8f0;
+  --chrome-muted: #7c7ca8;
+  --accent: #fce000;
+  --title-glow: 2px 2px 0 #d82800, -2px -2px 0 #0058f8;
+
+  /* scene — NES-ish limited palette */
+  --scene-bg: #08081a;
+  --line: #3cbcfc;          /* bright cyan structural */
+  --line-dim: #5878f8;
+  --p1: #3cbcfc;            /* TOP player — NES cyan/blue */
+  --p2: #f8b800;            /* BOTTOM player — NES amber */
+  --danger: #f83800;       /* NES red */
+  --ink: #fcfcfc;
+
+  /* extra pixel palette */
+  --px-rock: #a87858;
+  --px-rock-dark: #6c4828;
+  --px-rock-lite: #d8a868;
+  --px-hull: #00a844;
+  --px-hull-dark: #006410;
+  --px-hull-lite: #58f898;
+  --px-shield: #58f8f8;
+  --px-shield-dim: #1858a8;
+  --px-ship-edge: #fca0c0;
+  --px-star-a: #fcfcfc;
+  --px-star-b: #b8b8f8;
+}
+
+/* every painted shape reads as hard pixels */
+#scene { shape-rendering: crispEdges; }
+
+/* ---- backdrop ---- */
+.bg-wash { fill: var(--scene-bg); }
+/* dithered star field: blocky stars, alternating palette */
+.stars .star { fill: var(--px-star-a); }
+.stars .star:nth-child(odd) { fill: var(--px-star-b); }
+
+/* dither pattern swatches (used by <defs> patterns) */
+.dither-bg          { fill: none; }
+.dither-dot         { fill: #14143a; }
+.dither-shield-dot  { fill: var(--px-shield-dim); }
+
+/* ---- station + shield (left wall) ---- */
+.hull          { fill: none; stroke: var(--px-hull-dark); stroke-width: 2; }
+.hull-px       { fill: var(--px-hull); }
+.hull-shade    { fill: var(--px-hull-dark); }
+.hull-lite     { fill: var(--px-hull-lite); }
+.hull-detail   { fill: var(--px-hull-dark); stroke: none; }
+.hull-window   { fill: var(--px-shield); stroke: var(--ink); stroke-width: 1.5; }
+
+.shield        { fill: none; stroke: var(--px-shield); stroke-width: 6;
+                 stroke-linecap: butt; stroke-dasharray: 6 6; opacity: .85; }
+.shield-stud   { fill: var(--ink); }
+.shield-divider{ stroke: var(--scene-bg); stroke-width: 8; }
+
+/* ---- enemies ---- */
+.rock          { fill: var(--px-rock); stroke: var(--px-rock-dark); stroke-width: 2;
+                 stroke-linejoin: miter; }
+.crater        { fill: var(--px-rock-dark); stroke: none; }
+.hit-count     { fill: var(--ink); font-size: 9px; }
+.ship-body     { fill: var(--danger); stroke: var(--px-ship-edge); stroke-width: 1.5;
+                 stroke-linejoin: miter; }
+.ship-cockpit  { fill: #2a0b16; }
+.ship-cockpit-core { fill: var(--ink); }
+.laser         { fill: var(--danger); }
+
+/* ---- slingshots + shots ---- */
+.sling-frame   { stroke: #8848fc; stroke-width: 6; fill: none; stroke-linecap: butt; }
+.sling-band-p1 { stroke: var(--p1); stroke-width: 3; fill: none; stroke-linecap: butt; }
+.sling-band-p2 { stroke: var(--p2); stroke-width: 3; fill: none; stroke-linecap: butt; opacity: .9; }
+.rocket        { fill: var(--p1); stroke: var(--ink); stroke-width: 1; stroke-linejoin: miter; }
+.trajectory    { fill: none; stroke: var(--p1); stroke-width: 3;
+                 stroke-dasharray: 3 6; stroke-linecap: butt; opacity: .8; }
+
+/* ---- HUD ---- */
+.ammo-p1   { fill: var(--p1); font-size: 9px; }
+.ammo-p2   { fill: var(--p2); font-size: 9px; }
+.hud-label { fill: var(--chrome-muted); font-size: 7px; }
+.hud-value { fill: var(--ink); font-size: 14px; }
+.hud-score { fill: var(--accent); font-size: 14px; }

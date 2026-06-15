@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Star Slingers — Prototype Shelf</title>
+  <link rel="preload" as="font" type="font/woff2" href="../fonts/Audiowide-Regular.woff2" crossorigin />
+  <style>
+    @font-face {
+      font-family: "Audiowide";
+      src: url('../fonts/Audiowide-Regular.woff2') format('woff2');
+      font-display: swap;
+    }
+    :root {
+      --bg: #0a0626;
+      --ink: #e8e3ff;
+      --muted: #8a82b8;
+      --cyan: #46f0ff;
+      --magenta: #ff5ec7;
+      --card: #160f3a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+    body {
+      font-family: "Audiowide", system-ui, sans-serif;
+      padding: 28px 20px 48px;
+      -webkit-text-size-adjust: 100%;
+    }
+    header { margin-bottom: 22px; }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 6px;
+      letter-spacing: 1px;
+      color: var(--cyan);
+      text-shadow: 0 0 12px rgba(70, 240, 255, 0.5);
+    }
+    .sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    ul.gallery { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+    ul.gallery a {
+      display: flex; align-items: center; gap: 12px;
+      padding: 18px 18px; border-radius: 14px;
+      background: var(--card); border: 1px solid rgba(70, 240, 255, 0.25);
+      color: var(--ink); text-decoration: none; font-size: 16px;
+      transition: border-color .15s, box-shadow .15s, transform .05s;
+    }
+    ul.gallery a:active { transform: scale(0.99); }
+    ul.gallery a::before {
+      content: "▸"; color: var(--magenta); font-size: 18px;
+      text-shadow: 0 0 10px rgba(255, 94, 199, 0.6);
+    }
+    ul.gallery a:hover { border-color: var(--cyan); box-shadow: 0 0 18px rgba(70, 240, 255, 0.25); }
+    ul.gallery li.empty { color: var(--muted); font-size: 14px; padding: 18px; }
+    footer { margin-top: 26px; font-size: 11px; color: var(--muted); }
+    footer a { color: var(--cyan); }
+    h2 { font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 28px 0 4px; }
+    h2 + .sub { margin: 0 0 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Prototype Shelf</h1>
+    <p class="sub">
+      Experiments pushed here for review — not the game.<br />
+      Built <!--BUILT-->. The game lives at <a href="../" style="color:var(--cyan)">../</a>.
+    </p>
+  </header>
+  <ul class="gallery">
+    <!--EXPERIMENTS-->
+  </ul>
+  <h2>Locked references</h2>
+  <p class="sub">Decided designs — the spec to match when building into the game.</p>
+  <ul class="gallery">
+    <!--REFERENCES-->
+  </ul>
+  <footer>Star Slingers · auto-listed by the prototype-gallery vite plugin</footer>
+</body>
+</html>

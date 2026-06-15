@@ -1,0 +1,23 @@
+{
+  "name": "star-slingers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "deploy": "node deploy.mjs",
+    "deploy:prototype": "node deploy-prototype.mjs"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "playwright-core": "^1.60.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}

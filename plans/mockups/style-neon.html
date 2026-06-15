@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Slingers — Neon Arcade (canonical v5)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/mock.css">
+<link rel="stylesheet" href="tokens-neon.css">
+</head>
+<body>
+  <div class="title">STAR SLINGERS<small>Neon Arcade · Synthwave 1985 · compact edge station · canonical v5</small></div>
+
+  <div class="phone">
+    <div class="screen">
+      <!--
+        COMPACT EDGE-STATION LAYOUT (CANONICAL v5, decided 2026-06-06) — viewBox 360x740.
+        Changes from canonical v3: the station shrinks to the core size proven
+        in the v4 mock (hull r=24, shield r=46) and slides MOSTLY OFF-SCREEN —
+        centered at (-10,370), so only a sliver of hull and a short shield arc
+        poke in from the left wall. The viewBox clips the rest; full circles
+        are drawn and the edge does the cropping. Enemies still sweep
+        right -> left as in v3, but now FUNNEL toward the station on approach
+        (ships' noses point at it), so the whole field stays shared and either
+        player can cover for the other. Slings, HUDs, controls unchanged.
+
+        Style variants: copy this file, swap the tokens link, and re-skin.
+        You may redraw art INSIDE the slot <g> elements (and add <defs>),
+        but keep every slot's transform/position, the class hooks, and the
+        annotation block untouched so layout parity holds across variants.
+      -->
+      <svg id="scene" viewBox="0 0 360 740" preserveAspectRatio="xMidYMid slice">
+
+        <defs>
+          <radialGradient id="neon-neb" cx="42%" cy="48%" r="85%">
+            <stop offset="0%" stop-color="#3a1370" stop-opacity=".55"/>
+            <stop offset="60%" stop-color="#1a0b46" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="#0a0626" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="neon-hull" cx="22%" cy="50%" r="90%">
+            <stop offset="0%" stop-color="#16306a"/>
+            <stop offset="100%" stop-color="#0b1130"/>
+          </radialGradient>
+          <linearGradient id="neon-shield" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38f6ff"/>
+            <stop offset="50%" stop-color="#9d6bff"/>
+            <stop offset="100%" stop-color="#ff5ec7"/>
+          </linearGradient>
+          <linearGradient id="neon-rocket" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#38f6ff"/>
+          </linearGradient>
+          <filter id="neon-glow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="neon-glow-sm" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <rect class="bg-wash" width="360" height="740"/>
+        <g class="stars">
+          <circle class="star" cx="220" cy="120" r="1.4"/>
+          <circle class="star" cx="300" cy="110" r="1"/>
+          <circle class="star" cx="330" cy="360" r="1.6"/>
+          <circle class="star" cx="250" cy="640" r="1"/>
+          <circle class="star" cx="200" cy="560" r="1.2"/>
+          <circle class="star" cx="320" cy="540" r="1"/>
+          <circle class="star" cx="160" cy="380" r="1.1"/>
+          <circle class="star" cx="290" cy="270" r="1.3"/>
+        </g>
+
+        <!-- ===== SLOT: station (core-sized, centered at -10,370 — mostly
+                 off-screen; the viewBox crops it to a sliver on the left wall) ===== -->
+        <g class="slot-station">
+          <circle class="hull" cx="-10" cy="370" r="24"/>
+          <g class="hull-details">
+            <circle class="hull-window" cx="5" cy="361" r="2.5"/>
+            <circle class="hull-window" cx="3" cy="383" r="2"/>
+          </g>
+        </g>
+
+        <!-- ===== SLOT: shield (3 concentric rings = 3 HP, outermost
+                 shatters first; decided 2026-06-06, supersedes the earlier
+                 3-segments-along-the-arc — segments implied a positional
+                 weak spot the player can't control) ===== -->
+        <g class="slot-shield">
+          <g class="shield-glow">
+            <circle class="shield" cx="-10" cy="370" r="46"/>
+            <circle class="shield" cx="-10" cy="370" r="39"/>
+            <circle class="shield" cx="-10" cy="370" r="32"/>
+          </g>
+        </g>
+
+        <!-- ===== SLOT: enemies (sweep right -> left, funneling toward the
+                 station as they close in — ships' noses point at it) ===== -->
+        <g class="slot-enemies">
+          <!-- asteroid 1: tough, shows hits-to-break -->
+          <g class="driftX"><g class="asteroid" transform="translate(285,330)">
+            <circle class="rock" r="21"/>
+            <circle class="crater" cx="-6" cy="-5" r="5"/>
+            <circle class="crater" cx="8" cy="4" r="4"/>
+            <text class="hit-count display-text" y="6" text-anchor="middle">2</text>
+          </g></g>
+          <!-- asteroid 2: small -->
+          <g class="driftX2"><g class="asteroid" transform="translate(312,520)">
+            <circle class="rock" r="13"/>
+            <circle class="crater" cx="3" cy="-3" r="3"/>
+          </g></g>
+          <!-- enemy ship 1: jukes, nose + lasers aimed at the station -->
+          <g class="jukeY"><g class="ship" transform="translate(278,210) rotate(-29)">
+            <path class="ship-body" d="M-15,0 L11,-11 L4,0 L11,11 Z"/>
+            <circle class="ship-cockpit" cx="2" r="3.5"/>
+            <circle class="ship-cockpit-core" cx="2" r="1.8"/>
+            <rect class="bolt laser" x="-26" y="-1.6" width="14" height="3.2" rx="1.6"/>
+          </g></g>
+          <!-- enemy ship 2 -->
+          <g class="jukeY2"><g class="ship" transform="translate(305,455) rotate(15)">
+            <path class="ship-body" d="M-12,0 L9,-9 L3,0 L9,9 Z"/>
+            <circle class="ship-cockpit" cx="1.5" r="3"/>
+            <rect class="bolt2 laser" x="-22" y="-1.4" width="12" height="2.8" rx="1.4"/>
+          </g></g>
+        </g>
+
+        <!-- ===== SLOT: P1 control (top edge, shown MID-PULL) =====
+             Identical to v3: anchor dot at (180,100), finger dragged to
+             (150,55), rocket nocked, trajectory previews into the field. -->
+        <g class="slot-p1">
+          <path class="sling-range-p1" d="M110,100 A70 70 0 0 1 250,100"/>
+          <circle class="sling-anchor-p1" cx="180" cy="100" r="6"/>
+          <line class="sling-pull" x1="180" y1="100" x2="150" y2="55"/>
+          <circle class="sling-touch" cx="150" cy="55" r="9"/>
+          <g class="rocket-nock" transform="translate(180,100) rotate(146)">
+            <path class="rocket" d="M0,-9 L4,2 L0,5 L-4,2 Z"/>
+          </g>
+          <path class="trajectory" d="M186,108 Q232,148 266,196"/>
+        </g>
+
+        <!-- ===== SLOT: P2 control (bottom edge, AT REST) ===== -->
+        <g class="slot-p2">
+          <path class="sling-range-p2" d="M110,640 A70 70 0 0 0 250,640"/>
+          <circle class="sling-anchor-p2" cx="180" cy="640" r="6"/>
+        </g>
+
+        <!-- ===== SLOT: P1 HUD (top-right, rotated 180° so it reads
+                 right-side-up for the player at the top edge) ===== -->
+        <g class="slot-hud-p1" transform="translate(344,85) rotate(180)">
+          <text class="hud-label body-text" x="0" y="0">WAVE</text>
+          <text class="hud-value display-text" x="74" y="1">3</text>
+          <text class="hud-label body-text" x="0" y="20">SCORE</text>
+          <text class="hud-score display-text" x="74" y="21">1240</text>
+          <text class="hud-label body-text" x="0" y="40">AMMO</text>
+          <text class="ammo-p1 display-text" x="74" y="41">5</text>
+        </g>
+
+        <!-- ===== SLOT: P2 HUD (bottom-left, normal orientation) ===== -->
+        <g class="slot-hud-p2" transform="translate(16,655)">
+          <text class="hud-label body-text" x="0" y="0">WAVE</text>
+          <text class="hud-value display-text" x="74" y="1">3</text>
+          <text class="hud-label body-text" x="0" y="20">SCORE</text>
+          <text class="hud-score display-text" x="74" y="21">1240</text>
+          <text class="hud-label body-text" x="0" y="40">AMMO</text>
+          <text class="ammo-p2 display-text" x="74" y="41">5</text>
+        </g>
+
+        <!-- ===== ANNOTATIONS (do not modify in style variants) ===== -->
+        <g class="annot">
+          <line class="leader" x1="14" y1="360" x2="48" y2="332"/>
+          <g transform="translate(52,324)"><rect class="label-bg" x="0" y="-11" width="150" height="16" rx="8"/><text class="label-tag" x="7" y="1">station · mostly off-screen</text></g>
+
+          <line class="leader" x1="30" y1="402" x2="48" y2="458"/>
+          <g transform="translate(16,470)"><rect class="label-bg" x="0" y="-11" width="160" height="16" rx="8"/><text class="label-tag" x="7" y="1">shield · 3 rings = 3 hits</text></g>
+
+          <line class="leader" x1="262" y1="330" x2="240" y2="296"/>
+          <g transform="translate(150,290)"><rect class="label-bg" x="0" y="-11" width="156" height="16" rx="8"/><text class="label-tag" x="7" y="1">asteroid · "2" = hits to break</text></g>
+
+          <line class="leader" x1="270" y1="200" x2="208" y2="170"/>
+          <g transform="translate(30,164)"><rect class="label-bg" x="0" y="-11" width="182" height="16" rx="8"/><text class="label-tag" x="7" y="1">ships juke &amp; aim for the station</text></g>
+
+          <line class="leader" x1="152" y1="64" x2="106" y2="124"/>
+          <g transform="translate(20,130)"><rect class="label-bg" x="0" y="-11" width="158" height="16" rx="8"/><text class="label-tag" x="7" y="1">P1 mid-pull · release to fire</text></g>
+
+          <line class="leader" x1="264" y1="55" x2="288" y2="30"/>
+          <g transform="translate(118,24)"><rect class="label-bg" x="0" y="-11" width="172" height="16" rx="8"/><text class="label-tag" x="7" y="1">P1 HUD · upside-down for P1</text></g>
+
+          <line class="leader" x1="172" y1="634" x2="124" y2="606"/>
+          <g transform="translate(16,600)"><rect class="label-bg" x="0" y="-11" width="166" height="16" rx="8"/><text class="label-tag" x="7" y="1">anchor dot · finger starts here</text></g>
+
+          <line class="leader" x1="238" y1="694" x2="254" y2="714"/>
+          <g transform="translate(200,718)"><rect class="label-bg" x="0" y="-11" width="156" height="16" rx="8"/><text class="label-tag" x="7" y="1">drag zone · sets angle + power</text></g>
+
+          <g class="annot-flow">
+            <path class="leader" d="M310,560 L130,430"/>
+            <g transform="translate(130,430) rotate(36)"><path class="label-bg" d="M0,0 l10,-6 v12 z"/></g>
+            <g transform="translate(140,576)"><rect class="label-bg" x="0" y="-11" width="184" height="16" rx="8"/><text class="label-tag" x="7" y="1">enemies funnel toward the station</text></g>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="controls"><button class="btn" id="toggle">Hide labels</button></div>
+  <p class="caption">Static layout mock — not playable. <b>P1 sits at the top</b>, <b>P2 at the bottom</b>, facing each other; controls are unchanged from v3. The station keeps the v4 core's size but slides <b>mostly off the left edge</b> — only a hull sliver and the 3-ring shield (3 rings = 3 hits, outermost shatters first) poke into the field. <b>Enemies sweep in from the right and funnel toward the station</b>, so both players share the whole field and can cover for each other. Neon synthwave skin (cyan P1 / amber P2 / magenta enemies).</p>
+
+  <script src="shared/mock.js"></script>
+</body>
+</html>

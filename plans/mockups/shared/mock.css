@@ -1,0 +1,92 @@
+/* ============================================================
+   mock.css — shared structural scaffolding for ALL mock variants.
+   Structure, motion, and annotation chrome ONLY.
+   All color / font / effect values come from tokens-<style>.css.
+   ============================================================ */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--page-bg);
+  color: var(--chrome-ink);
+  font-family: var(--font-body);
+  min-height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 24px 12px 36px;
+}
+
+/* ---- page chrome (around the phone, not part of the game) ---- */
+.title {
+  font-family: var(--font-display);
+  font-size: 22px; letter-spacing: 1px; text-align: center;
+  text-shadow: var(--title-glow, none);
+}
+.title small {
+  display: block; font-family: var(--font-body);
+  font-size: 11px; letter-spacing: 2px; margin-top: 4px;
+  color: var(--chrome-muted); text-transform: uppercase;
+}
+.caption { text-align: center; max-width: 460px; line-height: 1.55; font-size: 14px; color: var(--chrome-muted); }
+.caption b { color: var(--chrome-ink); font-weight: 600; }
+
+.controls { display: flex; gap: 10px; }
+.btn {
+  font-family: var(--font-body); font-weight: 600; font-size: 13px;
+  color: var(--chrome-ink);
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14);
+  padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  transition: all .15s ease;
+}
+.btn:hover { background: rgba(255,255,255,.14); border-color: var(--accent, currentColor); }
+
+/* ---- phone frame (the device — constant across styles) ---- */
+.phone {
+  position: relative; width: min(92vw, 360px); aspect-ratio: 360 / 740;
+  border-radius: 42px; padding: 10px;
+  background: linear-gradient(160deg, #1b1c2e, #070713);
+  box-shadow: 0 0 0 2px #2c2e44, 0 30px 80px rgba(0,0,0,.6),
+              inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.screen {
+  position: relative; width: 100%; height: 100%;
+  border-radius: 34px; overflow: hidden;
+  background: var(--scene-bg);
+}
+.screen svg { display: block; width: 100%; height: 100%; }
+
+/* ---- SVG text helpers (variants paint these via tokens) ---- */
+.display-text { font-family: var(--font-display); }
+.body-text    { font-family: var(--font-body); font-weight: 600; }
+
+/* ---- annotation labels (meta — deliberately style-neutral) ---- */
+.label-tag { font-family: sans-serif; font-weight: 600; font-size: 9.5px; fill: #0a0a1c; }
+.label-bg  { fill: #eafaff; opacity: .92; }
+.leader    { stroke: #eafaff; stroke-width: 1; opacity: .5; stroke-dasharray: 2 2; }
+.labels-off .annot { display: none; }
+
+/* ---- shared motion (gameplay illustration, same in every style) ---- */
+@keyframes jukeY      { 0% { transform: translateY(-9px); } 50% { transform: translateY(11px); } 100% { transform: translateY(-9px); } }
+@keyframes driftX     { from { transform: translateX(7px); } to { transform: translateX(-9px); } }
+@keyframes twinkle    { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes laserL     { 0% { transform: translateX(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateX(-120px); opacity: 0; } }
+@keyframes shieldpulse{ 0%, 100% { opacity: .55; } 50% { opacity: .9; } }
+
+.jukeY   { animation: jukeY 3.0s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.jukeY2  { animation: jukeY 2.3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.driftX  { animation: driftX 3.6s ease-in-out infinite alternate; transform-box: fill-box; }
+.driftX2 { animation: driftX 4.8s ease-in-out infinite alternate; transform-box: fill-box; }
+.star    { animation: twinkle 2.6s ease-in-out infinite; }
+.bolt    { animation: laserL 1.6s ease-in infinite; transform-box: fill-box; }
+.bolt2   { animation: laserL 1.9s ease-in infinite .5s; transform-box: fill-box; }
+.shield-glow { animation: shieldpulse 2.8s ease-in-out infinite; }
+
+/* staggered star twinkle (replaces per-element inline delays) */
+.stars .star:nth-child(2) { animation-delay: .6s; }
+.stars .star:nth-child(3) { animation-delay: 1.1s; }
+.stars .star:nth-child(4) { animation-delay: .3s; }
+.stars .star:nth-child(5) { animation-delay: 1.4s; }
+.stars .star:nth-child(6) { animation-delay: .9s; }
+.stars .star:nth-child(7) { animation-delay: 1.7s; }
+.stars .star:nth-child(8) { animation-delay: .2s; }
