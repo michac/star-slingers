@@ -28,7 +28,7 @@ const WORKFLOW = 'deploy-pages.yml';
 // Docs-only pushes (these paths) don't fire deploy-pages.yml — keep in sync
 // with its paths-ignore filter.
 const isDocsOnly = (f) => f.startsWith('plans/') || f.endsWith('.md');
-const FALLBACK_URL = 'https://unwiredrevolution.github.io/star-slingers/';
+const FALLBACK_URL = 'https://michac.github.io/star-slingers/';
 const here = dirname(fileURLToPath(import.meta.url));
 const skipBuild = process.argv.includes('--skip-build');
 

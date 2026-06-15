@@ -20,7 +20,7 @@
 import { execSync, spawnSync } from 'node:child_process';
 
 const WORKFLOW = 'deploy-pages.yml';
-const FALLBACK_URL = 'https://unwiredrevolution.github.io/star-slingers/';
+const FALLBACK_URL = 'https://michac.github.io/star-slingers/';
 const argv = process.argv.slice(2);
 const skipBuild = argv.includes('--skip-build');
 const mIdx = argv.findIndex((a) => a === '-m' || a === '--m');
