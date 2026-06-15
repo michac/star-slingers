@@ -17,6 +17,8 @@ export const TEX = {
   escortCore: 'escort-core', // B5 escort after its shield ring is knocked off
   heart: 'icon-heart', // B5 health-bar cap (white, tinted at use)
   bolt: 'icon-bolt', // B5 charge-bar cap (white, tinted at use)
+  spark: 'px-spark', // B29 explosion: white dot → additive white-hot sparks
+  shard: 'px-shard', // B29 explosion: dark rock chunk with a magenta edge
 } as const;
 
 /** Rocket diamond from the mock: M0,-9 L4,2 L0,5 L-4,2 Z (nose at -y). */
@@ -41,6 +43,8 @@ export function generateTextures(scene: Phaser.Scene): void {
   makeEscort(scene);
   makeHeart(scene);
   makeBolt(scene);
+  makeSpark(scene);
+  makeShard(scene);
 }
 
 function makeRocket(scene: Phaser.Scene, key: string, color: number): void {
@@ -164,6 +168,29 @@ function makeHeart(scene: Phaser.Scene): void {
     true
   );
   g.generateTexture(TEX.heart, s, s);
+  g.destroy();
+}
+
+/** Spark dot (B29 explosion): a soft white circle → additive white-hot sparks. */
+function makeSpark(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.spark)) return;
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(4, 4, 4);
+  g.generateTexture(TEX.spark, 8, 8);
+  g.destroy();
+}
+
+/** Rock shard (B29 explosion): a dark rock-fill triangle with the rock's
+ *  magenta edge — a flung-off chunk of the asteroid. */
+function makeShard(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.shard)) return;
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(COLORS.rockFill, 1);
+  g.fillTriangle(1, 12, 7, 1, 13, 10);
+  g.lineStyle(1.5, COLORS.danger, 1);
+  g.strokeTriangle(1, 12, 7, 1, 13, 10);
+  g.generateTexture(TEX.shard, 14, 14);
   g.destroy();
 }
 

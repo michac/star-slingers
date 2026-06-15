@@ -7,8 +7,9 @@
 > **The approach (in flight).** We're building each effect as a prototype on the
 > shelf, iterating on the phone, then **locking** the agreed one into
 > `prototype/reference/` as its spec. When the list is done, we make a single pass
-> through the game to port them all. **Locked so far:** shields, explosion, shot
-> trail (below). **Up next:** nothing queued — pick the next effect when ready.
+> through the game to port them all. **Ported into the game (2026-06-15, one pass):**
+> shields, explosion, shot trail (all `done` below). **Up next:** nothing queued —
+> pick the next effect when ready.
 >
 > **Status key:** `queued` (next to prototype) · `prototyped` (on the shelf, in
 > review) · `locked` (agreed, archived to `reference/` as the spec) · `building` ·
@@ -19,11 +20,11 @@
 
 ---
 
-## Shields — glow + pulse (B22 + B23) — `locked` (2026-06-12) ✅
+## Shields — glow + pulse (B22 + B23) — `done` (2026-06-15) ✅
 
 **The reference IS the prototype — match it exactly, numbers and all:**
 > 📌 `star-slingers/prototype/reference/shield-pulse.ts`
-> (live: [`/prototype/reference/shield-pulse.html`](https://unwiredrevolution.github.io/mike-star-slingers/prototype/reference/shield-pulse.html) — tap to take a hit)
+> (live: [`/prototype/reference/shield-pulse.html`](https://michac.github.io/star-slingers/prototype/reference/shield-pulse.html) — tap to take a hit)
 
 The goal Michael set: rings must read as **energy shields, not a solid object**.
 The prototype is the spec; the build pass just ports it. In one breath: rings
@@ -68,11 +69,11 @@ of `Scale.FIT`. Revisit only if we find spare GPU budget (e.g. a partial DPR lik
 
 ---
 
-## Explosion (B29) — `locked` (2026-06-12) ✅
+## Explosion (B29) — `done` (2026-06-15) ✅
 
 **The reference IS the prototype — match it exactly:**
 > 📌 `star-slingers/prototype/reference/explosion-lab.ts`
-> (live: [`/prototype/reference/explosion-lab.html`](https://unwiredrevolution.github.io/mike-star-slingers/prototype/reference/explosion-lab.html) — tap the rock to detonate)
+> (live: [`/prototype/reference/explosion-lab.html`](https://michac.github.io/star-slingers/prototype/reference/explosion-lab.html) — tap the rock to detonate)
 
 Replaces the flat 160 ms scale-up + fade (`Asteroid.pop()`) with a composed burst —
 **flash** (white core + magenta glow, ~170 ms), **shockwave** (thin magenta ring,
@@ -88,11 +89,11 @@ in `textures.ts`; fire **one pooled/shared** particle manager at the pop positio
 
 ---
 
-## Shot trail — `locked` (2026-06-13) ✅
+## Shot trail — `done` (2026-06-15) ✅
 
 **The reference IS the prototype — match it exactly:**
 > 📌 `star-slingers/prototype/reference/shot-trail.ts`
-> (live: [`/prototype/reference/shot-trail.html`](https://unwiredrevolution.github.io/mike-star-slingers/prototype/reference/shot-trail.html) — cyan + amber loop, tap to fire)
+> (live: [`/prototype/reference/shot-trail.html`](https://michac.github.io/star-slingers/prototype/reference/shot-trail.html) — cyan + amber loop, tap to fire)
 
 A trail behind the players' shots — six takes to get there (lessons worth keeping):
 - **1 particle emitter:** beaded/"waggled" (gappy trail; tadpole). ✗

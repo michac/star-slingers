@@ -42,7 +42,9 @@ export class WaveDirector {
     private readonly huds: PlayerHud[],
     private readonly banner: WaveBanner,
     /** Called once the last wave clears — the scene starts the boss (B5). */
-    private readonly onRunCleared: () => void
+    private readonly onRunCleared: () => void,
+    /** The shared asteroid burst (B29), forwarded into every Asteroid. */
+    private readonly boom: (x: number, y: number, radius: number) => void
   ) {
     const specs1 = asteroidsFor(WAVES[0]);
     // One wrapper per physical lane slot, alive for the whole run (later
@@ -59,7 +61,8 @@ export class WaveDirector {
             speed: slot.baseSpeed * DIFFICULTY_MODEL.minSpeedScale,
           },
           DIFFICULTY_MODEL.spawnGapMax,
-          () => this.grantRespawn()
+          () => this.grantRespawn(),
+          this.boom
         )
     );
     this.startWave(0);

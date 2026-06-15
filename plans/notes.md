@@ -152,7 +152,7 @@ Safari — plus offline, which is literally a service worker (the "lightweight a
 the site and runs offline" idea, no native app needed).
 
 - **Hand-rolled, not `vite-plugin-pwa`.** The plugin nudges toward an absolute base
-  (`/mike-star-slingers/`) for SW scope / `start_url` on a project subpath, which would break
+  (`/star-slingers/`) for SW scope / `start_url` on a project subpath, which would break
   the deliberate relative `base: './'` ("works from any static folder"); and its
   precache-manifest machinery solves a multi-chunk problem we don't have (one content-hashed
   bundle, all art code-drawn). A ~45-line dependency-free `public/sw.js` covers the whole
@@ -329,7 +329,7 @@ pass); charging/exposed screenshots confirm the bars read cleanly off the boss. 
 ## Prototype shelf — `/prototype/` endpoint for remote review (2026-06-12, remote-control)
 Michael's ask while running remote: a place I can push experiments in an automated way so he can
 review from his phone even when not local. Built a **prototype shelf** that ships to
-`…/mike-star-slingers/prototype/` as a subpath of the same Pages artifact (GitHub Pages serves one
+`…/star-slingers/prototype/` as a subpath of the same Pages artifact (GitHub Pages serves one
 site per repo, so a subpath — not a second site — is the model). The game at `/` is untouched.
 - **Structure:** new `star-slingers/prototype/` — a styled `index.html` gallery + experiment pages
   (one dir deeper, so assets are `../fonts`). The B22 glow spike moved in: `glow-lab.html` +
@@ -346,6 +346,32 @@ site per repo, so a subpath — not a second site — is the model). The game at
   (Audiowide loads, glow-lab auto-listed) and the lab itself renders through the prototype path (WebGL
   glow on all three panels). typecheck + build green. `glow-lab.png` gitignored; `prototype/README.md`
   documents the drop-and-ship convention.
+
+## Polish pass — ported the 3 locked prototypes into the game (2026-06-15)
+- The single focused porting pass `plans/polish-pass.md` was holding open: the three shelf-locked
+  effects (shields B22+B23, explosion B29, shot trail) all moved from `prototype/reference/` into the
+  live game in one pass. The reference files *were* the spec — each target ported its reference's
+  behaviour and numbers; the only translation was the prototypes' review-zoom (`SCALE` 2.2–2.5×) down
+  to real game coordinates.
+- **Shields** (`Station.ts`): rings split out of the static hull into a per-frame layer; **color**
+  brightness pulses on a sine (trough 0.6→crest 1.0, ~3.2s) and flows outer→inner; an ambient
+  `postFX.addGlow` disc hugs + recolors to the outermost ring and breathes; the shatter cue became a
+  glow-flare-then-fade. Kept the two locked constraints (pulse color not alpha; no DPI, glow quality
+  0.3). postFX guarded with `?.` for headless. New `SHIELD_FX` block in `layout.ts`.
+- **Explosion** (`Asteroid.pop()` + new `Explosions.ts`): flash + shockwave + debris + sparks off
+  **one shared pair of particle emitters** (`emitParticleAt`, never per-pop emitters) + one transient
+  glow; baked `TEX.spark`/`TEX.shard`. `boom(x,y,r)` threaded `SandboxScene → WaveDirector → Asteroid`.
+  New `EXPLOSION` block (particle speed/scale/gravity ÷2.5 from the 2.5× reference; flash/shockwave
+  size off the real radius). Asteroids only; boss/escort pops unchanged.
+- **Shot trail** (`RocketPool`): per-rocket history via `setData` (~75 pts), one shared additive
+  Graphics redrawn by a new `RocketPool.update(delta)` beside `steer()` — a faint afterimage under a
+  tapered glow/body/core exhaust with a scrolling brightness flux; head player-colored, exhaust violet.
+  `WRAP_SKIP` guard ported. New `TRAIL` block.
+- Verify: typecheck + build + smoke all green. Headless screenshots eyeballed the fielded shield glow,
+  the violet trail behind a fired rocket, and a mid-burst explosion (spark + debris). `smoke.mjs` got a
+  small cross-platform browser-path fallback (Linux `~/.cache/ms-playwright`) so the documented check
+  runs off-Windows too; Windows path behaviour unchanged. Final tuning of the 2.5×→1× scale still wants
+  a Pixel 6 pass (`npm run deploy`), since the references were locked on-device.
 
 ## Open questions
 All moved to [`backlog.md`](backlog.md) (2026-06-06): **lanes** → resolved by the v5 funnel

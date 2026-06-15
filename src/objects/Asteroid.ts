@@ -30,7 +30,9 @@ export class Asteroid {
     spec: AsteroidSpec,
     spawnGapMax: number,
     /** Asks the wave for quota: true = respawn granted (and spent). */
-    private readonly onWantRespawn: () => boolean
+    private readonly onWantRespawn: () => boolean,
+    /** Fires the shared burst (B29) at a pop position. */
+    private readonly boom: (x: number, y: number, radius: number) => void
   ) {
     this._spec = spec;
     this.spawnGapMax = spawnGapMax;
@@ -126,11 +128,15 @@ export class Asteroid {
     body.stop();
     body.enable = false;
     this.label.setText('');
+    // The composed burst (B29) lives independently and self-cleans; the rock
+    // itself just snaps bigger and vanishes under the flash, then recycles.
+    this.boom(this.sprite.x, this.sprite.y, this._spec.radius);
     this.scene.tweens.add({
       targets: this.sprite,
-      scale: 1.6,
+      scale: 1.35,
       alpha: 0,
-      duration: 160,
+      duration: 110,
+      ease: 'Quad.Out',
       onComplete: () => this.respawnOrPark(),
     });
   }

@@ -99,8 +99,92 @@ export const APPROACH_X = 150;
 /** Worried-shake tween on the station when a ring shatters. */
 export const SHAKE = { amplitude: 3, durationMs: 60, repeats: 2 } as const;
 
-/** Shatter tween for the lost ring. */
+/** Shatter tween for the lost ring (used by the shield REGROW cue; the
+ *  destroy cue is now the SHIELD_FX flare-then-fade below). */
 export const SHATTER = { scaleTo: 1.25, durationMs: 200 } as const;
+
+/**
+ * Shield FX (B22 glow + B23 pulse), ported 1:1 from the locked prototype
+ * `prototype/reference/shield-pulse.ts`. Rings breathe on a sine (COLOR
+ * brightness, never alpha — opaque thick strokes avoid the radial "grid"
+ * spokes a semi-transparent ring shows at its tessellation joins) and FLOW
+ * outer→inner via a per-ring phase offset, under an ambient glow that hugs +
+ * recolors to the outermost remaining ring. A destroyed ring flares its glow
+ * then expands + fades. Perf: no DPI, glow `quality` stays 0.3. (Ring width +
+ * colors reuse STROKES.shield.width + the per-ring SHIELD_RINGS mapping.)
+ */
+export const SHIELD_FX = {
+  periodMs: 3200, // ms per breath — slow
+  pulseLo: 0.6, // trough brightness (crest is 1.0): a half-dim, still clearly lit
+  glowQuality: 0.3, // glow bloom sample size — keep low; higher lags the Pixel 6
+  // Destroyed ring: flare the glow bright (yoyo), then expand + fade away.
+  flare: { strength: 11, flareMs: 150, fadeMs: 540, scaleTo: 1.45 },
+} as const;
+
+/**
+ * Explosion (B29), ported from the locked prototype
+ * `prototype/reference/explosion-lab.ts` — flash + shockwave + debris + sparks.
+ * The reference was authored at its review-zoom (SCALE 2.5); the spatial dials
+ * here are the reference values brought down to real game coordinates: particle
+ * speed/scale/gravity and the shockwave stroke are ÷2.5, while flash/shockwave
+ * radii size off the asteroid's REAL radius and the scale tweens (unitless
+ * multipliers) port directly. The 2.5×→1× translation is the main tuning risk —
+ * verify on the phone. Perf: one shared pair of emitters, one transient glow per
+ * pop, glow `quality` 0.3. (Counts 12/28 from the reference.)
+ */
+export const EXPLOSION = {
+  glowQuality: 0.3,
+  depth: 50, // above asteroids/rockets, below the banner (900) / overlay (1000)
+  // White core disc under a transient magenta glow that blows out fast.
+  flash: { sizeFactor: 0.85, glowStrength: 6, scaleFrom: 0.3, scaleTo: 1.7, durationMs: 170 },
+  // Thin magenta ring expanding + fading — the classic shock front.
+  shockwave: { width: 1.5, alpha: 0.9, scaleFrom: 0.4, scaleTo: 2.4, durationMs: 360 }, // ref width 3 ÷2.5
+  // Rock shards flung out, spinning, falling, fading (ref speed 70/250, scale 1.4/0.3, gravity 160).
+  debris: {
+    count: 12,
+    speed: { min: 28, max: 100 }, // ÷2.5
+    lifespan: { min: 450, max: 760 },
+    scale: { start: 0.56, end: 0.12 }, // ÷2.5
+    gravityY: 64, // ÷2.5
+  },
+  // White-hot additive sparks: fast, twinkling out (ref speed 140/430, scale 1.5).
+  sparks: {
+    count: 28,
+    speed: { min: 56, max: 172 }, // ÷2.5
+    lifespan: { min: 300, max: 560 },
+    scale: { start: 0.6, end: 0 }, // ÷2.5
+  },
+} as const;
+
+/**
+ * Shot trail, ported 1:1 from the locked prototype
+ * `prototype/reference/shot-trail.ts`. All additive filled quads — no postFX,
+ * no particles. An `afterimage` (thin near-constant-width violet line over the
+ * full ~75-pt history, fading to 0 along its length) under a tapered exhaust:
+ * glow halo → violet body → white-hot core over the first ~18 points, with a
+ * brightness `flux` (a sine scrolling down the trail). The trail widths are
+ * absolute px in the reference (NOT multiplied by its demo zoom), so they port
+ * directly; verify against the game's real rocket speed. EXHAUST = the violet
+ * COLORS.shieldMid (the head stays the rocket sprite's player color).
+ */
+export const TRAIL = {
+  trailLen: 18, // bright exhaust ribbon length (points)
+  bodyHalf: 7,
+  bodyAlpha: 0.7,
+  glowMul: 2.3,
+  glowAlpha: 0.14,
+  coreHalf: 2.3,
+  coreAlpha: 0.85,
+  afterLen: 75, // afterimage history length (~1.2s at 60fps)
+  afterHalf: 1.0, // thin, near-constant-width line
+  afterAlpha: 0.22, // faint at the head, fading to 0 down the path
+  // Brightness flux: a wave scrolling down the exhaust → pulsing bands.
+  fluxW: 0.026, // rad/ms (period ~240ms)
+  fluxPhase: 0.55,
+  bodyFlux: 0.5,
+  coreFlux: 0.55,
+  wrapSkip: 60, // skip a segment longer than this (a homing re-aim / recycle teleport)
+} as const;
 
 /** End-of-round overlays (fail "Try again?" and victory "You did it!"):
  *  calm dim + an opaque modal card + a central icon (reads either way up).

@@ -3,13 +3,31 @@
 import { chromium } from 'playwright-core';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 
-const pwRoot = join(process.env.LOCALAPPDATA, 'ms-playwright');
-const chromeDir = readdirSync(pwRoot).filter((d) => d.startsWith('chromium-')).sort().pop();
-// Playwright renamed the win folder chrome-win -> chrome-win64; try both.
-const exe = ['chrome-win64', 'chrome-win']
-  .map((sub) => join(pwRoot, chromeDir, sub, 'chrome.exe'))
-  .find(existsSync);
+// Resolve a chromium binary cross-platform: on Michael's Windows box browsers
+// live under %LOCALAPPDATA%\ms-playwright (chrome.exe); on a Linux dev/CI box
+// under ~/.cache/ms-playwright (chrome). Try Windows first (unchanged), then
+// fall back to the Linux cache, then to playwright's own resolver.
+function findExecutable() {
+  const win = process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'ms-playwright');
+  if (win && existsSync(win)) {
+    const dir = readdirSync(win).filter((d) => d.startsWith('chromium-')).sort().pop();
+    // Playwright renamed the win folder chrome-win -> chrome-win64; try both.
+    const found = ['chrome-win64', 'chrome-win']
+      .map((sub) => join(win, dir, sub, 'chrome.exe'))
+      .find(existsSync);
+    if (found) return found;
+  }
+  const nix = join(homedir(), '.cache', 'ms-playwright');
+  if (existsSync(nix)) {
+    const dirs = readdirSync(nix).filter((d) => d.startsWith('chromium-')).sort().reverse();
+    const found = dirs.map((d) => join(nix, d, 'chrome-linux64', 'chrome')).find(existsSync);
+    if (found) return found;
+  }
+  return chromium.executablePath();
+}
+const exe = findExecutable();
 
 const browser = await chromium.launch({ executablePath: exe });
 const page = await browser.newPage({ viewport: { width: 360, height: 740 }, hasTouch: true });

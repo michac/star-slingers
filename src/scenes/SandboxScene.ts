@@ -11,6 +11,7 @@ import { generateTextures, TEX } from '../objects/textures';
 import { SlingControl } from '../objects/SlingControl';
 import { HomingToggle } from '../objects/HomingToggle';
 import { RocketPool } from '../objects/Rocket';
+import { Explosions } from '../objects/Explosions';
 import { Asteroid } from '../objects/Asteroid';
 import { PlayerHud } from '../objects/PlayerHud';
 import { Station } from '../objects/Station';
@@ -25,6 +26,7 @@ export class SandboxScene extends Phaser.Scene {
   private homingToggles: HomingToggle[] = [];
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
+  private explosions!: Explosions;
   private station!: Station;
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
@@ -43,6 +45,7 @@ export class SandboxScene extends Phaser.Scene {
     this.station = new Station(this); // under the asteroids/rockets
 
     this.rockets = new RocketPool(this);
+    this.explosions = new Explosions(this); // one shared burst system (B29)
     const hud1 = new PlayerHud(this, { ...HUD_P1, colorCss: CSS.p1 });
     const hud2 = new PlayerHud(this, { ...HUD_P2, colorCss: CSS.p2 });
     const banner = new WaveBanner(this);
@@ -64,7 +67,8 @@ export class SandboxScene extends Phaser.Scene {
       this.station,
       [hud1, hud2],
       banner,
-      () => this.bossEncounter.start()
+      () => this.bossEncounter.start(),
+      (x, y, r) => this.explosions.boom(x, y, r)
     );
     this.asteroids = this.waveDirector.asteroids;
 
@@ -167,8 +171,10 @@ export class SandboxScene extends Phaser.Scene {
     if (this.failOverlay.visible || this.victoryOverlay.visible) return;
     for (const control of this.controls) control.update();
     for (const asteroid of this.asteroids) asteroid.update();
-    // Steer in-flight homing shots toward their locked targets (B14).
+    // Steer in-flight homing shots toward their locked targets (B14), then
+    // advance + redraw their exhaust trails (the shot-trail polish item).
     this.rockets.steer(delta);
+    this.rockets.update(delta);
     this.station.update(delta); // shield regen clock
     this.waveDirector.update(delta); // wave-clear check
     this.bossEncounter.update(delta); // boss fight (no-op until the run clears)
