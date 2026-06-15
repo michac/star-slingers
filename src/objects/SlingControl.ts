@@ -7,7 +7,7 @@
  */
 import Phaser from 'phaser';
 import { STROKES } from '../tokens';
-import { SLING } from '../layout';
+import { CHARGE, SLING } from '../layout';
 
 export interface SlingControlConfig {
   anchor: { x: number; y: number };
@@ -17,7 +17,8 @@ export interface SlingControlConfig {
   /** Texture for the nocked-rocket preview at the anchor. */
   rocketTexture: string;
   canFire: () => boolean;
-  onFire: (x: number, y: number, vx: number, vy: number) => void;
+  /** `charged` (B13): a full-charge railgun shot — pierces every asteroid. */
+  onFire: (x: number, y: number, vx: number, vy: number, charged: boolean) => void;
   /** Homing mode (B14): is this seat's toggle on right now? */
   isHoming?: () => boolean;
   /** The rock the shot would lock onto for a given aim ray (anchor + dir),
@@ -34,6 +35,10 @@ export class SlingControl {
   private pointerId: number | null = null;
   /** Clamped pull vector (touch point minus anchor). */
   private readonly pull = new Phaser.Math.Vector2();
+  /** Charge accrued while holding (0→1; B13). 1 = a full railgun shot. */
+  private charge = 0;
+  /** Free-running ms clock, drives the full-charge "ready" pulse. */
+  private elapsed = 0;
 
   constructor(scene: Phaser.Scene, private readonly config: SlingControlConfig) {
     this.staticGfx = scene.add.graphics();
@@ -52,6 +57,7 @@ export class SlingControl {
     const dist = Phaser.Math.Distance.Between(pointer.x, pointer.y, anchor.x, anchor.y);
     if (dist > SLING.grabRadius) return;
     this.pointerId = pointer.id;
+    this.charge = 0; // charge accrues from pointer-down (B13)
     this.updatePull(pointer);
   }
 
@@ -67,19 +73,33 @@ export class SlingControl {
     this.pointerId = null;
     const len = this.pull.length();
     this.dynamicGfx.clear();
-    this.nockedRocket.setVisible(false);
+    this.nockedRocket.setVisible(false).setScale(1);
+    // A full charge fires a railgun — but only on a real shot, and never while
+    // homing (homing & charge are mutually exclusive, B13/B14).
+    const charged =
+      this.charge >= 1 &&
+      !this.config.isHoming?.() &&
+      len >= SLING.minFirePull &&
+      this.config.canFire();
+    this.charge = 0;
     if (len < SLING.minFirePull || !this.config.canFire()) return;
 
     const { anchor } = this.config;
     // Launch opposite the pull; speed scales with how far back it was drawn.
     const dir = this.pull.clone().scale(-1).normalize();
     const speed = Math.max(SLING.minSpeed, (len / SLING.pullRadius) * SLING.maxSpeed);
-    this.config.onFire(anchor.x, anchor.y, dir.x * speed, dir.y * speed);
+    this.config.onFire(anchor.x, anchor.y, dir.x * speed, dir.y * speed, charged);
   }
 
-  /** Redraw the pull visuals each frame while a finger is down. */
-  update(): void {
+  /** Redraw the pull visuals each frame while a finger is down, and accrue
+   *  charge (B13). `deltaMs` advances the ready-pulse clock + the charge. */
+  update(deltaMs: number): void {
+    this.elapsed += deltaMs;
     if (this.pointerId === null) return;
+    // Accrue charge while held — unless this seat is homing, which can't railgun.
+    if (!this.config.isHoming?.()) {
+      this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
+    }
     this.drawDynamic();
   }
 
@@ -135,7 +155,7 @@ export class SlingControl {
     g.strokeCircle(tipX, tipY, SLING.touchDotRadius);
 
     if (len < SLING.minFirePull) {
-      this.nockedRocket.setVisible(false);
+      this.nockedRocket.setVisible(false).setScale(1);
       return;
     }
 
@@ -161,8 +181,10 @@ export class SlingControl {
       .setRotation(Math.atan2(dirY, dirX) + Math.PI / 2);
 
     // Homing aim preview (B14): ring the rock the shot would lock onto, so the
-    // player sees what they'll hit before firing.
+    // player sees what they'll hit before firing. Homing owns the preview and
+    // can't charge, so the charge cue is suppressed for a homing seat (B13).
     if (this.config.isHoming?.()) {
+      this.nockedRocket.setScale(1);
       const lock = this.config.homingTargetAt?.(anchor.x, anchor.y, dirX, dirY);
       if (lock) {
         // Glow fill + bold ring so the lock clearly pops and is easy to track
@@ -172,7 +194,30 @@ export class SlingControl {
         g.lineStyle(3.5, color, 1);
         g.strokeCircle(lock.x, lock.y, lock.r);
       }
+    } else {
+      this.drawChargeCue();
     }
+  }
+
+  /** Charge cue (B13): a player-colored glow disc behind the nocked rocket that
+   *  grows + brightens as charge fills, plus a matching scale-up of the rocket.
+   *  At full charge it settles into a steady brightness/scale pulse off
+   *  `elapsed` so "armed" is unmistakable. Code-drawn, no postFX. */
+  private drawChargeCue(): void {
+    const { anchor, color } = this.config;
+    const c = this.charge;
+    let radius = Phaser.Math.Linear(CHARGE.glowRadiusMin, CHARGE.glowRadiusMax, c);
+    let alpha = Phaser.Math.Linear(CHARGE.glowAlphaMin, CHARGE.glowAlphaMax, c);
+    let scale = Phaser.Math.Linear(1, CHARGE.rocketScaleFull, c);
+    if (c >= 1) {
+      const pulse = Math.sin(this.elapsed * CHARGE.pulseW);
+      radius = CHARGE.glowRadiusMax;
+      alpha = CHARGE.glowAlphaMax * (1 + CHARGE.pulseGlowDepth * pulse);
+      scale = CHARGE.rocketScaleFull * (1 + CHARGE.pulseScaleDepth * pulse);
+    }
+    this.dynamicGfx.fillStyle(color, alpha);
+    this.dynamicGfx.fillCircle(anchor.x, anchor.y, radius);
+    this.nockedRocket.setScale(scale);
   }
 }
 

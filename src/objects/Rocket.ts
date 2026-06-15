@@ -57,6 +57,8 @@ export class RocketPool {
     rocket.setActive(true).setVisible(true);
     rocket.setData('isRocket', true);
     rocket.setData('homing', false); // pooled sprite may carry a stale flag
+    rocket.setData('charged', false); // B13: pooled sprite may carry a stale flag
+    rocket.setData('hitSet', new Set()); // B13: rocks this railgun has chipped
     rocket.setData('dist', 0); // reset travelled distance for the arm/ramp curve
     rocket.setData('history', [{ x, y }] as TrailPoint[]); // fresh trail history
 
@@ -116,6 +118,8 @@ export class RocketPool {
     body.stop();
     body.enable = false;
     rocket.setData('history', undefined); // drop the trail so a refire starts clean
+    rocket.setData('charged', false); // B13: clear the railgun flag…
+    rocket.setData('hitSet', undefined); // …and drop its pierced-rock refs
   }
 
   /** Per-frame: advance every active rocket's flight history and redraw the
@@ -136,18 +140,25 @@ export class RocketPool {
       history.unshift({ x: rocket.x, y: rocket.y });
       if (history.length > TRAIL.afterLen) history.pop();
 
-      this.afterimage(history); // long faint light-streak (under)
-      this.strip(history, TRAIL.bodyHalf * TRAIL.glowMul, EXHAUST, TRAIL.glowAlpha, TRAIL.bodyFlux); // glow halo
-      this.strip(history, TRAIL.bodyHalf, EXHAUST, TRAIL.bodyAlpha, TRAIL.bodyFlux); // violet body
-      this.strip(history, TRAIL.coreHalf, 0xffffff, TRAIL.coreAlpha, TRAIL.coreFlux); // white-hot core
+      // Per-rocket trail tier (B13): the absolute TRAIL values are the CHARGED
+      // (railgun) baseline; a normal shot gets a subdued multiplier set. So the
+      // in-flight trail doubles as the "this was a railgun" read.
+      const m = rocket.getData('charged') ? TRAIL.chargedMul : TRAIL.normalMul;
+      this.afterimage(history, m.alpha, m.width, m.len); // long faint light-streak (under)
+      this.strip(history, TRAIL.bodyHalf * TRAIL.glowMul * m.width, EXHAUST, TRAIL.glowAlpha * m.alpha, TRAIL.bodyFlux, m.len); // glow halo
+      this.strip(history, TRAIL.bodyHalf * m.width, EXHAUST, TRAIL.bodyAlpha * m.alpha, TRAIL.bodyFlux, m.len); // violet body
+      this.strip(history, TRAIL.coreHalf * m.width, 0xffffff, TRAIL.coreAlpha * m.alpha, TRAIL.coreFlux, m.len); // white-hot core
       return true;
     });
   }
 
   /** Thin, near-constant-width line over the long history, alpha fading to 0
-   *  along its length → a lingering light-streak of the flight path. */
-  private afterimage(h: TrailPoint[]): void {
-    const n = Math.min(h.length, TRAIL.afterLen);
+   *  along its length → a lingering light-streak of the flight path. Tier
+   *  multipliers (B13): `alphaMul`/`widthMul` dim+thin it, `lenMul` shortens it. */
+  private afterimage(h: TrailPoint[], alphaMul: number, widthMul: number, lenMul: number): void {
+    const effLen = Math.max(2, Math.round(TRAIL.afterLen * lenMul));
+    const n = Math.min(h.length, effLen);
+    const half = TRAIL.afterHalf * widthMul;
     for (let i = 0; i < n - 1; i++) {
       const a = h[i];
       const b = h[i + 1];
@@ -155,10 +166,10 @@ export class RocketPool {
       const dy = b.y - a.y;
       const len = Math.hypot(dx, dy);
       if (len < 0.01 || len > TRAIL.wrapSkip) continue;
-      const alpha = TRAIL.afterAlpha * (1 - i / (TRAIL.afterLen - 1));
+      const alpha = TRAIL.afterAlpha * alphaMul * (1 - i / (effLen - 1));
       if (alpha < 0.012) continue;
-      const px = (-dy / len) * TRAIL.afterHalf;
-      const py = (dx / len) * TRAIL.afterHalf;
+      const px = (-dy / len) * half;
+      const py = (dx / len) * half;
       this.trail.fillStyle(EXHAUST, alpha);
       this.trail.fillPoints(
         [
@@ -173,9 +184,10 @@ export class RocketPool {
   }
 
   /** Tapered exhaust strip over the first TRAIL.trailLen points. `fluxDepth`
-   *  modulates each segment's brightness by a wave that scrolls down the trail. */
-  private strip(h: TrailPoint[], halfW: number, color: number, maxAlpha: number, fluxDepth: number): void {
-    const count = TRAIL.trailLen;
+   *  modulates each segment's brightness by a wave that scrolls down the trail.
+   *  `lenMul` (B13) shortens the ribbon for the subdued normal-shot tier. */
+  private strip(h: TrailPoint[], halfW: number, color: number, maxAlpha: number, fluxDepth: number, lenMul: number): void {
+    const count = Math.max(2, Math.round(TRAIL.trailLen * lenMul));
     const n = Math.min(h.length, count);
     for (let i = 0; i < n - 1; i++) {
       const a = h[i];

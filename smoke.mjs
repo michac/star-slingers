@@ -79,7 +79,8 @@ const ti = await page.waitForFunction(
     let best = -1;
     let bestHits = -1;
     scene.asteroids.forEach((a, i) => {
-      if (a.active && !a.popping && a.sprite.x <= 320 && a.spec.hits > bestHits) {
+      // !isFragment: never let a fast split fragment (B30) be the target.
+      if (a.active && !a.popping && !a.isFragment && a.sprite.x <= 320 && a.spec.hits > bestHits) {
         bestHits = a.spec.hits;
         best = i;
       }
@@ -111,7 +112,7 @@ await page.screenshot({ path: 'smoke-hit.png' });
 const si = await page.waitForFunction(
   () => {
     const scene = window.__game.scene.keys['Sandbox'];
-    const i = scene.asteroids.findIndex((a) => a.active && !a.popping && a.sprite.x <= 320);
+    const i = scene.asteroids.findIndex((a) => a.active && !a.popping && !a.isFragment && a.sprite.x <= 320);
     return i >= 0 ? { i } : false;
   },
   undefined,
@@ -145,7 +146,7 @@ const homingBefore = await page.evaluate(() => window.__game.scene.keys['Sandbox
 const hti = await page.waitForFunction(
   () => {
     const scene = window.__game.scene.keys['Sandbox'];
-    const i = scene.asteroids.findIndex((a) => a.active && !a.popping && a.sprite.x <= 340 && a.sprite.x >= 270);
+    const i = scene.asteroids.findIndex((a) => a.active && !a.popping && !a.isFragment && a.sprite.x <= 340 && a.sprite.x >= 270);
     return i >= 0 ? { i } : false;
   },
   undefined,
@@ -173,6 +174,105 @@ await page.waitForFunction(
 const homingAfter = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.hits());
 console.log(`homing test: hit counter ${homingBefore} -> ${homingAfter}`);
 await page.screenshot({ path: 'smoke-homing.png' });
+
+// ---- charged-pierce test (B13, railgun) ----
+// A charged shot is a RAILGUN: it pierces every asteroid in its path instead of
+// recycling on first contact. Pick an active on-screen rock, fire a charged
+// rocket head-on, then assert the SAME rocket sprite is STILL active at the
+// moment it chips a rock — proving it railed through rather than recycled. (A
+// normal shot would have been killAndHide'd by handleHit on that first hit.)
+// The chip is read off the rocket's own per-pass hitSet, so `active` is sampled
+// in the SAME evaluation as the hit — no round-trip race against world-bounds.
+const pgi = await page.waitForFunction(
+  () => {
+    const scene = window.__game.scene.keys['Sandbox'];
+    const i = scene.asteroids.findIndex((a) => a.active && !a.popping && !a.isFragment && a.sprite.x <= 280 && a.sprite.x >= 120);
+    return i >= 0 ? { i } : false;
+  },
+  undefined,
+  { timeout: 30000 }
+).then((h) => h.jsonValue()).then((v) => v.i);
+
+await page.evaluate((i) => {
+  const scene = window.__game.scene.keys['Sandbox'];
+  const t = scene.asteroids[i].sprite;
+  const r = scene.rockets.fire('rocket-p1', t.x - 80, t.y, 400, 0);
+  r.setData('charged', true);
+  window.__pierceRocket = r; // stash so we can watch it chip + survive
+}, pgi);
+const pierceActive = await page.waitForFunction(
+  () => {
+    const r = window.__pierceRocket;
+    const hs = r && r.getData('hitSet');
+    return hs && hs.size > 0 ? { active: r.active } : false;
+  },
+  undefined,
+  { timeout: 5000 }
+).then((h) => h.jsonValue()).then((v) => v.active);
+console.log(`pierce test: charged rocket still active when it chipped a rock => ${pierceActive ? 'OK (railed through)' : 'FAIL (recycled)'}`);
+await page.screenshot({ path: 'smoke-pierce.png' });
+
+// ---- asteroid split test (B30) ----
+// A tough rock (2+ hits) killed by a rocket scatters 2 small 1-hit fragments
+// that score 10 each (their own 1-hit pops). Wave 1 fields only 1-hit rocks,
+// and headless game-time runs ~10x slower than wall-clock (software-WebGL
+// ReadPixels stalls clamp Phaser's per-frame delta), so advancing to a wave
+// with 2-hit rocks via the breather timer is impractical here. Instead field a
+// 2-hit rock directly through the public reconfigure()/spawn() path (exactly
+// what startWave does for lane rocks) and place it in-field for a deterministic
+// kill. Lane wrappers are asteroids[0..3]; the B30 fragment pool is the tail.
+const splitBefore = await page.evaluate(() => {
+  const scene = window.__game.scene.keys['Sandbox'];
+  const a = scene.asteroids[0]; // a lane wrapper (NOT a fragment)
+  a.reconfigure({ radius: 17, hits: 2, y: 300, speed: 30 }, 0);
+  a.spawn(); // field it (off the right edge)...
+  // ...then teleport into the field for a fast, deterministic kill.
+  a.sprite.setPosition(260, 300);
+  a.sprite.body.reset(260, 300);
+  a.sprite.body.setVelocityX(-30);
+  return scene.__debug.splitCount();
+});
+
+// Kill it: 2 head-on rockets (first chips 2->1, second pops 1->0 and splits).
+for (let k = 0; k < 2; k++) {
+  await page.evaluate(() => {
+    const scene = window.__game.scene.keys['Sandbox'];
+    const t = scene.asteroids[0].sprite;
+    scene.rockets.fire('rocket-p1', t.x - 80, t.y, 400, 0);
+  });
+  await page.waitForTimeout(300);
+}
+// The final pop must split: splitCount rises and >=2 fragments go live.
+await page.waitForFunction(
+  (prev) => window.__game.scene.keys['Sandbox'].__debug.splitCount() > prev,
+  splitBefore,
+  { timeout: 8000 }
+);
+const fragsAlive = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.fragmentsAlive());
+const scoreAfterKill = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.score());
+await page.screenshot({ path: 'smoke-split.png' });
+
+// Pop the scattered fragments: re-aim a rocket at each active fragment every
+// frame-ish until the score climbs by the two 1-hit pops (>=20). Fragments are
+// 1-hit, so each connect pops + scores 10.
+let splitScored = false;
+for (let attempt = 0; attempt < 40 && !splitScored; attempt++) {
+  await page.evaluate(() => {
+    const scene = window.__game.scene.keys['Sandbox'];
+    scene.asteroids.forEach((a) => {
+      if (a.isFragment && a.active && !a.popping) {
+        const t = a.sprite;
+        scene.rockets.fire('rocket-p1', t.x + 40, t.y, -500, 0); // chase + intercept
+      }
+    });
+  });
+  await page.waitForTimeout(150);
+  const sc = await page.evaluate(() => window.__game.scene.keys['Sandbox'].__debug.score());
+  splitScored = sc - scoreAfterKill >= 20;
+}
+console.log(
+  `split test: a 2-hit kill scattered ${fragsAlive} fragments (splitCount ${splitBefore}->${splitBefore + 1}); fragment pops scored +${splitScored ? '>=20' : '<20'} => ${fragsAlive >= 2 && splitScored ? 'OK' : 'FAIL'}`
+);
 
 // ---- final boss test (B5, cycling fight) ----
 // Skip straight to the boss and confirm the gate: while CHARGING (escorts up)

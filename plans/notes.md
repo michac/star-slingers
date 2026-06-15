@@ -394,6 +394,75 @@ site per repo, so a subpath — not a second site — is the model). The game at
   scores 0). Headless screenshots confirmed the SCORE row on both HUDs and the falling confetti. Final
   shower tuning wants a Pixel 6 pass; audio + haptics stay queued in B7.
 
+## B13 — charged shot reworked as a piercing railgun (2026-06-15)
+- Michael changed the payoff: instead of the original "full charge = **2 hits**," a charged shot is now a
+  **railgun** — *not stopped by anything*, it rails through **every** asteroid in its path until it leaves
+  the screen. Same trigger (hold the pull), new reward (pierce, not double-damage). Locked calls: pierce
+  depth **unlimited**; tough rocks **chipped once per rock** (one normal `takeHit()` each — reuses the exact
+  hit path, no instakill); **homing & charge mutually exclusive** (a homing seat can't charge); **boss/escorts
+  unaffected** (charged = ordinary single hit there — pierce is asteroid-only, so the finale balance is
+  untouched); still **1 ammo**.
+- **Charge** accrues from pointer-down in `SlingControl.update(deltaMs)` (the scene now passes `delta`),
+  capped at 1 over `CHARGE.fullMs` (~600ms — the only flick-vs-charged dial); never builds while homing.
+  **Cue:** the nocked rocket draws a player-colored glow disc that grows+brightens with charge and scales up,
+  settling into a steady brightness/scale **pulse** at full (code-drawn Graphics, no postFX). `onFire` gained
+  a trailing `charged` arg. **Pierce:** `SandboxScene.fireRocket` tags `rocket.setData('charged')`; `handleHit`
+  branches — charged shots `takeHit()` + score + **don't recycle**, guarded by a per-rocket `hitSet` so the
+  multi-frame overlap can't double-chip a *surviving* tough rock (a popped rock disables its body and stops
+  overlapping; world-bounds still recycles). `RocketPool` resets `charged`/`hitSet` on fire+recycle.
+- **Tiered trail:** the locked bright shot-trail is now the **charged** look; normal shots get a **subdued**
+  tier (`TRAIL.normalMul` — ~0.45 alpha, 0.65 len), threaded as per-rocket multipliers through `strip()`/
+  `afterimage()`. So the in-flight trail doubles as the railgun read.
+- Verify: typecheck + build + smoke green. `smoke.mjs` gained a charged-pierce assertion modeled on the homing
+  test — fires a charged rocket head-on and asserts the **same sprite is still `active` at the frame it chips
+  a rock** (sampled off the rocket's own `hitSet` in one evaluation, dodging a world-bounds round-trip race),
+  proving it railed through rather than recycled. Glow + charge feel want a Pixel 6 pass.
+
+## B30 — asteroid split (2026-06-15)
+Built B30, Classic-Asteroids juice for the kids: a tough rock (2- or 3-hit) **killed by a rocket**,
+on its **final pop only**, scatters **2 small 1-hit fragments**. Rewards the 9yo's hunt for big
+toughness-weighted rocks with more action + more points, while each fragment stays trivial for the
+5yo. Decisions locked with Michael (in the plan): fragments **threaten the station** (funnel in,
+can cost a ring — a self-balancing "winning tax"); fragments **score** their own 1-hit pop (10 pts
+each, via the existing path); **only rocket-kills split** (a station-reached rock — a loss — never
+does); 1-hit rocks never split; chipping a multi-hit rock doesn't split (final pop only).
+- **The crux was the fixed pool.** The rocket→asteroid overlap collider is built **once** over
+  `this.asteroids.map(a => a.sprite)` and the wrappers are never recreated, so new shootable
+  fragments can't be made mid-scene. Solution: **pre-allocate fragment wrappers and append them to
+  the same `this.asteroids` array** (one array, one collider) before the collider line runs. They
+  inherit the collider, the `update()` loop, `checkStationContacts()`, `pickHomingTarget`, and the
+  wave-clear field-empty check for free. A separate array + second collider was rejected (would
+  duplicate all four). Fragments differ from lane rocks in exactly two ways: `onWantRespawn` returns
+  **false** (one-shot — pop/exit/expire parks them, never respawns off the right edge) and they're
+  fielded **in-field with a scatter velocity** (`spawnFragment(x,y,vx,vy)`) instead of off the edge.
+  Scatter is **leftward-biased** (cone centered at 180°) so fragments head into the field and the
+  existing funnel + station-contact + left-exit logic all engage with no new bounds.
+- **Two load-bearing guards.** A **spawn grace** (body off ~100ms, also `takeHit()` returns 0 during
+  it) stops an in-flight railgun — whose per-rocket `hitSet` predates the fragment — from chipping a
+  fragment the instant it spawns. A hard **lifetime cap** (~6s) guarantees the wave can always clear:
+  fragments correctly count toward field-empty, so without the cap a fragment that never reached an
+  edge/station could hold a wave open forever. `update()` now takes `delta` to drive both clocks.
+- **No scoring/solver/difficulty change.** A fragment *is* a 1-hit rock, so `takeHit()` already
+  returns `1 × SCORE.perHit` = 10 on its pop. Split is wired in `handleHit` (both the charged-railgun
+  and normal branches) keyed on `pts > 0` — a rocket-kill — so `consume()` (station-reached) never
+  splits. `threatOf` (waves.ts) deliberately doesn't model fragment threat (documented inline + spec
+  §7): they only appear when winning, are trivial, and the regen leak absorbs strays; the cheap tuning
+  knobs if it's too much are `SPLIT.fragmentSpeed`/`lifetimeMs`, not the calibrated wave targets.
+- New `SPLIT` block in `src/layout.ts`; `makeAsteroid(scene, SPLIT.fragmentRadius)` baked in
+  `textures.ts` (NOT added to `RADIUS_BY_HITS` — that map is the solver's hits→radius contract);
+  `fragment`/`aliveMs`/`graceUntilMs` + `isFragment` + `spawnFragment` in `Asteroid.ts`; `fragmentPool`
+  + `splitCount` + `spawnFragments(origin)` in `WaveDirector.ts`; `__debug.fragmentsAlive`/`splitCount`
+  in the scene. Verify: typecheck + build + smoke green. **smoke caveat:** headless software-WebGL
+  runs game-time ~10× slower than wall-clock (ReadPixels GPU stalls clamp Phaser's per-frame delta,
+  so a 2.2s breather `delayedCall` takes ~17s wall to fire) — confirmed via a Sonnet review + probing,
+  it's a headless artifact, not a game bug. So the split assertion can't cheaply advance to a wave
+  with 2-hit rocks; it instead fields a 2-hit rock directly via the public `reconfigure()`/`spawn()`
+  path (what `startWave` does), kills it, asserts `splitCount` rises + ≥2 fragments + score +≥20 once
+  popped. Existing selectors hardened with `!isFragment`. **Un-phone-tested** — wants a Pixel 6 pass
+  (kill a 2-hit + a 3-hit, confirm scatter/funnel/score/ring-cost, that a station-reached rock doesn't
+  split, that the wave still clears with fragments in flight, and that a charged railgun's fragments
+  survive the same pass via spawn grace).
+
 ## Open questions
 All moved to [`backlog.md`](backlog.md) (2026-06-06): **lanes** → resolved by the v5 funnel
 (shared field); **shield rendering** (chunky segments vs smooth arc) → folded into B1 and

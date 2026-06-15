@@ -19,6 +19,31 @@ export const SLING = {
   trajectoryMax: 280, // preview length at a full pull
 } as const;
 
+/**
+ * Charged shot (B13) — hold the pull to power up a **railgun**: a full charge
+ * fires a rocket that pierces straight through every asteroid in its path
+ * (chipping each once) until it leaves the screen. Lives beside SLING (it's a
+ * control-feel concern). `fullMs` is the ONE dial separating "flick" from
+ * "charged": charge accrues from pointer-down, so a quick flick never reaches
+ * full and stays an ordinary single shot. The cue is local to the sling — the
+ * nocked rocket glows + grows as charge fills, then pulses when ready (no text,
+ * orientation-neutral). All code-drawn (Graphics), no postFX.
+ */
+export const CHARGE = {
+  fullMs: 600, // hold this long past the start of the pull to reach full charge
+  // Glow disc drawn behind the nocked rocket while charging.
+  glowRadiusMin: 8, // disc radius at charge 0…
+  glowRadiusMax: 22, // …lerping to this at full charge
+  glowAlphaMin: 0.12, // disc alpha at charge 0…
+  glowAlphaMax: 0.5, // …lerping to this at full charge
+  rocketScaleFull: 1.4, // nocked rocket scales 1→this as charge fills
+  // Full-charge "ready" pulse (sine off elapsed ms): a steady brightness/scale
+  // breath so the player can see the shot is armed.
+  pulseW: 0.012, // rad/ms (period ~520ms)
+  pulseGlowDepth: 0.25, // ± this fraction of the full glow alpha
+  pulseScaleDepth: 0.12, // ± this fraction of rocketScaleFull
+} as const;
+
 export const P1_ANCHOR = { x: 180, y: 100 } as const; // top player
 export const P2_ANCHOR = { x: 180, y: 640 } as const; // bottom player
 
@@ -184,6 +209,12 @@ export const TRAIL = {
   bodyFlux: 0.5,
   coreFlux: 0.55,
   wrapSkip: 60, // skip a segment longer than this (a homing re-aim / recycle teleport)
+  // Per-rocket TIER multipliers (B13). The absolute values above are the
+  // CHARGED (railgun) baseline — exactly the locked shot-trail look; a normal
+  // uncharged shot gets a subdued version (less alpha, shorter ribbon), so the
+  // in-flight trail doubles as the "this was a railgun" read.
+  chargedMul: { alpha: 1, len: 1, width: 1 }, // == the current look
+  normalMul: { alpha: 0.45, len: 0.65, width: 0.9 }, // subdued
 } as const;
 
 /** End-of-round overlays (fail "Try again?" and victory "You did it!"):
@@ -294,6 +325,33 @@ export const HUD_ROWS = {
 export const SCORE = {
   perHit: 10, // points = spec.hits × perHit (toughness-weighted)
   popup: { riseScale: 1.4, durationMs: 650, fontPx: 18 }, // floating "+N"
+} as const;
+
+/**
+ * Asteroid split (B30) — Classic-Asteroids juice. When a tough rock (2- or
+ * 3-hit) is destroyed BY A ROCKET, on its FINAL pop only, it scatters 2 small
+ * 1-hit fragments. They funnel toward the station like mini-asteroids (the
+ * existing funnel + station-contact + left-exit logic all engage), threaten a
+ * shield ring (a self-balancing "winning tax"), and score their own 1-hit pop
+ * (10 pts each — no scoring code change, a fragment IS a 1-hit rock). Only
+ * rocket-kills split; a rock that reaches the station never does.
+ *
+ * Fragments live as pre-allocated wrappers appended to the asteroid pool (so
+ * the rocket→asteroid collider, built once, covers them); they differ from
+ * lane rocks only in being one-shot (no respawn) and fielded at a position
+ * with a scatter velocity rather than off the right edge.
+ */
+export const SPLIT = {
+  poolSize: 6, // pre-allocated fragment wrappers (graceful degrade if exhausted)
+  count: 2, // fragments per qualifying kill
+  minHitsToSplit: 2, // 2- and 3-hit rocks split; 1-hit never
+  fragmentRadius: 10, // smaller than the 13px 1-hit rock → reads as a "chunk"
+  launchSpeed: 90, // initial scatter burst (px/s)
+  fragmentSpeed: 45, // post-funnel cruise toward the station (~ a slow lane rock)
+  scatterConeDeg: 70, // total spread of the 2 fragments...
+  scatterCenterDeg: 180, // ...centered LEFTWARD (toward the station, -x)
+  spawnGraceMs: 100, // body disabled on spawn (railgun/fresh-pop guard)
+  lifetimeMs: 6000, // hard cap — guarantees the wave can always clear
 } as const;
 
 /**

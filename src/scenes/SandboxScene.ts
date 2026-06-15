@@ -99,9 +99,9 @@ export class SandboxScene extends Phaser.Scene {
         edge: 'top',
         rocketTexture: TEX.rocketP1,
         canFire: () => hud1.canFire(),
-        onFire: (x, y, vx, vy) => {
+        onFire: (x, y, vx, vy, charged) => {
           hud1.spend();
-          this.fireRocket(TEX.rocketP1, x, y, vx, vy, homing1.enabled);
+          this.fireRocket(TEX.rocketP1, x, y, vx, vy, homing1.enabled, charged);
         },
         isHoming: () => homing1.enabled,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
@@ -112,9 +112,9 @@ export class SandboxScene extends Phaser.Scene {
         edge: 'bottom',
         rocketTexture: TEX.rocketP2,
         canFire: () => hud2.canFire(),
-        onFire: (x, y, vx, vy) => {
+        onFire: (x, y, vx, vy, charged) => {
           hud2.spend();
-          this.fireRocket(TEX.rocketP2, x, y, vx, vy, homing2.enabled);
+          this.fireRocket(TEX.rocketP2, x, y, vx, vy, homing2.enabled, charged);
         },
         isHoming: () => homing2.enabled,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
@@ -149,6 +149,9 @@ export class SandboxScene extends Phaser.Scene {
         wave: () => this.waveDirector.waveNumber,
         hits: () => this.hitCount,
         score: () => this.scoreKeeper.value,
+        fragmentsAlive: () =>
+          this.asteroids.filter((a) => a.isFragment && a.isActive).length,
+        splitCount: () => this.waveDirector.splitCount,
         setHoming: (player: number, on: boolean) => this.homingToggles[player - 1]?.set(on),
         startBoss: () => {
           this.waveDirector.endRunNow();
@@ -174,8 +177,8 @@ export class SandboxScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     // Freeze game logic behind either end-card; tweens still finish.
     if (this.failOverlay.visible || this.victoryOverlay.visible) return;
-    for (const control of this.controls) control.update();
-    for (const asteroid of this.asteroids) asteroid.update();
+    for (const control of this.controls) control.update(delta);
+    for (const asteroid of this.asteroids) asteroid.update(delta);
     // Steer in-flight homing shots toward their locked targets (B14), then
     // advance + redraw their exhaust trails (the shot-trail polish item).
     this.rockets.steer(delta);
@@ -207,9 +210,22 @@ export class SandboxScene extends Phaser.Scene {
   /** Fire a rocket. It homes ONLY if this seat's toggle is on AND it locks a
    *  target at fire (the highlighted rock); otherwise it's an ordinary straight
    *  shot. A locked shot is meant to connect (see HOMING.turnRateDeg). */
-  private fireRocket(tex: string, x: number, y: number, vx: number, vy: number, homing: boolean): void {
+  private fireRocket(
+    tex: string,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    homing: boolean,
+    charged: boolean
+  ): void {
     const rocket = this.rockets.fire(tex, x, y, vx, vy);
-    if (!rocket || !homing) return;
+    if (!rocket) return;
+    // A charged shot is a railgun (B13): it pierces asteroids (see handleHit)
+    // and wears the bright trail tier. Charge & homing are mutually exclusive
+    // at the sling, so a shot is never both.
+    if (charged) rocket.setData('charged', true);
+    if (!homing) return;
     const target = this.pickHomingTarget(x, y, vx, vy);
     if (!target) return; // no lock → leave it a straight shot
     rocket.setData('homing', true);
@@ -287,9 +303,35 @@ export class SandboxScene extends Phaser.Scene {
     const target = rocket === first ? second : first;
     const asteroid = target.getData('ref') as Asteroid | undefined;
     if (!rocket.getData('isRocket') || !asteroid) return;
+
+    // Charged = railgun (B13): pierce every asteroid in the path, chipping each
+    // ONCE (one normal takeHit per rock — 1-hit rocks pop, tough rocks chip
+    // down) and railing on instead of recycling. The per-rocket hitSet guards
+    // the multi-frame overlap window so a surviving chipped rock isn't double-
+    // chipped during a single pass; a popped rock disables its body and stops
+    // overlapping. The rocket recycles normally on world-bounds.
+    if (rocket.getData('charged')) {
+      const hitSet = rocket.getData('hitSet') as Set<Asteroid>;
+      if (hitSet.has(asteroid)) return; // already chipped this rock on this pass
+      hitSet.add(asteroid);
+      const pts = asteroid.takeHit();
+      if (pts > 0) {
+        this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
+        // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
+        // station consume() never scores, so it never splits). Read position
+        // now — the pop tween only scales/fades the sprite, never moves it.
+        this.waveDirector.spawnFragments(asteroid);
+      }
+      this.hitCount += 1;
+      return; // pierce — do NOT recycle
+    }
+
     this.rockets.recycle(rocket);
     const pts = asteroid.takeHit();
-    if (pts > 0) this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
+    if (pts > 0) {
+      this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
+      this.waveDirector.spawnFragments(asteroid); // B30 — see the charged branch
+    }
     this.hitCount += 1;
   };
 

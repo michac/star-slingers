@@ -115,7 +115,17 @@ export const BOSS = {
 /** Average spawn -> shield-contact travel distance (lane radius cancels). */
 const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (STATION.cx + SHIELD_RINGS[0]);
 
-/** Gross accurate hits/s a concrete field demands, sustained. */
+/**
+ * Gross accurate hits/s a concrete field demands, sustained.
+ *
+ * NOTE (B30): this models only fielded LANE rocks — split fragments are left
+ * intentionally un-modeled. Fragments appear only when players are *winning*
+ * (rocket-killing tough rocks), they're trivial 1-hit pops, and the shield
+ * regen leak absorbs the occasional one that reaches the station. The
+ * calibrated targets (0.05/0.20/0.45/0.75) stay as-is; if a W3/W4 playtest
+ * shows the kids drowning in fragments, drop SPLIT.fragmentSpeed or
+ * SPLIT.lifetimeMs (expire before reaching the station) — not the wave targets.
+ */
 function threatOf(specs: AsteroidSpec[]): number {
   return specs.reduce((sum, a) => sum + (a.hits * a.speed) / TRAVEL_DIST, 0);
 }

@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT } from '../layout';
+import { BOSS_LAYOUT, SPLIT } from '../layout';
 import { RADIUS_BY_HITS } from '../waves';
 
 export const TEX = {
@@ -39,6 +39,10 @@ export function generateTextures(scene: Phaser.Scene): void {
   for (const radius of new Set(Object.values(RADIUS_BY_HITS))) {
     makeAsteroid(scene, radius);
   }
+  // The split fragment (B30) — a smaller "chunk". NOT added to RADIUS_BY_HITS
+  // (that map is the solver's hits→radius contract); the crater guard (r>=15)
+  // handles this r=10 fine.
+  makeAsteroid(scene, SPLIT.fragmentRadius);
   makeBoss(scene);
   makeEscort(scene);
   makeHeart(scene);
