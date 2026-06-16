@@ -48,7 +48,11 @@ This repo is the game and its design record — nothing else.
 
 - `npm run dev` — dev server, LAN-exposed for phone testing (see `README.md` for firewall notes)
 - `npm run build` / `npm run typecheck`
-- `node smoke.mjs` — headless boot/interaction smoke check (writes ignored `smoke-*.png`)
+- `npm test` — `@playwright/test` suite (`e2e/sandbox.spec.ts`): auto-starts the dev server
+  headless on :5181, drives coordinate taps + direct shots, and asserts hits / score / homing /
+  pierce / split / the boss charge-expose-recharge cycle / the `?boss` shortcut, gating every case
+  on zero console errors. Still writes the ignored `smoke-*.png` eyeball frames. First run on a new
+  machine needs `npx playwright install chromium`.
 - `npm run deploy` — **commit first** (it refuses a dirty tree), then it pushes `main`, watches the
   `deploy-pages.yml` Action, and verifies the live URL. Needs `gh` authed and a GitHub remote with
   Pages enabled. Docs-only commits (`plans/**`, `*.md`) don't trigger a deploy.

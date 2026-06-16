@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "playwright test",
     "deploy": "node deploy.mjs",
     "deploy:prototype": "node deploy-prototype.mjs"
   },
@@ -15,8 +16,8 @@
     "phaser": "^3.90.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.3",
-    "playwright-core": "^1.60.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"
   }

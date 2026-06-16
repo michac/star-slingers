@@ -463,6 +463,32 @@ does); 1-hit rocks never split; chipping a multi-hit rock doesn't split (final p
   split, that the wave still clears with fragments in flight, and that a charged railgun's fragments
   survive the same pass via spawn grace).
 
+## B31 · Smoke → `@playwright/test` (2026-06-15)
+Promoted the 250-line hand-rolled `smoke.mjs` (run manually via `node smoke.mjs`, needing a dev
+server already up) into a real `@playwright/test` suite — the same move `../reflex-game` made.
+**Why:** the old script only *partially* failed — timeout `waitForFunction`s threw (non-zero exit),
+but every *semantic* check folded into a boolean (`bossOk`, `splitScored`, `pierceActive`,
+`escortsBack===4`) just `console.log("…FAIL")` and **exited 0**; a real regression could print FAIL
+and still pass the process. **Scope locked with Michael: runner only** — no `toHaveScreenshot`
+visual baselines (OS-AA-sensitive, flaky across Windows/Linux/CI, and the game has few static
+frames); we keep emitting the `smoke-*.png` screenshots purely as eyeball aids. New
+`playwright.config.ts` (webServer auto-start on a dedicated **:5181**, distinct from reflex's 5180;
+Pixel-6 360×740 touch viewport; swiftshader GL flags; `workers:1`; a 90s per-test `timeout` because
+headless game-time runs ~10× slow) + `e2e/sandbox.spec.ts` (1:1 port split into 8 named `test()`
+cases — boot-clean, hit, score, homing, pierce, split, boss-cycle, `?boss` — each old `…OK/FAIL`
+now an `expect()`, every case gating on zero console errors via `beforeEach`/`afterEach`). Dropped
+the custom cross-platform chromium resolver — **standard** Playwright resolution + `npx playwright
+install chromium` (a no-op here; `chromium-1228` was already cached and is the build `@playwright/
+test@^1.60` pins). The split case keeps its `reconfigure()`/`spawn()` direct-field trick and the
+headless-slow-gametime caveat comments. Deleted `smoke.mjs`; swapped `playwright-core`→
+`@playwright/test`, added `"test": "playwright test"`; `e2e/` left out of `tsconfig.json` `include`
+(Playwright transpiles the spec, so `typecheck`/`build` don't need the types); `.gitignore` gained
+Playwright's `test-results`/`playwright-report`/`blob-report`/`.last-run.json`. Verified: all 8
+cases green via the auto-started server; **proved it now fails loudly** — temporarily emitting 1
+fragment instead of 2 turned the split case **red on a value assertion with a non-zero exit** (the
+exact gap the old script left open); typecheck + build still green (e2e excluded from tsc). CLAUDE.md
+/ README / spec §8 references synced.
+
 ## Open questions
 All moved to [`backlog.md`](backlog.md) (2026-06-06): **lanes** → resolved by the v5 funnel
 (shared field); **shield rendering** (chunky segments vs smooth arc) → folded into B1 and

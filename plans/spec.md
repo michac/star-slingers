@@ -102,7 +102,7 @@ and iPhone (iOS Safari), since it being a webpage is the whole point.
   the deliberate relative `base: './'` ("works from any static folder"), and its
   precache-manifest machinery solves a multi-chunk problem this single bundle doesn't
   have. All PWA URLs are relative so they resolve under the `…/star-slingers/`
-  subpath; the SW registers PROD-only (dev + smoke never get one).
+  subpath; the SW registers PROD-only (dev + the headless test suite never get one).
 
 ## 9. Final boss (B5) — built 2026-06-09 (reworked to a cycling fight same day)
 
