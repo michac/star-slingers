@@ -13,11 +13,19 @@
 import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, STATION } from './layout';
 
 export interface AsteroidSpec {
+  kind: AsteroidKind;
   radius: number;
-  hits: number; // hits to break; numbers shown only when > 1 (mock convention)
   y: number; // drift lane, kept clear of both sling zones
   speed: number; // px/s, right -> left
 }
+
+/** A splitter takes one rocket hit, then adds two standard children: three
+ * required hits to clear it completely. */
+export type AsteroidKind = 'standard' | 'splitter';
+export const ASTEROID_KIND = {
+  standard: { radius: 13, threatHits: 1 },
+  splitter: { radius: 17, threatHits: 3 },
+} as const satisfies Record<AsteroidKind, { radius: number; threatHits: number }>;
 
 /** Physical lanes — position + base speed only. Toughness and size are NOT
  *  fixed here; the solver assigns them per wave. The floor (minLanes) uses
@@ -28,10 +36,6 @@ export const LANE_SLOTS: { y: number; baseSpeed: number }[] = [
   { y: 390, baseSpeed: 55 },
   { y: 480, baseSpeed: 65 },
 ];
-
-/** Size follows toughness (mock convention: big rock = tough). The solver
- *  picks hits; this maps hits -> the rock's radius/texture. */
-export const RADIUS_BY_HITS: Record<number, number> = { 1: 13, 2: 17, 3: 21 };
 
 /**
  * The difficulty model: knob ranges the solver moves through, in priority
@@ -45,7 +49,6 @@ export const DIFFICULTY_MODEL = {
   minSpeedScale: 0.5,
   maxSpeedScale: 0.85,
   speedStep: 0.02,
-  maxHits: 3,
   spawnGapMax: 300,
 } as const;
 
@@ -63,12 +66,12 @@ export interface WaveConfig {
  * is just a target; solveWave() realizes it. Targets chosen so the waterfall
  * is visible AND each wave feels distinct (Playtest 3 fix: waves 1 & 2 used
  * to solve to near-identical all-1-hit fields). The shape (B32 floor raise —
- * every wave now runs 4 lanes @ max speed, toughness is the ramp):
- *   W1 one 2-hit rock → W2 three 2-hit → W3 all four 2-hit → W4 a 3-hit joins.
+ * every wave now runs 4 lanes @ max speed, splitter count is the ramp):
+ *   W1 one splitter → W2/W3 two splitters → W4 three splitters.
  *   "Noticeably harder, still soloable": a skilled solo player can scrape W4
  *   (~75% accuracy) but two is comfy.
- * Tune by the dev boot log (target vs achieved + tier). Raise W4 toward ~0.9
- * to push the whole field to 3-hit; drop targets to soften. (The slow-lane
+ * Tune by the dev boot log (target vs achieved + tier). Raise targets to add
+ * more splitters; drop targets to soften. (The slow-lane
  * gentle lever is gone from W1 — the 5yo's cushion is homing (B8/B14), not
  * speed; if W1 is too steep for him, soften its target toward ~0.25.)
  */
@@ -121,16 +124,12 @@ const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (STATION.cx 
 /**
  * Gross accurate hits/s a concrete field demands, sustained.
  *
- * NOTE (B30): this models only fielded LANE rocks — split fragments are left
- * intentionally un-modeled. Fragments appear only when players are *winning*
- * (rocket-killing tough rocks), they're trivial 1-hit pops, and the shield
- * regen leak absorbs the occasional one that reaches the station. The
- * calibrated targets (0.30/0.45/0.60/0.75) stay as-is; if a W3/W4 playtest
- * shows the kids drowning in fragments, drop SPLIT.fragmentSpeed or
- * SPLIT.lifetimeMs (expire before reaching the station) — not the wave targets.
+ * A splitter includes the threat of its two standard children: three required
+ * hits total. The calibrated targets (0.30/0.45/0.60/0.75) stay as-is for the
+ * first B37 phone playtest.
  */
 function threatOf(specs: AsteroidSpec[]): number {
-  return specs.reduce((sum, a) => sum + (a.hits * a.speed) / TRAVEL_DIST, 0);
+  return specs.reduce((sum, a) => sum + (ASTEROID_KIND[a.kind].threatHits * a.speed) / TRAVEL_DIST, 0);
 }
 
 /**
@@ -138,7 +137,7 @@ function threatOf(specs: AsteroidSpec[]): number {
  * advancing knobs in priority order until threat reaches `required + leak`:
  *   1. (count)     lanes minLanes -> maxLanes, weak + slow
  *   2. (speed)     speedScale minSpeedScale -> maxSpeedScale
- *   3. (toughness) bump rocks 1->2 (slot order), then 2->3
+ *   3. (splitters) replace standard rocks with splitters (slot order)
  * Greedy/discrete: stops at the first step that meets the target, or when
  * fully saturated (target unreachable — caller's dev log shows the gap).
  */
@@ -147,12 +146,12 @@ export function solveWave(required: number, leak: number): AsteroidSpec[] {
   const target = required + leak;
   let lanes: number = M.minLanes;
   let speedScale: number = M.minSpeedScale;
-  const hits = LANE_SLOTS.map(() => 1); // per-slot toughness
+  const kinds: AsteroidKind[] = LANE_SLOTS.map(() => 'standard');
 
   const build = (): AsteroidSpec[] =>
     LANE_SLOTS.slice(0, lanes).map((slot, i) => ({
-      radius: RADIUS_BY_HITS[hits[i]],
-      hits: hits[i],
+      kind: kinds[i],
+      radius: ASTEROID_KIND[kinds[i]].radius,
       y: slot.y,
       speed: slot.baseSpeed * speedScale,
     }));
@@ -163,11 +162,9 @@ export function solveWave(required: number, leak: number): AsteroidSpec[] {
   while (!met() && speedScale < M.maxSpeedScale) {
     speedScale = Math.min(M.maxSpeedScale, speedScale + M.speedStep);
   }
-  // Toughness: raise the whole field 1->2 before any 2->3, in slot order.
-  for (let level = 2; level <= M.maxHits && !met(); level++) {
-    for (let i = 0; i < lanes && !met(); i++) {
-      if (hits[i] < level) hits[i] = level;
-    }
+  // Last lever: replace standards with splitters, in slot order.
+  for (let i = 0; i < lanes && !met(); i++) {
+    kinds[i] = 'splitter';
   }
   return build();
 }

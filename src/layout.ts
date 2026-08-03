@@ -311,39 +311,34 @@ export const HUD_ROWS = {
 } as const;
 
 /**
- * Scoring (B6) presentation — toughness-weighted points + the floating "+N"
- * popup. Lives here (not waves.ts) because it's presentation, not difficulty:
- * points = spec.hits × perHit (1-hit=10, 2-hit=20, 3-hit=30); only the final
- * pop scores. The popup grows-and-fades in place (orientation-neutral so it
+ * Scoring presentation — standards score 10 and splitters score 20 immediately;
+ * their two children score 10 each. The popup grows-and-fades in place (orientation-neutral so it
  * reads the same from both seats); the HUD number is the canonical read.
  */
 export const SCORE = {
-  perHit: 10, // points = spec.hits × perHit (toughness-weighted)
+  standard: 10,
+  splitter: 20,
   popup: { riseScale: 1.4, durationMs: 650, fontPx: 18 }, // floating "+N"
 } as const;
 
 /**
- * Asteroid split (B30) — Classic-Asteroids juice. When a tough rock (2- or
- * 3-hit) is destroyed BY A ROCKET, on its FINAL pop only, it scatters 2 small
- * 1-hit fragments. They funnel toward the station like mini-asteroids (the
+ * Splitter children (B37) — one rocket breaks a large splitter into two
+ * standard-size children. They funnel toward the station like mini-asteroids (the
  * existing funnel + station-contact + left-exit logic all engage), threaten a
- * shield ring (a self-balancing "winning tax"), and score their own 1-hit pop
- * (10 pts each — no scoring code change, a fragment IS a 1-hit rock). Only
- * rocket-kills split; a rock that reaches the station never does.
+ * shield ring (a self-balancing "winning tax"), and score their own standard
+ * pop (10 pts each). Only rocket-kills split; a rock that reaches the station never does.
  *
- * Fragments live as pre-allocated wrappers appended to the asteroid pool (so
+ * Children live as pre-allocated wrappers appended to the asteroid pool (so
  * the rocket→asteroid collider, built once, covers them); they differ from
  * lane rocks only in being one-shot (no respawn) and fielded at a position
  * with a scatter velocity rather than off the right edge.
  */
-export const SPLIT = {
-  poolSize: 6, // pre-allocated fragment wrappers (graceful degrade if exhausted)
-  count: 2, // fragments per qualifying kill
-  minHitsToSplit: 2, // 2- and 3-hit rocks split; 1-hit never
-  fragmentRadius: 10, // smaller than the 13px 1-hit rock → reads as a "chunk"
+export const SPLITTER_CHILDREN = {
+  poolSize: 6, // pre-allocated child wrappers (graceful degrade if exhausted)
+  count: 2, // children per splitter
   launchSpeed: 90, // initial scatter burst (px/s)
-  fragmentSpeed: 45, // post-funnel cruise toward the station (~ a slow lane rock)
-  scatterConeDeg: 70, // total spread of the 2 fragments...
+  childSpeed: 45, // post-funnel cruise toward the station (~ a slow lane rock)
+  scatterConeDeg: 70, // total spread of the 2 children...
   scatterCenterDeg: 180, // ...centered LEFTWARD (toward the station, -x)
   spawnGraceMs: 100, // body disabled on spawn (railgun/fresh-pop guard)
   lifetimeMs: 6000, // hard cap — guarantees the wave can always clear

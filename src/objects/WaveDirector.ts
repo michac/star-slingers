@@ -12,13 +12,13 @@
  * reset logic lives here.
  */
 import Phaser from 'phaser';
-import { SPLIT } from '../layout';
+import { SPLITTER_CHILDREN } from '../layout';
 import {
   asteroidsFor,
   BREATHER,
   DIFFICULTY_MODEL,
   LANE_SLOTS,
-  RADIUS_BY_HITS,
+  ASTEROID_KIND,
   WAVES,
 } from '../waves';
 import { Asteroid } from './Asteroid';
@@ -29,14 +29,13 @@ import { WaveBanner } from './WaveBanner';
 type WaveState = 'live' | 'breather' | 'done';
 
 export class WaveDirector {
-  /** One wrapper per lane slot PLUS the B30 fragment pool, all alive for the
+  /** One wrapper per lane slot PLUS the splitter-child pool, all alive for the
    *  whole run (see Asteroid's header: the overlap collider depends on these
-   *  never being recreated). The fragment wrappers are the tail of this array. */
+   *  never being recreated). The child wrappers are the tail of this array. */
   readonly asteroids: Asteroid[];
 
-  /** The B30 fragment pool — the tail of `asteroids` (indices ≥ lane count).
-   *  Only these are fielded as split fragments; lane wrappers never are. */
-  private readonly fragmentPool: Asteroid[];
+  /** The splitter-child pool — the tail of `asteroids` (indices ≥ lane count). */
+  private readonly childPool: Asteroid[];
 
   private waveIndex = 0;
   private quotaRemaining = 0;
@@ -65,8 +64,8 @@ export class WaveDirector {
         new Asteroid(
           this.scene,
           specs1[i] ?? {
-            radius: RADIUS_BY_HITS[1],
-            hits: 1,
+            kind: 'standard',
+            radius: ASTEROID_KIND.standard.radius,
             y: slot.y,
             speed: slot.baseSpeed * DIFFICULTY_MODEL.minSpeedScale,
           },
@@ -75,26 +74,26 @@ export class WaveDirector {
           this.boom
         )
     );
-    // B30: append dedicated FRAGMENT wrappers to the SAME array, parked. They
+    // Append dedicated child wrappers to the SAME array, parked. They
     // join here (before SandboxScene builds the rocket→asteroid collider once
     // over this.asteroids), so they get the collider + update loop + station
     // contact + homing + field-empty checks for free. They differ from lane
     // rocks in exactly two ways: onWantRespawn returns false (one-shot — they
     // park rather than respawn off the right edge), and they're fielded via
-    // spawnFragment() at a scatter position. Their indices are ≥ lane count, so
+    // spawnChild() at a scatter position. Their indices are ≥ lane count, so
     // startWave's specs[i] is undefined for them and waves never field them.
-    this.fragmentPool = Array.from(
-      { length: SPLIT.poolSize },
+    this.childPool = Array.from(
+      { length: SPLITTER_CHILDREN.poolSize },
       () =>
         new Asteroid(
           this.scene,
-          { radius: SPLIT.fragmentRadius, hits: 1, y: 0, speed: SPLIT.fragmentSpeed },
+          { kind: 'standard', radius: ASTEROID_KIND.standard.radius, y: 0, speed: SPLITTER_CHILDREN.childSpeed },
           DIFFICULTY_MODEL.spawnGapMax,
           () => false, // one-shot: never respawns off the right edge
           this.boom
         )
     );
-    this.asteroids.push(...this.fragmentPool);
+    this.asteroids.push(...this.childPool);
     this.startWave(0);
   }
 
@@ -126,27 +125,25 @@ export class WaveDirector {
     }
   }
 
-  /** Split a rocket-killed tough rock (B30): scatter up to SPLIT.count small
-   *  1-hit fragments from the origin's pop site. No-op for 1-hit rocks
-   *  (origin._spec.hits is untouched by takeHit, so it still reads the original
-   *  toughness). Graceful when the fragment pool is exhausted — never throws.
+  /** Split a rocket-killed splitter into standard children. Standards never
+   *  split; the child-pool exhaustion path degrades gracefully.
    *  Read the origin position synchronously (the caller invokes this right at
    *  the kill; the pop tween only scales/fades the sprite, never moves it). */
-  spawnFragments(origin: Asteroid): void {
-    if (origin.spec.hits < SPLIT.minHitsToSplit) return; // 1-hit rocks never split
-    const free = this.fragmentPool.filter((f) => !f.isActive);
+  spawnChildren(origin: Asteroid): void {
+    if (origin.spec.kind !== 'splitter') return;
+    const free = this.childPool.filter((child) => !child.isActive);
     if (free.length === 0) return; // pool exhausted — degrade gracefully
-    const n = Math.min(SPLIT.count, free.length);
+    const n = Math.min(SPLITTER_CHILDREN.count, free.length);
     const { x, y } = origin.sprite;
-    const half = Phaser.Math.DegToRad(SPLIT.scatterConeDeg) / 2;
-    const center = Phaser.Math.DegToRad(SPLIT.scatterCenterDeg);
+    const half = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterConeDeg) / 2;
+    const center = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterCenterDeg);
     for (let i = 0; i < n; i++) {
-      // Spread n fragments evenly across the cone (single fragment → dead center).
+      // Spread n children evenly across the cone (single child → dead center).
       const t = n > 1 ? i / (n - 1) : 0.5;
       const angle = center - half + 2 * half * t;
-      const vx = Math.cos(angle) * SPLIT.launchSpeed;
-      const vy = Math.sin(angle) * SPLIT.launchSpeed;
-      free[i].spawnFragment(x, y, vx, vy);
+      const vx = Math.cos(angle) * SPLITTER_CHILDREN.launchSpeed;
+      const vy = Math.sin(angle) * SPLITTER_CHILDREN.launchSpeed;
+      free[i].spawnChild(x, y, vx, vy);
     }
     this.splitCount += 1;
   }

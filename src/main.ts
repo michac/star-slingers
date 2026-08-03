@@ -10,12 +10,12 @@ import { SandboxScene } from './scenes/SandboxScene';
 if (import.meta.env.DEV) {
   for (const [i, w] of WAVES.entries()) {
     const specs = asteroidsFor(w);
-    const maxHits = Math.max(...specs.map((s) => s.hits));
+    const splitters = specs.filter((s) => s.kind === 'splitter').length;
     const speedScale = (specs[0].speed / 40).toFixed(2); // slot 0 baseSpeed = 40
     console.log(
       `wave ${i + 1}: target ${w.required.toFixed(2)} -> achieved ` +
         `${requiredHitsPerSec(w).toFixed(2)} required hits/s ` +
-        `[lanes ${specs.length}, speed x${speedScale}, maxHits ${maxHits}], ` +
+        `[lanes ${specs.length}, speed x${speedScale}, splitters ${splitters}], ` +
         `break-even ${(breakEvenAccuracy(w) * 100).toFixed(0)}%, quota ${w.quota}`
     );
   }

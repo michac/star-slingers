@@ -35,6 +35,7 @@
  * evaluate, so a 200-frame window is one round-trip, not one per frame.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { ASTEROID_KIND, solveWave } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -142,28 +143,28 @@ async function stepUntil(
  *  what startWave does for lane rocks), then park it STATIONARY in-field at
  *  (x,y), clear of the station — so an interaction test never has to wait for a
  *  wave rock to drift into range. Uses a lane wrapper (asteroids[slot], slots
- *  0..3; the B30 fragment pool is the tail). */
+ *  0..3; the splitter-child pool is the tail). */
 async function fieldRock(
   page: Page,
   {
     x,
     y,
-    hits = 1,
-    radius = 17,
+    kind = 'standard',
+    radius,
     slot = 0,
-  }: { x: number; y: number; hits?: number; radius?: number; slot?: number }
+  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number }
 ): Promise<void> {
   await page.evaluate(
-    ({ x, y, hits, radius, slot }) => {
+    ({ x, y, kind, radius, slot }) => {
       const s = (window as any).__game.scene.keys['Sandbox'];
-      const a = s.asteroids[slot]; // a lane wrapper (NOT a fragment)
-      a.reconfigure({ radius, hits, y, speed: 0 }, 0);
+      const a = s.asteroids[slot]; // a lane wrapper (NOT a child)
+      a.reconfigure({ kind, radius: radius ?? (kind === 'splitter' ? 17 : 13), y, speed: 0 }, 0);
       a.spawn(); // field it (off the right edge)...
       a.sprite.setPosition(x, y); // ...then place it in-field, clear of the station
       a.sprite.body.reset(x, y);
       a.sprite.body.setVelocity(0, 0);
     },
-    { x, y, hits, radius, slot }
+    { x, y, kind, radius, slot }
   );
 }
 
@@ -171,8 +172,8 @@ async function fieldRock(
 const hits = (page: Page) => page.evaluate(`${SCENE}.__debug.hits()`) as Promise<number>;
 const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
 const splitCount = (page: Page) => page.evaluate(`${SCENE}.__debug.splitCount()`) as Promise<number>;
-const fragmentsAlive = (page: Page) =>
-  page.evaluate(`${SCENE}.__debug.fragmentsAlive()`) as Promise<number>;
+const childrenAlive = (page: Page) =>
+  page.evaluate(`${SCENE}.__debug.childrenAlive()`) as Promise<number>;
 const bossPhase = (page: Page) => page.evaluate(`${SCENE}.__debug.bossPhase()`) as Promise<string>;
 const bossHp = (page: Page) => page.evaluate(`${SCENE}.__debug.bossHp()`) as Promise<number>;
 const escortsAlive = (page: Page) =>
@@ -223,29 +224,29 @@ test('head-on rocket ticks the hit counter', async ({ page }) => {
   expect(await hits(page)).toBeGreaterThan(hitsBefore);
 });
 
-test('a full pop scores', async ({ page }) => {
+test('one splitter hit scores and creates children', async ({ page }) => {
   await gotoGame(page);
 
-  // Only the FINAL pop scores: a chip on a multi-hit rock leaves the score at 0.
-  // Field a 2-hit rock directly and fire two head-on rockets, stepping each into
-  // the (stationary) rock — the first chip (2->1) scores nothing, the pop (1->0)
-  // drives the score > 0. Deterministic on the fixed-timestep clock.
-  await fieldRock(page, { x: 250, y: 300, hits: 2 });
+  // A splitter has no chip state: one hit immediately awards 20 and creates
+  // two children. Deterministic on the fixed-timestep clock.
+  await fieldRock(page, { x: 250, y: 300, kind: 'splitter' });
 
   const hitsBefore = await hits(page);
   await page.evaluate(() =>
     (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 170, 300, 400, 0)
   );
-  const chipped = await stepUntil(page, `s.__debug.hits() > ${hitsBefore}`, 120);
-  expect(chipped.done).toBe(true);
-  expect(await score(page)).toBe(0); // the chip must NOT score
-
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 170, 300, 400, 0)
-  );
-  const scored = await stepUntil(page, 's.__debug.score() > 0', 120);
+  const scored = await stepUntil(page, 's.__debug.score() >= 20', 120);
   expect(scored.done).toBe(true);
-  expect(await score(page)).toBeGreaterThan(0);
+  expect(await score(page)).toBe(20);
+  expect(await childrenAlive(page)).toBe(2);
+});
+
+test('wave solver uses only standards and three-hit splitters', () => {
+  const specs = solveWave(0.75, 0);
+  expect(specs.every((spec) => spec.kind === 'standard' || spec.kind === 'splitter')).toBe(true);
+  expect(specs.every((spec) => spec.radius === ASTEROID_KIND[spec.kind].radius)).toBe(true);
+  const cost = specs.reduce((sum, spec) => sum + ASTEROID_KIND[spec.kind].threatHits, 0);
+  expect(cost).toBeGreaterThan(specs.length); // a splitter contributes 3, not 2
 });
 
 test('off-axis homing shot curves in', async ({ page }) => {
@@ -317,39 +318,32 @@ test('charged shot rails through', async ({ page }) => {
   expect(pierce.active).toBe(true);
 });
 
-test('a rocket-killed tough rock splits', async ({ page }) => {
+test('a splitter immediately splits into two standard children', async ({ page }) => {
   await gotoGame(page);
 
-  // A tough rock (2+ hits) killed by a rocket scatters 2 small 1-hit fragments
-  // that score 10 each (their own 1-hit pops). Wave 1 fields only 1-hit rocks, so
-  // field a 2-hit rock directly through the public reconfigure()/spawn() path
+  // One splitter hit scatters two standard-size, one-hit children that score 10
+  // each. Field it directly through the public reconfigure()/spawn() path
   // (exactly what startWave does) and kill it on the fixed-timestep clock. Lane
-  // wrappers are asteroids[0..3]; the B30 fragment pool is the tail.
+  // wrappers are asteroids[0..3]; the child pool is the tail.
   const splitBefore = await splitCount(page);
   const hitsBefore = await hits(page);
-  await fieldRock(page, { x: 260, y: 300, hits: 2 });
+  await fieldRock(page, { x: 260, y: 300, kind: 'splitter' });
 
-  // Kill it: 2 head-on rockets (first chips 2->1, second pops 1->0 and splits),
-  // stepping each into the stationary rock.
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 180, 300, 400, 0)
-  );
-  const chip = await stepUntil(page, `s.__debug.hits() > ${hitsBefore}`, 120);
-  expect(chip.done).toBe(true);
+  // One head-on rocket splits it immediately.
   await page.evaluate(() =>
     (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 180, 300, 400, 0)
   );
   const split = await stepUntil(page, `s.__debug.splitCount() > ${splitBefore}`, 120);
-  expect(split.done).toBe(true); // the final pop split: splitCount rose
+  expect(split.done).toBe(true);
 
-  const fragsAlive = await fragmentsAlive(page);
+  const kidsAlive = await childrenAlive(page);
   const scoreAfterKill = await score(page);
   await shot(page, 'smoke-split.png');
-  expect(fragsAlive).toBeGreaterThanOrEqual(2); // >=2 fragments went live
+  expect(kidsAlive).toBe(2);
+  expect(scoreAfterKill).toBe(20);
 
-  // Pop the scattered fragments: in ONE in-browser loop, re-aim a rocket at each
-  // live fragment (every few frames) and step until the score climbs by the two
-  // 1-hit pops (>=20). Fragments are 1-hit, so each connect pops + scores 10.
+  // Pop the scattered children in one in-browser loop. Each is standard-size
+  // and one-hit, so the two pops add exactly 20.
   const scoreDelta = (await page.evaluate((scoreAfterKill) => {
     const g = (window as any).__game;
     g.loop.sleep();
@@ -360,7 +354,7 @@ test('a rocket-killed tough rock splits', async ({ page }) => {
     for (let n = 0; n < 400 && delta < 20; n++) {
       if (n % 3 === 0) {
         s.asteroids.forEach((a: any) => {
-          if (a.isFragment && a.active && !a.popping) {
+          if (a.isChild && a.active && !a.popping) {
             const t = a.sprite;
             s.rockets.fire('rocket-p1', t.x + 40, t.y, -500, 0); // chase + intercept
           }
@@ -372,7 +366,7 @@ test('a rocket-killed tough rock splits', async ({ page }) => {
     }
     return delta;
   }, scoreAfterKill)) as number;
-  expect(scoreDelta).toBeGreaterThanOrEqual(20);
+  expect(scoreDelta).toBe(20);
 });
 
 test('boss gate + cycle', async ({ page }) => {

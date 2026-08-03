@@ -28,30 +28,6 @@ as clutter. Rework the boss's look (and possibly the station/escorts elsewhere) 
 circle-on-circle monotony while keeping the neon skin. Explore on the prototype shelf first per the
 working agreement; land in one pass. Sync `plans/polish-pass.md` + spec §4.
 
-### B37 · Multi-hit rocks should split on the FIRST hit, not the last — `idea` *(2026-07-14)*
-The multi-hit mechanic feels like too much grind. A "2" rock today shows a counter and must be
-**chipped 2→1 (one hit, no split), then popped 1→0 (second hit) to split**, and *then* each of the 2
-scattered 1-hit fragments needs its own hit — so a single "2" costs up to **4 hits** to fully clear.
-Michael expects a **"2" to split immediately** — the toughness should *be* the split, not a counter you
-grind down first.
-**Current behavior (B30):** split fires only on the final pop — `handleHit` splits when
-`asteroid.takeHit()` returns `pts > 0` (a kill), so intermediate chips (`pts === 0`) never split. Rock
-toughness = `spec.hits`; fragments are pre-allocated 1-hit wrappers scattered by `spawnFragments`
-(`WaveDirector`), sized via the baked fragment texture / `SPLIT` block (`src/layout.ts`).
-**Wanted:** hitting a "2" splits it right away instead of decrementing to "1" first.
-**Design questions to settle before building** (this is why it's `idea`, not `decided`):
-- Does a "2" split into **two 1-hit fragments on the first hit** (total clear = 1 + 2 = 3 hits, vs 4
-  today)? And a "3" → three 1-hit fragments on first hit, or a "2"+a "1", or…? Decide what the number
-  *means* now — "hits to destroy" vs "pieces it bursts into".
-- Do we still show a counter at all, or does a splitting rock just visibly burst? (Kid-legibility: the
-  number is a recognition cue, not reading — keep or drop deliberately.)
-- Fragments still 1-hit and still threaten/score the same? (Keep the B30 self-balancing "winning tax".)
-**Watch-out — difficulty coupling:** the solver treats `spec.hits` as toughness (`threatOf` /
-`requiredHitsPerSec` / `asteroidsFor` in `src/waves.ts`); changing what a hit-count means shifts the
-achieved difficulty of W1–W4, so re-read the dev boot log and likely re-tune `WAVES.required` after.
-Touchpoints: `Asteroid.takeHit`, `SandboxScene.handleHit` (both `pts > 0` branches), `WaveDirector`
-split path, `SPLIT`/textures. Sync spec §4 + §7 + notes.
-
 ## Later
 
 ### B7 · Sound & haptics — `idea` [draft]
@@ -62,6 +38,15 @@ Draft material: *thwip* on release; chunky *boom* + sparkle on breaks; shield-se
 The 5yo had real trouble hitting things — leading the target is the core skill and it's hard at 5. **The primary lever shipped as B14 (homing toggle, done 2026-06-09)** — per-player, opt-in, so it only eases his aim. Remaining backups still open: a slower lane so there's always an easy side, telegraphed shots. Sandbox knobs already exist in `src/layout.ts` (asteroid speed/size, rocket maxSpeed) and `src/waves.ts` (difficulty targets). Cuts both ways — keep difficulty interesting for the 9yo too. **Next playtest:** does homing land for the 5yo, and is the gentle-assist turn-rate (`HOMING.turnRateDeg` in `src/layout.ts`) tuned right?
 
 ## Resolved
+- **B37 · One-hit large splitters — `done`** *(2026-08-03)*. Retired multi-hit rocks and the tiny
+  fragment tier. There are now only explicit **standard** (r=13, one hit, 10 points) and **splitter**
+  (r=17, one hit, 20 points) kinds; neither shows a number. A rocket hit on a splitter immediately
+  creates two preallocated, standard-size children, so clearing it scores **40** total (20 + 10 + 10).
+  Children retain the leftward scatter, station threat, railgun-safe spawn grace, and hard lifetime cap.
+  The solver now prices a splitter at **3 required hits** and can generate only standards and splitters;
+  the targets remain 0.30/0.45/0.60/0.75 for the first phone playtest. Removed the 3-hit radius/texture
+  tier and renamed fragment terminology throughout the integration. Playwright covers immediate split,
+  child size/count, full score, and solver kinds/cost. typecheck + build + 9-test suite green.
 - **B36 · Fix the flaky Playwright tests — fixed-timestep harness — `done`** *(2026-07-10)*. The suite
   wasn't trustworthy: `off-axis homing` + `boss gate + cycle` failed ~2/3 on `--repeat-each=3`, and at
   `--repeat-each=5` the drift-window cases (`head-on`/`full-pop`/`charged`) flaked too (`charged` 5/5).

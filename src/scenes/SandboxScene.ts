@@ -149,8 +149,7 @@ export class SandboxScene extends Phaser.Scene {
         wave: () => this.waveDirector.waveNumber,
         hits: () => this.hitCount,
         score: () => this.scoreKeeper.value,
-        fragmentsAlive: () =>
-          this.asteroids.filter((a) => a.isFragment && a.isActive).length,
+        childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
         splitCount: () => this.waveDirector.splitCount,
         setHoming: (player: number, on: boolean) => this.homingToggles[player - 1]?.set(on),
         startBoss: () => {
@@ -321,7 +320,7 @@ export class SandboxScene extends Phaser.Scene {
         // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
         // station consume() never scores, so it never splits). Read position
         // now — the pop tween only scales/fades the sprite, never moves it.
-        this.waveDirector.spawnFragments(asteroid);
+        this.waveDirector.spawnChildren(asteroid);
       }
       this.hitCount += 1;
       return; // pierce — do NOT recycle
@@ -331,7 +330,7 @@ export class SandboxScene extends Phaser.Scene {
     const pts = asteroid.takeHit();
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
-      this.waveDirector.spawnFragments(asteroid); // B30 — see the charged branch
+      this.waveDirector.spawnChildren(asteroid);
     }
     this.hitCount += 1;
   };

@@ -4,8 +4,8 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT, SPLIT } from '../layout';
-import { RADIUS_BY_HITS } from '../waves';
+import { BOSS_LAYOUT } from '../layout';
+import { ASTEROID_KIND } from '../waves';
 
 export const TEX = {
   rocketP1: 'rocket-p1',
@@ -34,15 +34,10 @@ const ROCKET_H = 14;
 export function generateTextures(scene: Phaser.Scene): void {
   makeRocket(scene, TEX.rocketP1, COLORS.p1);
   makeRocket(scene, TEX.rocketP2, COLORS.p2);
-  // Every toughness tier's radius up front — the solver can field any of
-  // them in later waves.
-  for (const radius of new Set(Object.values(RADIUS_BY_HITS))) {
+  // Every lane-rock radius up front — standards and splitters only.
+  for (const { radius } of Object.values(ASTEROID_KIND)) {
     makeAsteroid(scene, radius);
   }
-  // The split fragment (B30) — a smaller "chunk". NOT added to RADIUS_BY_HITS
-  // (that map is the solver's hits→radius contract); the crater guard (r>=15)
-  // handles this r=10 fine.
-  makeAsteroid(scene, SPLIT.fragmentRadius);
   makeBoss(scene);
   makeEscort(scene);
   makeHeart(scene);

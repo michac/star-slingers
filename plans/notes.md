@@ -646,3 +646,19 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Design watch-items from the chat
 - Shots cross the enemies' path, so **leading the target is the core skill** — satisfying for an adult, possibly tricky at 5. Confirmed by playtest 1; fairness levers tracked as backlog B8 (aim-assist, slower lane, telegraphed shots); playtest these early.
+
+## Build history
+
+- **B37 — One-hit large splitters (2026-08-03):** replaced the grindy 2/3-hit
+  rock representation with explicit **standard** (r=13, 10 points) and
+  **splitter** (r=17, 20 points) kinds. Both pop in one rocket hit and never
+  show a number. A splitter immediately scatters two standard-size children,
+  giving a complete 40-point clear; children retain B30's preallocated-pool
+  collider/update integration, leftward station-threatening scatter, brief
+  railgun-safe spawn grace, and hard lifetime cap. The solver now charges a
+  splitter as 3 required hits (initial split + two child pops), has only the
+  standard→splitter final tier, and keeps the 0.30/0.45/0.60/0.75 targets
+  unchanged for the first phone playtest (boot-log composition: 1/2/2/3
+  splitters, all at ×0.85). Removed the 3-hit texture/radius and
+  renamed fragment terminology to children. typecheck + build + all 9
+  Playwright cases green; still needs Pixel 6 tuning feedback.
