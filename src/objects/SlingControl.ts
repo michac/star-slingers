@@ -6,7 +6,7 @@
  * at most one pointer by id, so two controls track two fingers independently.
  */
 import Phaser from 'phaser';
-import { STROKES } from '../tokens';
+import { COLORS, STROKES } from '../tokens';
 import { CHARGE, SLING } from '../layout';
 
 export interface SlingControlConfig {
@@ -92,13 +92,19 @@ export class SlingControl {
   }
 
   /** Redraw the pull visuals each frame while a finger is down, and accrue
-   *  charge (B13). `deltaMs` advances the ready-pulse clock + the charge. */
+   *  charge (B13, re-gated B35). `deltaMs` advances the ready-pulse clock + the
+   *  charge. Charge only fills while the dot is held past the full-pull
+   *  threshold; ease off and it resets to 0 (a continuous full pull is the
+   *  railgun skill). A homing seat never charges. */
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
     if (this.pointerId === null) return;
-    // Accrue charge while held — unless this seat is homing, which can't railgun.
     if (!this.config.isHoming?.()) {
-      this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
+      if (this.pull.length() >= SLING.pullRadius * CHARGE.pullThresholdFrac) {
+        this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
+      } else {
+        this.charge = 0; // eased off the full pull → reset
+      }
     }
     this.drawDynamic();
   }
@@ -184,7 +190,6 @@ export class SlingControl {
     // player sees what they'll hit before firing. Homing owns the preview and
     // can't charge, so the charge cue is suppressed for a homing seat (B13).
     if (this.config.isHoming?.()) {
-      this.nockedRocket.setScale(1);
       const lock = this.config.homingTargetAt?.(anchor.x, anchor.y, dirX, dirY);
       if (lock) {
         // Glow fill + bold ring so the lock clearly pops and is easy to track
@@ -195,29 +200,37 @@ export class SlingControl {
         g.strokeCircle(lock.x, lock.y, lock.r);
       }
     } else {
-      this.drawChargeCue();
+      this.drawChargeArc();
     }
   }
 
-  /** Charge cue (B13): a player-colored glow disc behind the nocked rocket that
-   *  grows + brightens as charge fills, plus a matching scale-up of the rocket.
-   *  At full charge it settles into a steady brightness/scale pulse off
-   *  `elapsed` so "armed" is unmistakable. Code-drawn, no postFX. */
-  private drawChargeCue(): void {
-    const { anchor, color } = this.config;
-    const c = this.charge;
-    let radius = Phaser.Math.Linear(CHARGE.glowRadiusMin, CHARGE.glowRadiusMax, c);
-    let alpha = Phaser.Math.Linear(CHARGE.glowAlphaMin, CHARGE.glowAlphaMax, c);
-    let scale = Phaser.Math.Linear(1, CHARGE.rocketScaleFull, c);
-    if (c >= 1) {
+  /** Charge cue (B35): the pull arc doubles as a railgun progress bar. Below the
+   *  full-pull threshold (charge 0) nothing draws here — the resting dashed arc
+   *  in staticGfx shows through. At/above threshold the arc goes SOLID
+   *  player-color (covering the dashed base), with a charge-violet arc filling
+   *  from `start` toward `start + charge·span`. At full charge the fill breathes
+   *  on `elapsed` so "armed" is unmistakable. Reuses drawStatic's angle logic. */
+  private drawChargeArc(): void {
+    if (this.charge <= 0) return; // dashed base shows through
+    const { anchor, color, edge } = this.config;
+    const g = this.dynamicGfx;
+    const [start, end] = edge === 'top' ? [Math.PI, Math.PI * 2] : [0, Math.PI];
+    const arc = STROKES.chargeArc;
+    const r = SLING.pullRadius;
+
+    // Solid player-color arc over the full span, covering the dashed base.
+    g.lineStyle(arc.width, color, arc.alpha);
+    drawSolidArc(g, anchor.x, anchor.y, r, start, end);
+
+    // Charge-violet fill grows start → charge·span; breathes when armed.
+    let alpha: number = arc.alpha;
+    if (this.charge >= 1) {
       const pulse = Math.sin(this.elapsed * CHARGE.pulseW);
-      radius = CHARGE.glowRadiusMax;
-      alpha = CHARGE.glowAlphaMax * (1 + CHARGE.pulseGlowDepth * pulse);
-      scale = CHARGE.rocketScaleFull * (1 + CHARGE.pulseScaleDepth * pulse);
+      alpha = Phaser.Math.Clamp(arc.alpha * (1 + CHARGE.armedPulseDepth * pulse), 0, 1);
     }
-    this.dynamicGfx.fillStyle(color, alpha);
-    this.dynamicGfx.fillCircle(anchor.x, anchor.y, radius);
-    this.nockedRocket.setScale(scale);
+    const sweptEnd = start + this.charge * (end - start);
+    g.lineStyle(arc.width, COLORS.charge, alpha);
+    drawSolidArc(g, anchor.x, anchor.y, r, start, sweptEnd);
   }
 }
 
@@ -241,6 +254,34 @@ function drawDashedLine(
   for (let s = 0; s < len; s += dash + gap) {
     const e = Math.min(s + dash, len);
     g.lineBetween(x1 + ux * s, y1 + uy * s, x1 + ux * e, y1 + uy * e);
+  }
+}
+
+/** Solid arc (B35): drawDashedArc's arc-length walk with no gaps. Passing
+ *  `endAngle` short of the full span yields the partial (start→swept) fill —
+ *  same call, so one helper covers both the solid base and the charge fill. */
+function drawSolidArc(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+  startAngle: number,
+  endAngle: number
+): void {
+  const total = Math.abs(endAngle - startAngle) * r;
+  if (total === 0) return;
+  const sign = Math.sign(endAngle - startAngle);
+  const seg = 4; // segment length (px) — short enough to read as a smooth arc
+  for (let s = 0; s < total; s += seg) {
+    const e = Math.min(s + seg, total);
+    const a0 = startAngle + (s / r) * sign;
+    const a1 = startAngle + (e / r) * sign;
+    g.lineBetween(
+      cx + r * Math.cos(a0),
+      cy + r * Math.sin(a0),
+      cx + r * Math.cos(a1),
+      cy + r * Math.sin(a1)
+    );
   }
 }
 

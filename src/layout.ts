@@ -20,28 +20,23 @@ export const SLING = {
 } as const;
 
 /**
- * Charged shot (B13) — hold the pull to power up a **railgun**: a full charge
- * fires a rocket that pierces straight through every asteroid in its path
- * (chipping each once) until it leaves the screen. Lives beside SLING (it's a
- * control-feel concern). `fullMs` is the ONE dial separating "flick" from
- * "charged": charge accrues from pointer-down, so a quick flick never reaches
- * full and stays an ordinary single shot. The cue is local to the sling — the
- * nocked rocket glows + grows as charge fills, then pulses when ready (no text,
- * orientation-neutral). All code-drawn (Graphics), no postFX.
+ * Charged shot (B13, re-cued B35) — hold the pull **fully back** to power up a
+ * **railgun**: a full charge fires a rocket that pierces straight through every
+ * asteroid in its path (chipping each once) until it leaves the screen. Lives
+ * beside SLING (it's a control-feel concern). Charge only accrues while the dot
+ * is held past `pullThresholdFrac` of the pull radius, and RESETS to 0 the
+ * moment it eases below — so a railgun is a held-full-pull skill, not a timed
+ * hold. The cue is the pull arc itself (B35): the resting dashed arc goes solid
+ * and fills in the charge violet from one end as a progress bar, then breathes
+ * when armed (no text, orientation-neutral). All code-drawn (Graphics), no postFX.
  */
 export const CHARGE = {
-  fullMs: 600, // hold this long past the start of the pull to reach full charge
-  // Glow disc drawn behind the nocked rocket while charging.
-  glowRadiusMin: 8, // disc radius at charge 0…
-  glowRadiusMax: 22, // …lerping to this at full charge
-  glowAlphaMin: 0.12, // disc alpha at charge 0…
-  glowAlphaMax: 0.5, // …lerping to this at full charge
-  rocketScaleFull: 1.4, // nocked rocket scales 1→this as charge fills
-  // Full-charge "ready" pulse (sine off elapsed ms): a steady brightness/scale
-  // breath so the player can see the shot is armed.
+  fullMs: 600, // hold at full pull this long to reach full charge (pull-back time no longer counts)
+  pullThresholdFrac: 0.88, // dot must be ≥ this fraction of SLING.pullRadius back to charge
+  // Armed "ready" pulse (sine off elapsed ms): a steady brightness breath on the
+  // full charge-color arc so the player can see the shot is armed.
   pulseW: 0.012, // rad/ms (period ~520ms)
-  pulseGlowDepth: 0.25, // ± this fraction of the full glow alpha
-  pulseScaleDepth: 0.12, // ± this fraction of rocketScaleFull
+  armedPulseDepth: 0.25, // ± this fraction of the arc alpha at full charge
 } as const;
 
 export const P1_ANCHOR = { x: 180, y: 100 } as const; // top player

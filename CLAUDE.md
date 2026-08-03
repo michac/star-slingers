@@ -51,8 +51,22 @@ This repo is the game and its design record — nothing else.
 - `npm test` — `@playwright/test` suite (`e2e/sandbox.spec.ts`): auto-starts the dev server
   headless on :5181, drives coordinate taps + direct shots, and asserts hits / score / homing /
   pierce / split / the boss charge-expose-recharge cycle / the `?boss` shortcut, gating every case
-  on zero console errors. Still writes the ignored `smoke-*.png` eyeball frames. First run on a new
-  machine needs `npx playwright install chromium`.
+  on zero console errors. First run on a new machine needs `npx playwright install chromium`.
+  **The interaction cases** (hits, score, homing, pierce, split, boss) don't wait for a wave rock to
+  drift on-screen — they **field a stationary rock directly** via `reconfigure()`/`spawn()` and drive
+  a **fixed 16ms timestep** through `window.__game` (`stepGame()`: `loop.sleep()` + manual
+  `scene.update(t, dt)` — physics/overlaps/timers advance in lockstep, no render, no wall-clock
+  racing; `stepUntil()` runs the whole step loop **in one page.evaluate**, so a 200-frame window costs
+  one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
+  the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
+  TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
+  skipped with the `__debug.snapBossIn()` hook. **Speed** (~15s for the 8 cases, ~1 min at
+  `--repeat-each=5`): headless swiftshader makes rendering pathologically slow, so (a) the `smoke-*.png`
+  eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —
+  and (b) `gotoGame()` **parks the RAF loop right after boot**, because any `page.evaluate` that runs
+  against a live render loop stalls ~0.8s on the in-flight software frame (this alone took the boss case
+  8s→1.7s). Parallel workers do *not* help — the one software-GL context is the bottleneck — so the
+  config stays `workers: 1`.
 - `npm run deploy` — **commit first** (it refuses a dirty tree), then it pushes `main`, watches the
   `deploy-pages.yml` Action, and verifies the live URL. Needs `gh` authed and a GitHub remote with
   Pages enabled. Docs-only commits (`plans/**`, `*.md`) don't trigger a deploy.

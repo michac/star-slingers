@@ -489,6 +489,109 @@ fragment instead of 2 turned the split case **red on a value assertion with a no
 exact gap the old script left open); typecheck + build still green (e2e excluded from tsc). CLAUDE.md
 / README / spec §8 references synced.
 
+## B32 · difficulty floor → 0.30 + B35 · railgun charge cue → pull-back arc (2026-07-10)
+Two independent `decided` items worked together (different files, no overlap).
+
+**B32 — raise the difficulty floor.** The opening was a crawl: W1 targeted `required` 0.05, but its
+shield-regen leak (0.10) already exceeded that, so the solver pinned W1 to the literal floor (3 lanes
+@ `minSpeedScale` 0.5 — ~20–28 px/s, ~3% break-even). **Pure target retune, no model change** (Michael
+picked the even ramp, Option A): `WAVES.required` 0.05/0.20/0.45/0.75 → **0.30/0.45/0.60/0.75**. At
+this floor the solver math shows every wave blows past the count + speed levers into the toughness
+tier, so all four run **4 lanes @ ×0.85** and toughness is the whole ramp — dev boot log confirmed
+**W1** one 2-hit (be 17%) · **W2** three 2-hit (27%) · **W3** four 2-hit (34%) · **W4** 3-hit + three
+2-hit (38%, unchanged). `minSpeedScale` is now moot (no wave stops in the speed tier); `DIFFICULTY_MODEL`,
+lanes, regen, quotas all left untouched. **The slow-lane gentle lever is gone from W1** — the 5yo's
+cushion is homing (B8/B14); if W1 plays too steep for him next playtest, soften its target toward ~0.25,
+don't reintroduce slow lanes. **Un-phone-tested.**
+
+**B35 — railgun charge cue → the pull arc as a progress bar.** Retired B13's glow-disc-behind-the-rocket
+cue (`drawChargeCue` + the `CHARGE.glow*`/`rocketScale`/pulse-disc dials) and re-cued charge onto the
+half-circle pull arc. Two locked decisions (Michael, AskUserQuestion): charge fill color = **violet
+accent** (alias onto the existing shield-mid / trail violet, `COLORS.charge` — no new hue), and ease-off
+behavior = **reset charge to 0** (a continuous full pull is required). Charge now accrues only while the
+dot is held past **`CHARGE.pullThresholdFrac` 0.88** of the pull radius and resets the instant it eases
+below — turning the railgun into a held-full-pull skill with a progress-bar read (`fullMs` 600 kept; may
+want lowering on the phone since pull-back time no longer counts). Arc states: below threshold = the
+resting **dashed** player-color arc shows through (`staticGfx` untouched); at/above threshold, charge<1 =
+a **solid** player-color arc (new `drawSolidArc` helper — `drawDashedArc`'s arc-length walk with no gaps,
+covering both the base and the partial fill) with a **violet** fill sweeping `start → start+charge·span`;
+charge==1 = full violet arc with an "armed" brightness breath (reused the existing `elapsed` sine).
+Homing seats stay dashed and never charge (unchanged). New `tokens.ts` `COLORS.charge` + `STROKES.chargeArc`.
+**Verified:** typecheck + build clean; drove the gating in-app (Playwright) — partial pull → charge 0,
+full pull → 0.5 @300ms → 1.0 @700ms, ease-off → resets to 0, homing seat → stays 0; screenshot confirmed
+the solid violet fill (P1 half-charged = half violet/half cyan, P2 full = all violet). The charged-pierce
+Playwright case stays green (it drives `rockets.fire(...)` + `setData('charged')` directly, bypassing the
+pull path, so the new full-pull gate doesn't touch it). **Un-phone-tested.** *(Note: the `off-axis homing`
+and `boss gate + cycle` Playwright cases are pre-existing flakes — both fail ~2/3 on `--repeat-each=3`
+on the untouched baseline too, independent of this work.)*
+
+## B36 · Fix the flaky Playwright tests — fixed-timestep harness (2026-07-10)
+Test-infra only, **no game-behavior change**. The suite wasn't trustworthy: `off-axis homing` and
+`boss gate + cycle` failed ~2/3 on `--repeat-each=3`, and under `--repeat-each=5` the drift-window
+cases (`head-on`, `full-pop`, `charged`) flaked hard too (`charged` failed 5/5).
+
+**Root cause (spike-confirmed, refined the plan's hypothesis).** Every failing case waited on a
+*game-time* event behind a *wall-clock* `waitForFunction`/`waitForTimeout` while headless software-WebGL
+runs game-time ~10× slow. Two flavors: (a) the "wait for a wave rock to drift into a narrow x-window"
+scan (30s budget, blown under load), and (b) game-time timers (homing `dist`, boss `chargeMs`/`exposedMs`)
+outrunning short wall-clock waits. **The fix is to stop using the wall clock as the test clock.**
+
+**Harness (chosen with Michael — option: drive a fixed timestep).** `stepGame(page, dt=16, n)` parks
+the RAF loop (`game.loop.sleep()` → `raf.stop()`, fully deterministic across CDP round-trips) and
+advances frames manually via **`game.scene.update(t, dt)`** — SceneManager → each scene's `Systems.step`
+→ physics `world.update` + overlaps + `scene.update`, all in lockstep, **no render**. Two spike findings
+corrected the plan: (1) `game.step()` *renders* each frame (the slow ReadPixels path — 330 steps blew the
+90s timeout), so use `scene.update` instead → the whole 30s boss window becomes ~20ms of stepping;
+(2) **Phaser 3.90's `TweenManager.getDelta` is wall-clock (`Date.now()`)**, so tweens do *not* advance
+under stepping. Only the boss slide-in is a tween, so it needed the plan's fallback: a minimal DEV hook
+**`Boss.snapEntered()` → `BossEncounter.snapBossIn()` → `__debug.snapBossIn()`** (kills the entrance
+tween, snaps to the parked/entered state its `onComplete` would reach). Homing steering and boss timers
+are all `deltaMs`-driven, so they step perfectly.
+
+**Rewrites.** All 5 interaction cases now **field a stationary rock directly** (shared `fieldRock()` over
+the `reconfigure()`/`spawn()` path the split case already used) and step to a bounded frame budget with
+`stepUntil()` — no drift-window scan, no moving-target race, no wall-clock timeout. `head-on`/`full-pop`/
+`charged`/`homing` migrated; `boss` uses `snapBossIn()` + stepping. `full-pop` got *stronger*: it fields a
+2-hit rock and asserts the chip scores **0** before the pop scores **>0** (the old version just fired
+`spec.hits` shots at whatever drifted by). The invuln check also got stronger — the shot now actually
+**crosses** the boss (~40 frames) instead of barely moving in ~40ms of headless game-time.
+
+**Verified.** typecheck + build clean; **`--repeat-each=5` → 40/40 green** (8.9 min, was 16.5 with 11
+timeouts); the two former-flaky cases spot-checked **`--repeat-each=10` → 20/20**; no `.only`/`.skip`;
+`smoke-*.png` frames still emit; every case still gates on zero console errors. Game code touched only by
+the DEV-only `snapBossIn` hook (`Boss`/`BossEncounter`/`SandboxScene.__debug`); `playwright.config.ts`
+unchanged (its 90s per-test budget is now vast headroom — stepped cases are 3–18s). The 6 "leave them
+green" cases from the plan turned out to flake at `--repeat-each=5`, so — **decided with Michael** — the
+scope extended to migrate all 5 interaction cases (not just the 2 named), finally making a green
+`npm test` trustworthy.
+
+**Speed pass (same day, Michael asked "8 min is a long time").** Profiled where the wall-clock actually
+went — *not* the stepping (300 in-browser steps = 11ms; a 188-frame boss recharge = 8ms). Two real
+costs: (1) **`page.screenshot()` = ~7s each** in headless swiftshader (the ReadPixels path), ×7 frames
+×5 repeats ≈ 4.4 min — and since we now step *without* rendering, the frame is stale anyway. Made the
+`smoke-*.png` frames **opt-in** (`SMOKE_SHOTS=1`); default `npm test` skips them. (2) **CDP round-trip
+latency under machine load** — rewrote `stepUntil()` to run the entire step loop **inside one
+`page.evaluate`** (via `new Function` on a condition string), so a long window is one round-trip, not
+one per batch; folded `charged`'s fire+step+read into a single evaluate; replaced `gotoGame`'s fixed
+`waitForTimeout(1000)` with a `waitForFunction` on the scene's `__debug` (returns as soon as `create()`
+ran). Default 8-case run dropped ~2min → ~50s.
+
+*Two more culprits, found by profiling on a cleaned machine (Michael killed a runaway Playwright-**MCP**
+Chrome — a stuck swiftshader GPU process from a prior session pinned at ~987% CPU / ≈10 cores for 3+ hrs
+— which had been inflating and jittering every run; note it was the **MCP** browser, not the test
+suite's ephemeral one):* (3) **the live RAF render loop**. Any `page.evaluate` that touches the scene
+while Phaser is still rendering **stalls ~0.8s** waiting for the in-flight software frame — `rockets.fire`
+timed at ~800ms wall but **0.5ms** in-browser. So `gotoGame()` now **parks the loop** (`loop.sleep()`)
+right after boot; every interaction is then instant (**boss 8s → 1.7s**, `full-pop` 9.4s → 1.6s, homing
+3.2s → 0.28s). That forced migrating the **split** case too (the last one still on `waitForTimeout`,
+which needs a live loop) onto `stepGame` — its fragment-chase is now one in-browser loop. (4) **context
+reuse and parallel workers don't help** — measured: a warm-context reload saves only ~150ms over a fresh
+context (context boot isn't the cost), and `fullyParallel`+4 workers *worsened* per-test times because
+the single software-GL context + single Vite server serialize the parallel contexts anyway. Config stays
+`workers: 1`. **Net: `npm test` ~8 min → ~15s (8 cases); `--repeat-each=5` 8.9 min → ~1.1 min, still
+40/40 green.** The game-driving was never the cost — it's headless swiftshader's slow rendering, dodged
+by never rendering (park the loop, step logic only, screenshots opt-in).
+
 ## Open questions
 All moved to [`backlog.md`](backlog.md) (2026-06-06): **lanes** → resolved by the v5 funnel
 (shared field); **shield rendering** (chunky segments vs smooth arc) → folded into B1 and

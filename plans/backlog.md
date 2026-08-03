@@ -7,14 +7,52 @@
 > **Statuses:** `idea` (recorded) · `decided` (design agreed, not built) · `building` · `done`.
 > **[draft]** marks items carrying unreviewed auto-generated material from the original spec — raw ideas to react to, not decisions.
 
-## Next up — Michael's wants (2026-06-06), in rough build order
+## Next up — Michael's wants (2026-07-10), in rough build order
 
-*(none queued — B31 shipped 2026-06-15)*
+### B33 · Harder boss — force escort co-op — `idea`
+The boss is too soloable. Idea: make an escort un-clearable by one player alone within the charge
+window — e.g. **each player must land one of the two hits** to clear an escort (or the escort's
+2-hit can't be double-tapped fast enough by a single seat). The intent is to *require* cooperation:
+neither kid can carry the whole clear. Design the exact mechanism (both-players-must-hit vs.
+tighter timing) and how it reads without text. Balance dials in `BOSS` (`src/waves.ts`); geometry in
+`BOSS_LAYOUT`. Keep it gentle-fail per the kid constraints. Sync spec §9.
+**More ideas:** make the escorts behave and look more like ships (ties into B34's visual rework),
+possibly **reduce the escort count but make each harder**, and maybe **require charged shots (B13
+railgun) to damage the boss while escorts are down** — another lever that pushes toward coordinated
+two-player play.
+
+### B34 · Boss (and general) visual polish — `idea`
+The aesthetic is good, but we've ended up with **too many circles-inside-circles** — hull ring,
+shield rings, boss shield ring, escorts, orbit, charge arc all stack as concentric circles and read
+as clutter. Rework the boss's look (and possibly the station/escorts elsewhere) to break up the
+circle-on-circle monotony while keeping the neon skin. Explore on the prototype shelf first per the
+working agreement; land in one pass. Sync `plans/polish-pass.md` + spec §4.
+
+### B37 · Multi-hit rocks should split on the FIRST hit, not the last — `idea` *(2026-07-14)*
+The multi-hit mechanic feels like too much grind. A "2" rock today shows a counter and must be
+**chipped 2→1 (one hit, no split), then popped 1→0 (second hit) to split**, and *then* each of the 2
+scattered 1-hit fragments needs its own hit — so a single "2" costs up to **4 hits** to fully clear.
+Michael expects a **"2" to split immediately** — the toughness should *be* the split, not a counter you
+grind down first.
+**Current behavior (B30):** split fires only on the final pop — `handleHit` splits when
+`asteroid.takeHit()` returns `pts > 0` (a kill), so intermediate chips (`pts === 0`) never split. Rock
+toughness = `spec.hits`; fragments are pre-allocated 1-hit wrappers scattered by `spawnFragments`
+(`WaveDirector`), sized via the baked fragment texture / `SPLIT` block (`src/layout.ts`).
+**Wanted:** hitting a "2" splits it right away instead of decrementing to "1" first.
+**Design questions to settle before building** (this is why it's `idea`, not `decided`):
+- Does a "2" split into **two 1-hit fragments on the first hit** (total clear = 1 + 2 = 3 hits, vs 4
+  today)? And a "3" → three 1-hit fragments on first hit, or a "2"+a "1", or…? Decide what the number
+  *means* now — "hits to destroy" vs "pieces it bursts into".
+- Do we still show a counter at all, or does a splitting rock just visibly burst? (Kid-legibility: the
+  number is a recognition cue, not reading — keep or drop deliberately.)
+- Fragments still 1-hit and still threaten/score the same? (Keep the B30 self-balancing "winning tax".)
+**Watch-out — difficulty coupling:** the solver treats `spec.hits` as toughness (`threatOf` /
+`requiredHitsPerSec` / `asteroidsFor` in `src/waves.ts`); changing what a hit-count means shifts the
+achieved difficulty of W1–W4, so re-read the dev boot log and likely re-tune `WAVES.required` after.
+Touchpoints: `Asteroid.takeHit`, `SandboxScene.handleHit` (both `pts > 0` branches), `WaveDirector`
+split path, `SPLIT`/textures. Sync spec §4 + §7 + notes.
 
 ## Later
-
-### B4 · Enemy ships — `idea` [draft]
-Draft material: ships juke on approach and shoot at the station; shots telegraphed with a half-second warning glow so a young kid can react. The boss's escort vessels (B5) will likely reuse this work.
 
 ### B7 · Sound & haptics — `idea` [draft]
 Draft material: *thwip* on release; chunky *boom* + sparkle on breaks; shield-segment shatter + worried shake; phone vibration on boss hits; cheer on wave clear.
@@ -23,13 +61,64 @@ Draft material: *thwip* on release; chunky *boom* + sparkle on breaks; shield-se
 ### B8 · 5-year-old fairness levers — `partly done` ★ flagged by playtest 1
 The 5yo had real trouble hitting things — leading the target is the core skill and it's hard at 5. **The primary lever shipped as B14 (homing toggle, done 2026-06-09)** — per-player, opt-in, so it only eases his aim. Remaining backups still open: a slower lane so there's always an easy side, telegraphed shots. Sandbox knobs already exist in `src/layout.ts` (asteroid speed/size, rocket maxSpeed) and `src/waves.ts` (difficulty targets). Cuts both ways — keep difficulty interesting for the 9yo too. **Next playtest:** does homing land for the 5yo, and is the gentle-assist turn-rate (`HOMING.turnRateDeg` in `src/layout.ts`) tuned right?
 
-### B24 · Neon gradient fills — `idea` *(new 2026-06-07)*
-The mock gradients the B21 palette port approximates with solids: hull radial (`#neon-hull`), rocket white→cyan (`#neon-rocket`), nebula background wash (`#neon-neb`), and the 3-stop shield (currently faked as three per-ring solids). Bake into generated textures / a background RenderTexture. Low priority — solids read fine.
-
-### B11 · Working title — `idea`
-"Star Slingers" is a placeholder — swap freely.
-
 ## Resolved
+- **B36 · Fix the flaky Playwright tests — fixed-timestep harness — `done`** *(2026-07-10)*. The suite
+  wasn't trustworthy: `off-axis homing` + `boss gate + cycle` failed ~2/3 on `--repeat-each=3`, and at
+  `--repeat-each=5` the drift-window cases (`head-on`/`full-pop`/`charged`) flaked too (`charged` 5/5).
+  **Root cause (spike-confirmed):** every case waited on a *game-time* event behind a *wall-clock*
+  timeout while headless software-WebGL runs game-time ~10× slow — the "wait for a rock to drift into an
+  x-window" scans and the `deltaMs` timers (homing `dist`, boss `chargeMs`/`exposedMs`) both outran their
+  waits. **Fix (chosen with Michael): stop using the wall clock as the test clock.** New `stepGame()`
+  parks the RAF loop (`loop.sleep()`) and advances a **fixed 16ms timestep** via `game.scene.update(t,dt)`
+  — physics/overlaps/timers in lockstep, no render, no racing (the 30s boss window → ~20ms of stepping).
+  Two spike corrections to the plan: `game.step()` *renders* (slow ReadPixels — use `scene.update`), and
+  Phaser 3.90's TweenManager is **wall-clock** so the boss slide-in tween won't step → added a minimal
+  DEV hook `Boss.snapEntered()`/`BossEncounter.snapBossIn()`/`__debug.snapBossIn()`. All 5 interaction
+  cases now **field a stationary rock directly** (shared `fieldRock()`) + step to a bounded budget
+  (`stepUntil()`); scope extended past the plan's 2 named cases to all 5 once the "leave them green" cases
+  proved flaky at `--repeat-each=5` (**decided with Michael**). `full-pop` strengthened (asserts chip
+  scores 0, pop scores >0); invuln check strengthened (shot actually crosses the boss). **Verified:**
+  typecheck + build clean; `--repeat-each=5` **40/40 green** (8.9 min, was 16.5 with 11 timeouts);
+  formerly-flaky pair `--repeat-each=10` **20/20**; no `.only`/`.skip`; `smoke-*.png` still emit; zero
+  console errors gated. Game code touched only by the DEV `snapBossIn` hook; `playwright.config.ts`
+  unchanged. `e2e/sandbox.spec.ts` + `Boss`/`BossEncounter`/`SandboxScene` (DEV hook) + CLAUDE.md test
+  blurb + notes synced. (No `spec.md §` covers the test harness.) **Speed pass (Michael flagged 8 min):**
+  profiling (not the stepping — 300 steps = 11ms) pinned four headless-swiftshader costs: (1)
+  `page.screenshot()` ~7s each → made `smoke-*.png` **opt-in** (`SMOKE_SHOTS=1`); (2) CDP round-trips →
+  `stepUntil()` loop moved **in-browser** (one round-trip/window), `charged` folded to one evaluate,
+  `gotoGame` fixed-sleep → scene-ready `waitForFunction`; (3) **the live RAF loop** — a `page.evaluate`
+  touching the scene mid-render stalls ~0.8s on the software frame (`rockets.fire` = 800ms wall / 0.5ms
+  in-browser), so `gotoGame` now **parks the loop** right after boot (**boss 8s→1.7s**), which forced
+  migrating **split** onto `stepGame` too; (4) context reuse (~150ms) and parallel workers (worse — one
+  software-GL context serializes them) don't help, so config stays `workers: 1`. A runaway MCP Chrome
+  (~987% CPU, prior session) had been inflating everything — Michael killed it. **`npm test` ~8min →
+  ~15s (8 cases); `--repeat-each=5` 8.9min → ~1.1min, 40/40 green.**
+- **B32 · Raise the difficulty floor to 0.30 — `done`** *(2026-07-10)*. The opening was a crawl: W1
+  targeted `required` 0.05, but its shield-regen leak (0.10) exceeded that, so the solver pinned W1 to
+  the literal floor (3 lanes @ `minSpeedScale` 0.5, ~20–28 px/s, ~3% break-even). **Pure target retune,
+  no model change** (Michael's locked Option A, even ramp): `WAVES.required` 0.05/0.20/0.45/0.75 →
+  **0.30/0.45/0.60/0.75**. At this floor the solver blows past the count + speed levers into toughness
+  for every wave, so all four run **4 lanes @ ×0.85** and the ramp is pure toughness — dev boot log
+  confirmed **W1** one 2-hit (be 17%) · **W2** three 2-hit (27%) · **W3** four 2-hit (34%) · **W4** 3-hit
+  + three 2-hit (38%, unchanged). `minSpeedScale` now moot; `DIFFICULTY_MODEL`/lanes/regen/quotas
+  untouched. Only `WAVES` in `src/waves.ts` changed (+ nearby comments). typecheck + build clean; verified
+  against the boot log. The slow-lane gentle lever is gone from W1 (5yo cushion is homing now — soften
+  toward ~0.25 if too steep next playtest, don't re-add slow lanes). spec §7 + notes synced. **Un-phone-tested.**
+- **B35 · Railgun charge cue → the pull-back arc as a progress bar — `done`** *(2026-07-10)*. Retired
+  B13's glow-disc-behind-the-rocket cue (`drawChargeCue` + the `CHARGE.glow*`/`rocketScale`/pulse-disc
+  dials) and re-cued charge onto the half-circle **pull arc**. Two locked decisions (Michael): fill color
+  = **violet accent** (`COLORS.charge` aliased onto the existing shield-mid / trail violet — no new hue),
+  ease-off = **reset charge to 0** (a continuous full pull required). Charge now accrues only while the dot
+  is held past **`CHARGE.pullThresholdFrac` 0.88** of the pull radius and resets the instant it eases below
+  — a held-full-pull skill with a progress-bar read (`fullMs` 600 kept; may want lowering on the phone
+  since pull-back time no longer counts). Arc: below threshold = the resting **dashed** player-color arc
+  shows through; at/above, charge<1 = a **solid** player-color arc (new `drawSolidArc` helper — `drawDashedArc`'s
+  arc-length walk with no gaps, covering base + partial fill) with a **violet** fill sweeping `start →
+  start+charge·span`; charge==1 = full violet arc + an "armed" brightness breath (reused the `elapsed` sine).
+  Homing seats stay dashed & never charge. New `tokens.ts` `COLORS.charge` + `STROKES.chargeArc`. typecheck +
+  build clean; drove the gating in-app (partial→0, full→0.5@300ms→1.0@700ms, ease-off→0, homing→0) and
+  screenshotted the violet fill. Charged-pierce Playwright case stays green (drives `rockets.fire` directly,
+  bypassing the pull path). spec §5 + notes synced. **Un-phone-tested.**
 - **B31 · Smoke → `@playwright/test` (runner only) — `done`** *(2026-06-15)*. Promoted the 250-line
   hand-rolled `smoke.mjs` into a real `@playwright/test` suite — the same move `../reflex-game` made.
   **Scope locked with Michael: runner only**, no `toHaveScreenshot` visual baselines (OS-AA-sensitive,

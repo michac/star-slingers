@@ -38,6 +38,11 @@ export const COLORS = {
   shieldOuter: 0x38f6ff, // cyan
   shieldMid: 0x9d6bff, // purple
   shieldInner: 0xff5ec7, // magenta
+
+  // Railgun charge (B35): the filling pull-arc reads in violet, reusing the
+  // shield-mid purple (== the trail's EXHAUST hue) so "charged" ties visually
+  // to the railgun trail. Not a new hue — an alias onto an existing stop.
+  charge: 0x9d6bff, // == shieldMid violet
 } as const;
 
 /** Same palette as CSS strings — Phaser Text styles want strings. */
@@ -57,6 +62,7 @@ export const FONTS = {
 /** Stroke/dash recipes from the neon paint rules. */
 export const STROKES = {
   rangeArc: { width: 2, alpha: 0.8, dash: 3, gap: 7 }, // .sling-range-*
+  chargeArc: { width: 2, alpha: 0.95 }, // B35: solid pull-arc (base + charge fill)
   pullLine: { width: 2.8, alpha: 0.95 }, // .sling-pull
   touchDot: { fillAlpha: 0.28, strokeWidth: 1.8 }, // .sling-touch
   trajectory: { width: 2, alpha: 0.85, dash: 2, gap: 7 }, // .trajectory

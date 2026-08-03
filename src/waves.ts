@@ -62,17 +62,20 @@ export interface WaveConfig {
  * The run: 4 escalating waves (boss B5 comes after, separately). Each wave
  * is just a target; solveWave() realizes it. Targets chosen so the waterfall
  * is visible AND each wave feels distinct (Playtest 3 fix: waves 1 & 2 used
- * to solve to near-identical all-1-hit fields). The shape:
- *   W1 gentle 3-lane floor → W2 +4th lane & faster → W3 fast, toughness
- *   appears → W4 a 3-hit rock joins. "Noticeably harder, still soloable":
- *   a skilled solo player can scrape W4 (~75% accuracy) but two is comfy.
+ * to solve to near-identical all-1-hit fields). The shape (B32 floor raise —
+ * every wave now runs 4 lanes @ max speed, toughness is the ramp):
+ *   W1 one 2-hit rock → W2 three 2-hit → W3 all four 2-hit → W4 a 3-hit joins.
+ *   "Noticeably harder, still soloable": a skilled solo player can scrape W4
+ *   (~75% accuracy) but two is comfy.
  * Tune by the dev boot log (target vs achieved + tier). Raise W4 toward ~0.9
- * to push the whole field to 3-hit; drop targets to soften.
+ * to push the whole field to 3-hit; drop targets to soften. (The slow-lane
+ * gentle lever is gone from W1 — the 5yo's cushion is homing (B8/B14), not
+ * speed; if W1 is too steep for him, soften its target toward ~0.25.)
  */
 export const WAVES: WaveConfig[] = [
-  { required: 0.05, quota: 8, shieldRegenMs: 10000 },
-  { required: 0.2, quota: 10, shieldRegenMs: 11000 },
-  { required: 0.45, quota: 12, shieldRegenMs: 13000 },
+  { required: 0.3, quota: 8, shieldRegenMs: 10000 },
+  { required: 0.45, quota: 10, shieldRegenMs: 11000 },
+  { required: 0.6, quota: 12, shieldRegenMs: 13000 },
   { required: 0.75, quota: 14, shieldRegenMs: 15000 },
 ];
 
@@ -122,7 +125,7 @@ const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (STATION.cx 
  * intentionally un-modeled. Fragments appear only when players are *winning*
  * (rocket-killing tough rocks), they're trivial 1-hit pops, and the shield
  * regen leak absorbs the occasional one that reaches the station. The
- * calibrated targets (0.05/0.20/0.45/0.75) stay as-is; if a W3/W4 playtest
+ * calibrated targets (0.30/0.45/0.60/0.75) stay as-is; if a W3/W4 playtest
  * shows the kids drowning in fragments, drop SPLIT.fragmentSpeed or
  * SPLIT.lifetimeMs (expire before reaching the station) — not the wave targets.
  */

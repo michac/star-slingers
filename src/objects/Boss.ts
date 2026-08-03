@@ -86,6 +86,16 @@ export class Boss {
     });
   }
 
+  /** DEV/test: finish the slide-in instantly. The entrance is a wall-clock
+   *  tween (Phaser's TweenManager ignores the fixed-timestep delta), so the
+   *  headless test harness can't advance it by stepping; this snaps to the
+   *  parked, entered state the tween's onComplete would otherwise reach. */
+  snapEntered(): void {
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.setPosition(BOSS_LAYOUT.park.x, BOSS_LAYOUT.park.y);
+    this.entering = false;
+  }
+
   /** Per-frame render (timing is the encounter's; this just paints). */
   update(): void {
     this.drawFx();

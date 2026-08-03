@@ -127,6 +127,11 @@ export class BossEncounter {
     for (let n = 0; n < BOSS.escortHits && e.isActive; n++) e.takeHit();
   }
 
+  /** DEV/test: skip the boss slide-in tween (see Boss.snapEntered). */
+  snapBossIn(): void {
+    this.boss.snapEntered();
+  }
+
   /** Begin (or restart) a charge cycle: re-shield, respawn all 4 escorts. */
   private startCharge(): void {
     this.phaseState = 'charging';

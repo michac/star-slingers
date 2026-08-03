@@ -158,6 +158,7 @@ export class SandboxScene extends Phaser.Scene {
           this.bossEncounter.start();
         },
         bossPhase: () => this.bossEncounter.phase,
+        snapBossIn: () => this.bossEncounter.snapBossIn(),
         killEscort: (i: number) => this.bossEncounter.killEscort(i),
         bossHp: () => this.bossEncounter.bossHp,
         escortsAlive: () => this.bossEncounter.aliveEscorts,
