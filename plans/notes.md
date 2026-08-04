@@ -649,6 +649,11 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **B40 — Longer boss exposure (2026-08-04):** phone feedback found the original 3s
+  shields-down window too brief for a 10-HP boss that only takes charged railguns, risking a
+  dragged-out fight. Doubled `BOSS.exposedMs` from **3000ms to 6000ms**. Kept the 5s escort
+  charge, 10 HP, and all railgun timing/visuals intact. Updated the deterministic cycle budget.
+
 - **B39 — Shareable boss link (2026-08-04):** documented the existing GitHub Pages boss shortcut:
   `https://michac.github.io/star-slingers/?boss`. It preserves the normal full-run URL and lets phone
   playtests jump straight to the finale.
@@ -662,7 +667,8 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
   boss beams; exposure-window respawns restore both locks. The exposed boss now takes damage
   only from charged railguns (one HP each); normal homing is still harmless, while homing is
   allowed to charge only in that boss-only window and shows lock + charge cues together.
-  Constants stay at 5s charge / 3s exposure / 10 HP. Deterministic Playwright now asserts
+  Constants originally stayed at 5s charge / 3s exposure / 10 HP; B40 subsequently doubled
+  exposure to 6s. Deterministic Playwright now asserts
   duplicate rejection, either-order clears, beam persistence, fresh respawns, normal/homing
   immunity, and charged homing damage. typecheck + build + 9-test suite green. **Still needs
   Pixel 6 acceptance:** both kids should identify the needed color without explanation.

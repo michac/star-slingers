@@ -445,9 +445,9 @@ test('boss co-op locks, railgun gate + cycle', async ({ page }) => {
   expect(dropped.done).toBe(true);
   expect(await bossHp(page)).toBeLessThan(hpStart);
 
-  // Cycle closes: after the exposed window (exposedMs 3000 / 16 ≈ 188 frames) it
+  // Cycle closes: after the exposed window (exposedMs 6000 / 16 ≈ 375 frames) it
   // re-shields back to charging and all 4 escorts respawn.
-  const recharged = await stepUntil(page, "s.__debug.bossPhase() === 'charging'", 300);
+  const recharged = await stepUntil(page, "s.__debug.bossPhase() === 'charging'", 450);
   expect(recharged.done).toBe(true);
   expect(await escortsAlive(page)).toBe(4);
   expect(await escortLocks(page)).toEqual([0, 0, 0, 0]);

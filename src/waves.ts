@@ -106,9 +106,9 @@ export const BREATHER = {
 export const BOSS = {
   hp: 10, // hits to destroy (chipped across exposed windows; the big number)
   escortCount: 4,
-  escortHits: 2, // hits per escort — shield ring, then core
+  escortHits: 2, // one unique contribution from each player
   chargeMs: 5000, // time to clear the escorts before the boss fires (the urgency)
-  exposedMs: 3000, // the shoot-the-boss window after a successful clear
+  exposedMs: 6000, // generous shoot-the-boss window after a successful clear (B40)
   shieldRegenMs: 14000, // regen during the boss (the leak allowance)
 } as const;
 

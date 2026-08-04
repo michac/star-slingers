@@ -145,7 +145,8 @@ while battling**, guarded by **4 escort vessels that slowly orbit it**. The figh
   escorts), `exposedMs` (window length), `hp`, `escortHits`, `shieldRegenMs`. Boss/escort
   positions, sizes, orbit, and entrance speed live in `src/layout.ts` `BOSS_LAYOUT`.
   `escortHits` remains the historical two-contribution count; the fixed player-lock rule is
-  not a balance dial. Boss HP remains 10 and railgun timing is unchanged.
+  not a balance dial. Boss HP remains 10, railgun timing is unchanged, and the exposed
+  damage window is **6 seconds** (B40; the escort charge race remains 5 seconds).
 
 ## Everything else
 Enemy ships, sound/juice, fairness-lever backups: the original brainstorm's drafts live as **[draft]-tagged backlog items** (B4/B8, plus the audio+haptics half of B7) — raw material to react to, not decisions. They graduate into this spec when worked out, reviewed, and built. (Waves = §3/§7; scoring = §3; homing = §5; boss = §9; wave-clear shower = §4 — all built.)

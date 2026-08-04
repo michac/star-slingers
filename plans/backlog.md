@@ -33,6 +33,9 @@ Draft material: *thwip* on release; chunky *boom* + sparkle on breaks; shield-se
 The 5yo had real trouble hitting things — leading the target is the core skill and it's hard at 5. **The primary lever shipped as B14 (homing toggle, done 2026-06-09)** — per-player, opt-in, so it only eases his aim. Remaining backups still open: a slower lane so there's always an easy side, telegraphed shots. Sandbox knobs already exist in `src/layout.ts` (asteroid speed/size, rocket maxSpeed) and `src/waves.ts` (difficulty targets). Cuts both ways — keep difficulty interesting for the 9yo too. **Next playtest:** does homing land for the 5yo, and is the gentle-assist turn-rate (`HOMING.turnRateDeg` in `src/layout.ts`) tuned right?
 
 ## Resolved
+- **B40 · Longer boss exposure — `done`** *(2026-08-04)*. Doubled the shields-down damage window
+  from **3s to 6s** after phone playtesting indicated the original window would make the 10-HP,
+  charged-railgun boss fight drag. The 5s escort charge race, 10 HP, and railgun timing are unchanged.
 - **B39 · Shareable boss link — `done`** *(2026-08-04)*. The live boss shortcut is
   [https://michac.github.io/star-slingers/?boss](https://michac.github.io/star-slingers/?boss).
   It uses the existing `?boss` boot shortcut, so the normal game URL is unchanged; the link is now
