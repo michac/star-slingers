@@ -9,24 +9,19 @@
 
 ## Next up — Michael's wants (2026-07-10), in rough build order
 
-### B33 · Harder boss — force escort co-op — `idea`
-The boss is too soloable. Idea: make an escort un-clearable by one player alone within the charge
-window — e.g. **each player must land one of the two hits** to clear an escort (or the escort's
-2-hit can't be double-tapped fast enough by a single seat). The intent is to *require* cooperation:
-neither kid can carry the whole clear. Design the exact mechanism (both-players-must-hit vs.
-tighter timing) and how it reads without text. Balance dials in `BOSS` (`src/waves.ts`); geometry in
-`BOSS_LAYOUT`. Keep it gentle-fail per the kid constraints. Sync spec §9.
-**More ideas:** make the escorts behave and look more like ships (ties into B34's visual rework),
-possibly **reduce the escort count but make each harder**, and maybe **require charged shots (B13
-railgun) to damage the boss while escorts are down** — another lever that pushes toward coordinated
-two-player play.
-
 ### B34 · Boss (and general) visual polish — `idea`
 The aesthetic is good, but we've ended up with **too many circles-inside-circles** — hull ring,
-shield rings, boss shield ring, escorts, orbit, charge arc all stack as concentric circles and read
-as clutter. Rework the boss's look (and possibly the station/escorts elsewhere) to break up the
-circle-on-circle monotony while keeping the neon skin. Explore on the prototype shelf first per the
-working agreement; land in one pass. Sync `plans/polish-pass.md` + spec §4.
+shield rings, boss shield ring, orbit, charge arc all stack as concentric circles and read as
+clutter. The B33 directional escort ships and lock fins are shipped; rework the remaining
+boss/general circle-heavy presentation while keeping the neon skin. Explore on the prototype shelf
+first per the working agreement; land in one pass. Sync `plans/polish-pass.md` + spec §4.
+
+### B38 · Railgun pull-arc timing & visual polish — `idea`
+The full-pull railgun mechanic works on the phone, but the **charge timing and its pull-arc visuals
+need another design pass**. Keep the mechanic's core constraints unless review changes them: charge
+begins only past the full-pull threshold, resets when easing off, and homing seats cannot charge.
+Prototype alternate timing and visual treatments on the shelf, then lock and port one cohesive
+solution. Relevant dials are `CHARGE` and `SlingControl`; sync spec §5 and notes when resolved.
 
 ## Later
 
@@ -38,6 +33,20 @@ Draft material: *thwip* on release; chunky *boom* + sparkle on breaks; shield-se
 The 5yo had real trouble hitting things — leading the target is the core skill and it's hard at 5. **The primary lever shipped as B14 (homing toggle, done 2026-06-09)** — per-player, opt-in, so it only eases his aim. Remaining backups still open: a slower lane so there's always an easy side, telegraphed shots. Sandbox knobs already exist in `src/layout.ts` (asteroid speed/size, rocket maxSpeed) and `src/waves.ts` (difficulty targets). Cuts both ways — keep difficulty interesting for the 9yo too. **Next playtest:** does homing land for the 5yo, and is the gentle-assist turn-rate (`HOMING.turnRateDeg` in `src/layout.ts`) tuned right?
 
 ## Resolved
+- **B39 · Shareable boss link — `done`** *(2026-08-04)*. The live boss shortcut is
+  [https://michac.github.io/star-slingers/?boss](https://michac.github.io/star-slingers/?boss).
+  It uses the existing `?boss` boot shortcut, so the normal game URL is unchanged; the link is now
+  documented in the README for phone playtesting and review.
+- **B33 · Co-op escort boss redesign — `done`** *(2026-08-03)*. Each of the four escorts now
+  requires one cyan P1 rocket and one amber P2 rocket, in either order; duplicate-color rockets are
+  spent but rejected. Directional ships face the station and carry matching color lock fins; breaking
+  one leaves the other pulsing, so no reading is needed to tell whose shot is next. Partial locks
+  survive a boss beam, and a full exposure-cycle respawn restores both locks. The exposed 10-HP boss
+  takes **charged railguns only**; ordinary and ordinary-homing rockets do no damage. Homing remains
+  charge-exclusive except during the exposed phase, when its lock preview and railgun arc both show so
+  an assisted player can fire a charged homing boss shot. The locked visual reference is
+  `prototype/reference/escort-coop-lock.html`. Playwright covers masks, duplicates, either order,
+  beam persistence, respawn, and charged/homing boss damage; typecheck, build, and all 9 tests green.
 - **B37 · One-hit large splitters — `done`** *(2026-08-03)*. Retired multi-hit rocks and the tiny
   fragment tier. There are now only explicit **standard** (r=13, one hit, 10 points) and **splitter**
   (r=17, one hit, 20 points) kinds; neither shows a number. A rocket hit on a splitter immediately

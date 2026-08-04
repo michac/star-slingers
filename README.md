@@ -32,6 +32,11 @@ off the right edge. Ammo regens ~1 per 1.5 s up to 5.
    upside-down on purpose), P2 from the bottom. Both slings must work with
    two fingers at once, with no page scroll, zoom, or stuck slings.
 
+## Live links
+
+- [Play Star Slingers](https://michac.github.io/star-slingers/)
+- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss) — useful for phone testing the finale; the normal link still starts a full run.
+
 ## Scripts
 
 - `npm run dev` — dev server (LAN-exposed)

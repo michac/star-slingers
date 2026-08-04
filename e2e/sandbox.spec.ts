@@ -180,6 +180,9 @@ const escortsAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.escortsAlive()`) as Promise<number>;
 const killEscort = (page: Page, i: number) =>
   page.evaluate(`${SCENE}.__debug.killEscort(${i})`);
+const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
+  page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
+const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
 const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBoss()`);
 const setHoming = (page: Page, player: number, on: boolean) =>
   page.evaluate(`${SCENE}.__debug.setHoming(${player}, ${on})`);
@@ -369,7 +372,7 @@ test('a splitter immediately splits into two standard children', async ({ page }
   expect(scoreDelta).toBe(20);
 });
 
-test('boss gate + cycle', async ({ page }) => {
+test('boss co-op locks, railgun gate + cycle', async ({ page }) => {
   await gotoGame(page);
 
   // Deterministic boss cycle on the fixed-timestep clock. Skip straight to the
@@ -392,18 +395,54 @@ test('boss gate + cycle', async ({ page }) => {
   await stepGame(page, 16, 40);
   expect(await bossHp(page)).toBe(hpStart);
 
-  // Pop all 4 escorts -> EXPOSED window (one frame to observe the open gate).
-  for (let i = 0; i < 4; i++) await killEscort(page, i);
+  // Every ship needs BOTH colors. A P1 double-tap consumes both rockets but
+  // leaves escort 0 awaiting amber; the reverse order clears escort 1.
+  await hitEscort(page, 0, 'p1');
+  await hitEscort(page, 0, 'p1');
+  expect(await escortsAlive(page)).toBe(4);
+  expect((await escortLocks(page))[0]).toBe(1);
+  await hitEscort(page, 1, 'p2');
+  await hitEscort(page, 1, 'p1');
+  expect(await escortsAlive(page)).toBe(3);
+
+  // A boss beam does not erase a partial contribution: the surviving cyan
+  // lock is still waiting after the 5s charge has fired and restarted.
+  await hitEscort(page, 2, 'p1');
+  await stepGame(page, 16, 320);
+  expect((await escortLocks(page))[2]).toBe(1);
+  expect(await escortsAlive(page)).toBe(3);
+
+  // Finish the partial ship, then clear the remaining two with either order.
+  await hitEscort(page, 0, 'p2');
+  await hitEscort(page, 2, 'p2');
+  await hitEscort(page, 3, 'p2');
+  await hitEscort(page, 3, 'p1');
   await stepGame(page, 16, 1);
   expect(await bossPhase(page)).toBe('exposed');
   await shot(page, 'smoke-boss-exposed.png');
 
-  // Exposed: a rocket through the boss center now drops its HP (bounded steps).
+  // Exposed but ordinary rockets — including an ordinary homing rocket — are
+  // consumed without damage. Only a charged railgun can reduce boss HP.
   await page.evaluate(() =>
     (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 60, 370, 350, 0)
   );
-  const dropped = await stepUntil(page, `s.__debug.bossHp() < ${hpStart}`, 100);
-  expect(dropped.done).toBe(true); // the shot reaches the boss near step ~16
+  await stepGame(page, 16, 30);
+  expect(await bossHp(page)).toBe(hpStart);
+  await page.evaluate(() => {
+    const s = (window as any).__game.scene.keys['Sandbox'];
+    const r = s.rockets.fire('rocket-p1', 60, 370, 350, 0);
+    r.setData('homing', true);
+  });
+  await stepGame(page, 16, 30);
+  expect(await bossHp(page)).toBe(hpStart);
+  await page.evaluate(() => {
+    const s = (window as any).__game.scene.keys['Sandbox'];
+    const r = s.rockets.fire('rocket-p1', 60, 370, 350, 0);
+    r.setData('charged', true);
+    r.setData('homing', true); // B33 exposed-phase homing railgun exception
+  });
+  const dropped = await stepUntil(page, `s.__debug.bossHp() < ${hpStart}`, 80);
+  expect(dropped.done).toBe(true);
   expect(await bossHp(page)).toBeLessThan(hpStart);
 
   // Cycle closes: after the exposed window (exposedMs 3000 / 16 ≈ 188 frames) it
@@ -411,6 +450,7 @@ test('boss gate + cycle', async ({ page }) => {
   const recharged = await stepUntil(page, "s.__debug.bossPhase() === 'charging'", 300);
   expect(recharged.done).toBe(true);
   expect(await escortsAlive(page)).toBe(4);
+  expect(await escortLocks(page)).toEqual([0, 0, 0, 0]);
 });
 
 test('?boss shortcut boots into the fight', async ({ page }) => {

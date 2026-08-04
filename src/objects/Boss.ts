@@ -113,8 +113,10 @@ export class Boss {
     if (!this.dead) this.sprite.setTint(0x8a78c8);
   }
 
-  takeHit(): void {
-    if (!this.vulnerable || this.dead) return;
+  takeHit(charged: boolean): void {
+    // B33: exposure is a railgun-only damage window. Ordinary (including
+    // ordinary homing) rockets are visibly consumed but cannot chip the boss.
+    if (!charged || !this.vulnerable || this.dead) return;
     this.hp -= 1;
     if (this.hp > 0) return;
     this.dead = true;

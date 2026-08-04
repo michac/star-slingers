@@ -16,7 +16,7 @@
  * recreated body (same discipline as the asteroid wrappers).
  */
 import Phaser from 'phaser';
-import { BOSS_LAYOUT } from '../layout';
+import { BOSS_LAYOUT, STATION } from '../layout';
 import { BOSS } from '../waves';
 import { Boss } from './Boss';
 import { BossBars } from './BossBars';
@@ -24,6 +24,7 @@ import { Escort } from './Escort';
 import { Station } from './Station';
 import { Overlay } from './Overlay';
 import type { HomingTarget } from './HomingTarget';
+import type { PlayerId } from './Rocket';
 
 type BossPhase = 'idle' | 'charging' | 'exposed' | 'won' | 'lost';
 
@@ -61,6 +62,11 @@ export class BossEncounter {
   /** Live (un-popped) escort count — for tests verifying the respawn cycle. */
   get aliveEscorts(): number {
     return this.escorts.filter((e) => e.isActive).length;
+  }
+
+  /** B33's narrow exception to the normal homing/railgun tradeoff. */
+  get allowsHomingRailgun(): boolean {
+    return this.phaseState === 'exposed';
   }
 
   /** Sprites for the one-time rocket↔boss overlap collider (boss + escorts). */
@@ -120,11 +126,22 @@ export class BossEncounter {
     return [];
   }
 
-  /** DEV/test: instantly destroy escort i (used by __debug.killEscort). */
+  /** DEV/test: contribute both colors to escort i (used for cycle setup). */
   killEscort(i: number): void {
     const e = this.escorts[i];
     if (!e) return;
-    for (let n = 0; n < BOSS.escortHits && e.isActive; n++) e.takeHit();
+    e.takeHit('p1');
+    e.takeHit('p2');
+  }
+
+  /** DEV/test: route an explicitly colored hit to one escort. */
+  hitEscort(i: number, player: PlayerId): void {
+    this.escorts[i]?.takeHit(player);
+  }
+
+  /** DEV/test read: two-bit contribution masks, one per escort. */
+  get escortLocks(): number[] {
+    return this.escorts.map((e) => e.lockMask);
   }
 
   /** DEV/test: skip the boss slide-in tween (see Boss.snapEntered). */
@@ -170,7 +187,7 @@ export class BossEncounter {
     this.escorts.forEach((e, i) => {
       if (!e.isActive) return;
       const a = this.orbitAngle + i * step;
-      e.place(bx + Math.cos(a) * r, by + Math.sin(a) * r);
+      e.place(bx + Math.cos(a) * r, by + Math.sin(a) * r, STATION.cx, STATION.cy);
     });
   }
 

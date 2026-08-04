@@ -7,15 +7,15 @@
  * HomingTarget so the 5yo's homing can lock it.
  */
 import Phaser from 'phaser';
-import { COLORS, STROKES } from '../tokens';
+import { COLORS } from '../tokens';
 import { BOSS_LAYOUT } from '../layout';
-import { BOSS } from '../waves';
 import { TEX } from './textures';
+import type { PlayerId } from './Rocket';
 
 export class Escort {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
   readonly radius = BOSS_LAYOUT.escort.radius;
-  private hitsLeft = BOSS.escortHits;
+  private contributions = 0;
   private active = false;
   private popping = false;
 
@@ -42,26 +42,38 @@ export class Escort {
     return this.popping;
   }
 
+  /** B33 DEV/test read: 1=p1 cyan contributed, 2=p2 amber contributed. */
+  get lockMask(): number {
+    return this.contributions;
+  }
+
   activate(): void {
     this.active = true;
     this.popping = false;
-    this.hitsLeft = BOSS.escortHits;
+    this.contributions = 0;
     this.sprite.setTexture(TEX.escort).setVisible(true).setScale(1).setAlpha(1); // shield ring back on
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
   }
 
   /** Encounter repositions it on the orbit each frame. */
-  place(x: number, y: number): void {
+  place(x: number, y: number, faceX: number, faceY: number): void {
     this.sprite.setPosition(x, y);
+    this.sprite.setRotation(Math.atan2(faceY - y, faceX - x) + Math.PI / 2);
   }
 
-  takeHit(): void {
+  /** One unique hit from each player is required. Duplicate shots are consumed
+   * but leave the lock unchanged, with a small muted reject spark. */
+  takeHit(player: PlayerId): void {
     if (!this.active || this.popping) return;
-    this.hitsLeft -= 1;
-    if (this.hitsLeft > 0) {
-      // Shield ring knocked off → bare core (second hit will kill it).
-      this.sprite.setTexture(TEX.escortCore);
-      this.shatterRing();
+    const bit = player === 'p1' ? 1 : 2;
+    if (this.contributions & bit) {
+      this.rejectSpark();
+      return;
+    }
+    this.contributions |= bit;
+    if (this.contributions !== 3) {
+      this.sprite.setTexture(player === 'p1' ? TEX.escortP2Lock : TEX.escortP1Lock);
+      this.pulseRemainingLock(player === 'p1' ? COLORS.p2 : COLORS.p1);
       return;
     }
     // Destroyed: stop being a target/orbiter NOW so the gate fires immediately,
@@ -79,25 +91,32 @@ export class Escort {
     });
   }
 
-  /** Cyan shield ring flying apart on the first hit (same cue as the station
-   *  shield shatter), so "it's not dead, hit again" reads clearly. */
-  private shatterRing(): void {
-    const g = this.scene.add.graphics({ x: this.sprite.x, y: this.sprite.y }).setDepth(2);
-    g.lineStyle(STROKES.shield.width, COLORS.shieldOuter, STROKES.shield.alpha);
-    g.strokeCircle(0, 0, this.radius);
+  private pulseRemainingLock(color: number): void {
+    const g = this.scene.add.graphics({ x: this.sprite.x, y: this.sprite.y }).setDepth(3);
+    g.fillStyle(color, 0.8);
+    g.fillCircle(0, 0, this.radius * 0.72);
     this.scene.tweens.add({
       targets: g,
-      scale: 1.4,
+      scale: 1.25,
       alpha: 0,
-      duration: 180,
+      duration: 220,
       onComplete: () => g.destroy(),
     });
+  }
+
+  private rejectSpark(): void {
+    const g = this.scene.add.graphics({ x: this.sprite.x, y: this.sprite.y }).setDepth(3);
+    g.lineStyle(2, COLORS.chromeMuted, 0.75);
+    g.lineBetween(-5, -5, 5, 5);
+    g.lineBetween(-5, 5, 5, -5);
+    this.scene.tweens.add({ targets: g, scale: 1.5, alpha: 0, duration: 100, onComplete: () => g.destroy() });
   }
 
   private park(): void {
     this.active = false;
     this.popping = false;
     this.sprite.setVisible(false);
+    this.sprite.setRotation(0);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;

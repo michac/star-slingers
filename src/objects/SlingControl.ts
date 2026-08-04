@@ -21,6 +21,8 @@ export interface SlingControlConfig {
   onFire: (x: number, y: number, vx: number, vy: number, charged: boolean) => void;
   /** Homing mode (B14): is this seat's toggle on right now? */
   isHoming?: () => boolean;
+  /** B33: only the exposed boss lets a homing seat charge a railgun. */
+  canChargeWhileHoming?: () => boolean;
   /** The rock the shot would lock onto for a given aim ray (anchor + dir),
    *  as a position + ring radius — or null if none. Drives the aim preview. */
   homingTargetAt?: (ox: number, oy: number, dirx: number, diry: number) => { x: number; y: number; r: number } | null;
@@ -74,11 +76,11 @@ export class SlingControl {
     const len = this.pull.length();
     this.dynamicGfx.clear();
     this.nockedRocket.setVisible(false).setScale(1);
-    // A full charge fires a railgun — but only on a real shot, and never while
-    // homing (homing & charge are mutually exclusive, B13/B14).
+    // A full charge fires a railgun. Homing normally excludes charge, except
+    // during B33's exposed-boss window.
     const charged =
       this.charge >= 1 &&
-      !this.config.isHoming?.() &&
+      this.canCharge() &&
       len >= SLING.minFirePull &&
       this.config.canFire();
     this.charge = 0;
@@ -99,7 +101,7 @@ export class SlingControl {
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
     if (this.pointerId === null) return;
-    if (!this.config.isHoming?.()) {
+    if (this.canCharge()) {
       if (this.pull.length() >= SLING.pullRadius * CHARGE.pullThresholdFrac) {
         this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
       } else {
@@ -186,9 +188,7 @@ export class SlingControl {
       .setVisible(true)
       .setRotation(Math.atan2(dirY, dirX) + Math.PI / 2);
 
-    // Homing aim preview (B14): ring the rock the shot would lock onto, so the
-    // player sees what they'll hit before firing. Homing owns the preview and
-    // can't charge, so the charge cue is suppressed for a homing seat (B13).
+    // Homing aim preview (B14): ring the target the shot would lock onto.
     if (this.config.isHoming?.()) {
       const lock = this.config.homingTargetAt?.(anchor.x, anchor.y, dirX, dirY);
       if (lock) {
@@ -199,9 +199,16 @@ export class SlingControl {
         g.lineStyle(3.5, color, 1);
         g.strokeCircle(lock.x, lock.y, lock.r);
       }
-    } else {
+    }
+    // B33's boss-only exception deliberately shows BOTH the homing lock and
+    // railgun progress, so the assisted player can still hurt the exposed boss.
+    if (this.canCharge()) {
       this.drawChargeArc();
     }
+  }
+
+  private canCharge(): boolean {
+    return !this.config.isHoming?.() || this.config.canChargeWhileHoming?.() === true;
   }
 
   /** Charge cue (B35): the pull arc doubles as a railgun progress bar. Below the

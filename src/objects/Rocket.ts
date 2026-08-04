@@ -9,6 +9,8 @@ import { HOMING, TRAIL } from '../layout';
 import { COLORS } from '../tokens';
 import type { HomingTarget } from './HomingTarget';
 
+export type PlayerId = 'p1' | 'p2';
+
 /** A point on a rocket's flight history; stored per-sprite via setData. */
 type TrailPoint = { x: number; y: number };
 
@@ -49,7 +51,8 @@ export class RocketPool {
     x: number,
     y: number,
     vx: number,
-    vy: number
+    vy: number,
+    player: PlayerId = textureKey === 'rocket-p2' ? 'p2' : 'p1'
   ): Phaser.Physics.Arcade.Sprite | null {
     const rocket = this.group.get(x, y, textureKey) as Phaser.Physics.Arcade.Sprite | null;
     if (!rocket) return null; // pool exhausted
@@ -58,6 +61,7 @@ export class RocketPool {
     rocket.setData('isRocket', true);
     rocket.setData('homing', false); // pooled sprite may carry a stale flag
     rocket.setData('charged', false); // B13: pooled sprite may carry a stale flag
+    rocket.setData('player', player); // B33: escorts need one hit from each seat
     rocket.setData('hitSet', new Set()); // B13: rocks this railgun has chipped
     rocket.setData('dist', 0); // reset travelled distance for the arm/ramp curve
     rocket.setData('history', [{ x, y }] as TrailPoint[]); // fresh trail history
@@ -120,6 +124,7 @@ export class RocketPool {
     rocket.setData('history', undefined); // drop the trail so a refire starts clean
     rocket.setData('charged', false); // B13: clear the railgun flag…
     rocket.setData('hitSet', undefined); // …and drop its pierced-rock refs
+    rocket.setData('player', undefined);
   }
 
   /** Per-frame: advance every active rocket's flight history and redraw the

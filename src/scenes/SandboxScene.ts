@@ -20,6 +20,8 @@ import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
 import { WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
+import { Boss } from '../objects/Boss';
+import { Escort } from '../objects/Escort';
 import type { HomingTarget } from '../objects/HomingTarget';
 
 export class SandboxScene extends Phaser.Scene {
@@ -101,9 +103,10 @@ export class SandboxScene extends Phaser.Scene {
         canFire: () => hud1.canFire(),
         onFire: (x, y, vx, vy, charged) => {
           hud1.spend();
-          this.fireRocket(TEX.rocketP1, x, y, vx, vy, homing1.enabled, charged);
+          this.fireRocket(TEX.rocketP1, 'p1', x, y, vx, vy, homing1.enabled, charged);
         },
         isHoming: () => homing1.enabled,
+        canChargeWhileHoming: () => this.bossEncounter.allowsHomingRailgun,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
       }),
       new SlingControl(this, {
@@ -114,9 +117,10 @@ export class SandboxScene extends Phaser.Scene {
         canFire: () => hud2.canFire(),
         onFire: (x, y, vx, vy, charged) => {
           hud2.spend();
-          this.fireRocket(TEX.rocketP2, x, y, vx, vy, homing2.enabled, charged);
+          this.fireRocket(TEX.rocketP2, 'p2', x, y, vx, vy, homing2.enabled, charged);
         },
         isHoming: () => homing2.enabled,
+        canChargeWhileHoming: () => this.bossEncounter.allowsHomingRailgun,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
       }),
     ];
@@ -159,6 +163,8 @@ export class SandboxScene extends Phaser.Scene {
         bossPhase: () => this.bossEncounter.phase,
         snapBossIn: () => this.bossEncounter.snapBossIn(),
         killEscort: (i: number) => this.bossEncounter.killEscort(i),
+        hitEscort: (i: number, player: 'p1' | 'p2') => this.bossEncounter.hitEscort(i, player),
+        escortLocks: () => this.bossEncounter.escortLocks,
         bossHp: () => this.bossEncounter.bossHp,
         escortsAlive: () => this.bossEncounter.aliveEscorts,
       };
@@ -212,6 +218,7 @@ export class SandboxScene extends Phaser.Scene {
    *  shot. A locked shot is meant to connect (see HOMING.turnRateDeg). */
   private fireRocket(
     tex: string,
+    player: 'p1' | 'p2',
     x: number,
     y: number,
     vx: number,
@@ -219,7 +226,7 @@ export class SandboxScene extends Phaser.Scene {
     homing: boolean,
     charged: boolean
   ): void {
-    const rocket = this.rockets.fire(tex, x, y, vx, vy);
+    const rocket = this.rockets.fire(tex, x, y, vx, vy, player);
     if (!rocket) return;
     // A charged shot is a railgun (B13): it pierces asteroids (see handleHit)
     // and wears the bright trail tier. Charge & homing are mutually exclusive
@@ -343,10 +350,15 @@ export class SandboxScene extends Phaser.Scene {
     const second = b as Phaser.Physics.Arcade.Sprite;
     const rocket = first.getData('isRocket') ? first : second;
     const target = rocket === first ? second : first;
-    const ref = target.getData('ref') as { takeHit: () => void } | undefined;
+    const ref = target.getData('ref') as Boss | Escort | undefined;
     if (!rocket.getData('isRocket') || !ref) return;
+    const charged = rocket.getData('charged') === true;
+    const player = rocket.getData('player') as 'p1' | 'p2';
     this.rockets.recycle(rocket);
-    ref.takeHit();
+    // Escorts consume the firing seat's identity; the exposed boss consumes
+    // only a fully charged railgun (B33).
+    if (ref instanceof Boss) ref.takeHit(charged);
+    else ref.takeHit(player);
   };
 
   private drawStars(): void {

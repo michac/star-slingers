@@ -45,6 +45,7 @@ Keep the station alive. One shared station, one shared score — there's no comp
 - **Per-player HUD** shows WAVE, SCORE (the shared score, built in B6 — §3), and AMMO; P1's whole HUD column is rotated 180°.
 - **Homing toggle (B14, the 5yo fairness lever — decided/built 2026-06-09):** a small visible on/off switch in the player's color, next to each sling (to that player's right; P1's is mirrored + rotated 180° to read from the top seat). No text — it reads by color, knob position, and brightness. **Off by default, opt-in, independent per seat** (the parent quietly flips it on for the 5yo while the 9yo keeps the honest lead-the-target challenge). **The skill is earning the lock, not the flight:** with homing on, the aim drag **rings the asteroid closest to the launch path** *only if you're aimed fairly precisely at it* (a tight cone + a close pass to the rock's center), so the kid still has to point at a target. **If a shot locks a target it connects** — it flies straight for a beat (an obvious "smart rocket" reveal), then curves hard onto the locked rock and hits. **No lock → ordinary straight shot** (no auto-aim), and if the locked rock is destroyed mid-flight the shot just flies straight (it never re-targets a different rock). The setting **persists across a "Try again" restart** (stored in the game registry) so a loss never silently disables it. *(Mutually exclusive with the charged shot below — a homing seat can't charge.)*
 - **Charged shot → piercing railgun (B13, built 2026-06-15):** **hold the pull to power up**, and a full charge fires a **railgun** — a rocket that is *not stopped by anything* and rails straight through **every** asteroid in its path until it flies off-screen. It **chips each rock once** (one normal hit per rock — 1-hit rocks pop, tough rocks chip down; it never instakills), and still **costs only 1 ammo**. **Charge fills only while the dot is held _fully pulled back_ (B35):** it accrues only when the pull is past `CHARGE.pullThresholdFrac` (~0.88 of the pull radius) and **resets to 0 the instant you ease off** — so a railgun is a *held-full-pull skill*, not a timed hold, and a quick flick never charges. `CHARGE.fullMs` in `src/layout.ts` is the hold-at-full-pull time. **Charge cue = the pull arc itself (B35):** the resting **dashed** player-color arc goes **solid** and **fills in a violet accent** (the shield-mid / trail violet — rhymes with the railgun trail, distinct from the cyan/amber player colors) from one end like a progress bar as charge climbs; at full charge the whole arc is violet with an "armed" brightness **breath** (local to the sling, orientation-neutral, no text; code-drawn Graphics, no postFX). *(Replaced the earlier B13 glow-disc-behind-the-rocket cue.)* **Mutually exclusive with homing** — a homing seat fires its homing shot and can't charge (homing already owns the aim preview). **Boss/escorts are unaffected** — a charged shot is an ordinary single hit against the boss/escorts, so the finale's balance is untouched; pierce is an **asteroid-only** behavior.
+- **B33 exception:** homing normally excludes charge, but during the **exposed boss** phase an enabled homing sling shows both its target lock and railgun charge arc, and can fire a charged homing railgun. Piercing remains asteroid-only; a charged railgun is now the **only** rocket that damages the exposed boss.
 
 ## 6. Co-op dynamic (principles)
 - Two slings, **one shared station, one shared score**.
@@ -131,17 +132,20 @@ while battling**, guarded by **4 escort vessels that slowly orbit it**. The figh
   **Loss:** a charge fires with the shield already gone → **"Try again?"** (both reuse
   the existing end-cards).
 
-- **Escorts take two hits, shown as shield-then-core:** a magenta core inside a **cyan
-  shield ring**; the first hit knocks the ring off (it shatters, echoing the boss's own
-  shield), the second pops the core. They're **pure gating targets** (no station threat).
-- **Urgency = the charge bar racing you; co-op = needing both slings** to clear the 4
-  escorts inside the time limit (and to make the most of each short window). **No
-  asteroids** during the boss. **Homing (B14) still works** — it locks escorts while
-  charging, the boss while exposed.
+- **Each escort is a directional ship with two player-color lock fins:** one cyan P1 and
+  one amber P2. It needs **one rocket from each player**, in either order; a duplicate hit
+  is consumed but rejected. The matching fin breaks on a successful hit and the remaining
+  fin pulses in its player color, silently showing whose shot is needed next. They're pure
+  gating targets; partial locks survive a boss beam and a full respawn restores both locks.
+  The locked visual source is `prototype/reference/escort-coop-lock.html`.
+- **Urgency = the charge bar racing you; co-op = both kids must contribute** to every one
+  of the four escorts. **No asteroids** during the boss. Homing locks escorts while charging
+  and the boss while exposed; normal homing does not damage the boss (see the charged exception in §5).
 - **Tuning:** `src/waves.ts` `BOSS` holds the dials — `chargeMs` (time to clear the
   escorts), `exposedMs` (window length), `hp`, `escortHits`, `shieldRegenMs`. Boss/escort
   positions, sizes, orbit, and entrance speed live in `src/layout.ts` `BOSS_LAYOUT`.
-  *(The charged shot (B13, §5) is asteroid-only pierce — it's an ordinary single hit on the boss/escorts, so the finale balance is untouched.)*
+  `escortHits` remains the historical two-contribution count; the fixed player-lock rule is
+  not a balance dial. Boss HP remains 10 and railgun timing is unchanged.
 
 ## Everything else
 Enemy ships, sound/juice, fairness-lever backups: the original brainstorm's drafts live as **[draft]-tagged backlog items** (B4/B8, plus the audio+haptics half of B7) — raw material to react to, not decisions. They graduate into this spec when worked out, reviewed, and built. (Waves = §3/§7; scoring = §3; homing = §5; boss = §9; wave-clear shower = §4 — all built.)

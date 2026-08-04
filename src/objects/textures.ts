@@ -13,8 +13,9 @@ export const TEX = {
   /** One texture per distinct asteroid radius. */
   asteroid: (radius: number) => `asteroid-${radius}`,
   boss: 'boss', // B5 final boss core
-  escort: 'escort', // B5 escort vessel — cyan shield ring + magenta core
-  escortCore: 'escort-core', // B5 escort after its shield ring is knocked off
+  escort: 'escort-both-locks', // B33 escort ship with both player locks
+  escortP1Lock: 'escort-p1-lock', // cyan lock remains
+  escortP2Lock: 'escort-p2-lock', // amber lock remains
   heart: 'icon-heart', // B5 health-bar cap (white, tinted at use)
   bolt: 'icon-bolt', // B5 charge-bar cap (white, tinted at use)
   spark: 'px-spark', // B29 explosion: white dot → additive white-hot sparks
@@ -115,39 +116,45 @@ function makeBoss(scene: Phaser.Scene): void {
   g.destroy();
 }
 
-/**
- * Escort vessel (B5): a magenta core inside a cyan shield ring — the "shield
- * then core" two-hit read (first hit knocks the cyan ring off, second pops the
- * core). Two textures on the SAME 2R x 2R canvas (R = outer shield radius) so
- * swapping to the core texture mid-fight never shifts the body. The cyan ring
- * deliberately echoes the boss's own invulnerable shield ring.
- */
+/** B33 escort ship: directional hull with a cyan and amber lock-fin. All three
+ * state textures share the same canvas/body so lock changes never shift orbit. */
 function makeEscort(scene: Phaser.Scene): void {
-  const R = BOSS_LAYOUT.escort.radius; // outer shield radius (canvas half)
-  const core = BOSS_LAYOUT.escort.coreRadius;
-  const drawCore = (g: Phaser.GameObjects.Graphics) => {
+  const R = BOSS_LAYOUT.escort.radius;
+  const drawShip = (g: Phaser.GameObjects.Graphics, p1: boolean, p2: boolean) => {
+    // Nose points up; Escort.place rotates it toward the shared station.
     g.fillStyle(COLORS.rockFill, 1);
-    g.fillCircle(R, R, core - STROKES.rock.width / 2);
+    g.fillPoints([
+      new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
+      new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
+    ], true);
     g.lineStyle(STROKES.rock.width, COLORS.danger, 1);
-    g.strokeCircle(R, R, core - STROKES.rock.width / 2);
+    g.strokePoints([
+      new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
+      new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
+    ], true);
     g.fillStyle(COLORS.accent, 1);
-    g.fillCircle(R, R, core * 0.42);
+    g.fillCircle(R, R * 0.95, R * 0.18);
+    const fin = (left: boolean, color: number, on: boolean) => {
+      if (!on) return;
+      const sign = left ? -1 : 1;
+      g.fillStyle(color, 1);
+      g.fillTriangle(R + sign * R * 0.34, R * 1.18, R + sign * R * 0.88, R * 1.58, R + sign * R * 0.33, R * 1.62);
+      g.lineStyle(1.5, 0xffffff, 0.72);
+      g.strokeTriangle(R + sign * R * 0.34, R * 1.18, R + sign * R * 0.88, R * 1.58, R + sign * R * 0.33, R * 1.62);
+    };
+    fin(true, COLORS.p1, p1);
+    fin(false, COLORS.p2, p2);
   };
-
-  if (!scene.textures.exists(TEX.escort)) {
+  const make = (key: string, p1: boolean, p2: boolean) => {
+    if (scene.textures.exists(key)) return;
     const g = scene.make.graphics({}, false);
-    g.lineStyle(STROKES.shield.width, COLORS.shieldOuter, STROKES.shield.alpha);
-    g.strokeCircle(R, R, R - STROKES.shield.width / 2); // the cyan shield ring
-    drawCore(g);
-    g.generateTexture(TEX.escort, R * 2, R * 2);
+    drawShip(g, p1, p2);
+    g.generateTexture(key, R * 2, R * 2);
     g.destroy();
-  }
-  if (!scene.textures.exists(TEX.escortCore)) {
-    const g = scene.make.graphics({}, false);
-    drawCore(g); // same canvas, ring area transparent
-    g.generateTexture(TEX.escortCore, R * 2, R * 2);
-    g.destroy();
-  }
+  };
+  make(TEX.escort, true, true);
+  make(TEX.escortP1Lock, true, false);
+  make(TEX.escortP2Lock, false, true);
 }
 
 /** Heart icon (B5 health-bar cap): two lobes + a point, drawn white to tint. */

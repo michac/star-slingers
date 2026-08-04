@@ -649,6 +649,24 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **B39 — Shareable boss link (2026-08-04):** documented the existing GitHub Pages boss shortcut:
+  `https://michac.github.io/star-slingers/?boss`. It preserves the normal full-run URL and lets phone
+  playtests jump straight to the finale.
+
+- **B33 — Co-op escort boss redesign (2026-08-03):** locked the visual in
+  `prototype/reference/escort-coop-lock.html`, then ported its station-facing directional
+  ships and cyan/amber lock fins into procedural escort textures. Rockets now carry `p1` /
+  `p2` identity through the pool and boss overlap. Every escort requires one unique hit from
+  each player in either order; the first breaks its own color fin, pulses the remaining one,
+  and duplicate-color shots make only a muted reject spark. Partial progress persists through
+  boss beams; exposure-window respawns restore both locks. The exposed boss now takes damage
+  only from charged railguns (one HP each); normal homing is still harmless, while homing is
+  allowed to charge only in that boss-only window and shows lock + charge cues together.
+  Constants stay at 5s charge / 3s exposure / 10 HP. Deterministic Playwright now asserts
+  duplicate rejection, either-order clears, beam persistence, fresh respawns, normal/homing
+  immunity, and charged homing damage. typecheck + build + 9-test suite green. **Still needs
+  Pixel 6 acceptance:** both kids should identify the needed color without explanation.
+
 - **B37 — One-hit large splitters (2026-08-03):** replaced the grindy 2/3-hit
   rock representation with explicit **standard** (r=13, 10 points) and
   **splitter** (r=17, 20 points) kinds. Both pop in one rocket hit and never
