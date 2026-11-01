@@ -9,6 +9,7 @@
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
 import { BOSS_LAYOUT } from '../layout';
+import { BOSS } from '../waves';
 import { TEX } from './textures';
 import type { PlayerId } from './Rocket';
 
@@ -18,6 +19,7 @@ export class Escort {
   private contributions = 0;
   private active = false;
   private popping = false;
+  private downMs = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -48,11 +50,20 @@ export class Escort {
   }
 
   activate(): void {
+    this.scene.tweens.killTweensOf(this.sprite);
     this.active = true;
     this.popping = false;
+    this.downMs = 0;
     this.contributions = 0;
     this.sprite.setTexture(TEX.escort).setVisible(true).setScale(1).setAlpha(1); // shield ring back on
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
+  }
+
+  /** A downed node returns after B34's fixed shield-web gap window. */
+  update(deltaMs: number): void {
+    if (this.active || !this.popping) return;
+    this.downMs += deltaMs;
+    if (this.downMs >= BOSS.escortRegenMs) this.activate();
   }
 
   /** Encounter repositions it on the orbit each frame. */
@@ -80,6 +91,7 @@ export class Escort {
     // then a throwaway pop tween for juice.
     this.active = false;
     this.popping = true;
+    this.downMs = 0;
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.onDestroyed();
     this.scene.tweens.add({
@@ -87,7 +99,9 @@ export class Escort {
       scale: 1.6,
       alpha: 0,
       duration: 160,
-      onComplete: () => this.park(),
+      onComplete: () => {
+        if (!this.active) this.sprite.setVisible(false);
+      },
     });
   }
 

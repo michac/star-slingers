@@ -134,6 +134,17 @@ haptics** half of the wave-clear juice stays queued in backlog **B7**.)
 
 ---
 
+## Boss command ship + shield web (B34) — `done` (2026-08-05) ✅
+
+The boss no longer adds another ring-on-ring target. It is the escorts' larger,
+station-facing command-ship silhouette, surrounded by a fixed-radius rotating diamond of four
+station-facing escorts. Each live adjacent pair draws one neon **shield-web** link; a destroyed
+escort removes its two links for a literal shoot-through gap, then regenerates after 6 seconds
+with both co-op lock fins restored. The charge timer resets on a kill and **pauses** while any
+node is down. The boss has no shield decoration or exposed phase: a charged railgun that travels
+through a gap always chips its HP; an active web line consumes any shot. `prototype/boss-command-lab.html`
+is the tap-through phone-review artifact. The implementation is intentionally un-phone-tested.
+
 ## Queue — to prototype next
 
 _(nothing queued — add the next effect here when we pick it)_

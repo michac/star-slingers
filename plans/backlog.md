@@ -9,12 +9,20 @@
 
 ## Next up — Michael's wants (2026-07-10), in rough build order
 
-### B34 · Boss (and general) visual polish — `idea`
+### B34 · Boss (and general) visual polish — `done`
 The aesthetic is good, but we've ended up with **too many circles-inside-circles** — hull ring,
 shield rings, boss shield ring, orbit, charge arc all stack as concentric circles and read as
 clutter. The B33 directional escort ships and lock fins are shipped; rework the remaining
-boss/general circle-heavy presentation while keeping the neon skin. Explore on the prototype shelf
-first per the working agreement; land in one pass. Sync `plans/polish-pass.md` + spec §4.
+boss/general circle-heavy presentation while keeping the neon skin. **Locked direction (2026-08-05):**
+boss encounter only — the boss shares the escorts' left-facing ship silhouette; all ships point at
+the protected station; and the boss carries no shield decoration of its own. The escorts hold a
+fixed-radius diamond formation that rotates as one unit (no inward/outward drift) and are linked by
+a **shield web**: each live adjacent pair draws one
+blocker; killing an escort removes its two attached links, creating a shoot-through gap. A downed
+escort regenerates after **6 seconds**. This replaces the all-escorts-dead gate; later live work
+adds shield-line collision detection that consumes shots on a line while preserving shots that
+pass through a gap. The tap-through review state lab is on the prototype shelf; the live port is
+un-phone-tested. Sync `plans/polish-pass.md` + spec §4/§9.
 
 ### B38 · Railgun pull-arc timing & visual polish — `idea`
 The full-pull railgun mechanic works on the phone, but the **charge timing and its pull-arc visuals

@@ -4,8 +4,8 @@
  * `scene.rockets.fire(...)` shots, and reads live state through the
  * `window.__game` hook (src/main.ts) and the scene's DEV `__debug` surface
  * (src/scenes/SandboxScene.ts) to assert the seams in CLAUDE.md: hit-counter,
- * scoring, homing, charged-pierce, asteroid split, the boss charge/expose/
- * recharge cycle, and the ?boss shortcut — plus zero console errors per case.
+ * scoring, homing, charged-pierce, asteroid split, the boss shield-web cycle,
+ * and the ?boss shortcut — plus zero console errors per case.
  *
  * Every old `console.log("…OK/FAIL")` is now an `expect()`, so a real
  * regression goes red with a non-zero exit (the gap the hand-rolled script
@@ -372,85 +372,68 @@ test('a splitter immediately splits into two standard children', async ({ page }
   expect(scoreDelta).toBe(20);
 });
 
-test('boss co-op locks, railgun gate + cycle', async ({ page }) => {
+test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   await gotoGame(page);
 
-  // Deterministic boss cycle on the fixed-timestep clock. Skip straight to the
-  // boss, snap past the (wall-clock) entrance tween, then drive the gate by
-  // stepping: while CHARGING (escorts up) the boss is invulnerable — a hit must
-  // NOT drop its HP. Clear all 4 escorts -> EXPOSED window -> a hit DOES drop its
-  // HP -> the window ends -> re-shield to CHARGING with all 4 escorts respawned.
+  // Deterministic B34 boss test: the complete diamond has four physical links.
+  // Downing one two-player escort removes its two links for 6s, pauses charge,
+  // and lets a charged shot reach the always-vulnerable command ship.
   await startBoss(page);
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`); // finish the entrance tween instantly
   await stepGame(page, 16, 1); // one frame so the encounter observes the entered boss
   const hpStart = await bossHp(page);
   await shot(page, 'smoke-boss-charging.png');
   expect(await bossPhase(page)).toBe('charging');
-
-  // Invulnerable while charging: a rocket fully crosses the boss center (~40
-  // frames from x=60 at 350px/s past the boss at x=180) yet HP stays put.
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 60, 370, 350, 0)
-  );
-  await stepGame(page, 16, 40);
-  expect(await bossHp(page)).toBe(hpStart);
+  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(4);
+  // A segment across the lower-left side intersects the intact web.
+  expect(await page.evaluate(`${SCENE}.__debug.webBlocks(100, 400, 180, 400)`)).toBe(true);
 
   // Every ship needs BOTH colors. A P1 double-tap consumes both rockets but
-  // leaves escort 0 awaiting amber; the reverse order clears escort 1.
+  // leaves escort 0 awaiting amber; the reverse order clears escort 2, the
+  // left-side node. That opens the incoming horizontal path from the slings.
   await hitEscort(page, 0, 'p1');
   await hitEscort(page, 0, 'p1');
   expect(await escortsAlive(page)).toBe(4);
   expect((await escortLocks(page))[0]).toBe(1);
-  await hitEscort(page, 1, 'p2');
-  await hitEscort(page, 1, 'p1');
-  expect(await escortsAlive(page)).toBe(3);
-
-  // A boss beam does not erase a partial contribution: the surviving cyan
-  // lock is still waiting after the 5s charge has fired and restarted.
-  await hitEscort(page, 2, 'p1');
-  await stepGame(page, 16, 320);
-  expect((await escortLocks(page))[2]).toBe(1);
-  expect(await escortsAlive(page)).toBe(3);
-
-  // Finish the partial ship, then clear the remaining two with either order.
-  await hitEscort(page, 0, 'p2');
   await hitEscort(page, 2, 'p2');
-  await hitEscort(page, 3, 'p2');
-  await hitEscort(page, 3, 'p1');
+  await hitEscort(page, 2, 'p1');
   await stepGame(page, 16, 1);
-  expect(await bossPhase(page)).toBe('exposed');
-  await shot(page, 'smoke-boss-exposed.png');
+  expect(await escortsAlive(page)).toBe(3);
+  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(2);
+  expect(await page.evaluate(`${SCENE}.__debug.webBlocks(60, 370, 200, 370)`)).toBe(false);
 
-  // Exposed but ordinary rockets — including an ordinary homing rocket — are
-  // consumed without damage. Only a charged railgun can reduce boss HP.
+  // Ordinary gap shots remain harmless; a railgun through the same missing
+  // links damages the boss.
   await page.evaluate(() =>
     (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 60, 370, 350, 0)
   );
-  await stepGame(page, 16, 30);
-  expect(await bossHp(page)).toBe(hpStart);
-  await page.evaluate(() => {
-    const s = (window as any).__game.scene.keys['Sandbox'];
-    const r = s.rockets.fire('rocket-p1', 60, 370, 350, 0);
-    r.setData('homing', true);
-  });
   await stepGame(page, 16, 30);
   expect(await bossHp(page)).toBe(hpStart);
   await page.evaluate(() => {
     const s = (window as any).__game.scene.keys['Sandbox'];
     const r = s.rockets.fire('rocket-p1', 60, 370, 350, 0);
     r.setData('charged', true);
-    r.setData('homing', true); // B33 exposed-phase homing railgun exception
   });
   const dropped = await stepUntil(page, `s.__debug.bossHp() < ${hpStart}`, 80);
   expect(dropped.done).toBe(true);
   expect(await bossHp(page)).toBeLessThan(hpStart);
 
-  // Cycle closes: after the exposed window (exposedMs 6000 / 16 ≈ 375 frames) it
-  // re-shields back to charging and all 4 escorts respawn.
-  const recharged = await stepUntil(page, "s.__debug.bossPhase() === 'charging'", 450);
-  expect(recharged.done).toBe(true);
+  // The open gap freezes the charge rather than letting a beam race the team.
+  await stepGame(page, 16, 240);
+  expect(await page.evaluate(`${SCENE}.__debug.bossCharge()`)).toBe(0);
+  expect(await escortsAlive(page)).toBe(3);
+
+  // The downed node regenerates after 6s with both locks reset, restoring all
+  // four links; charge then resumes and can still fire at the station.
+  const regenerated = await stepUntil(page, 's.__debug.escortsAlive() === 4', 100);
+  expect(regenerated.done).toBe(true);
   expect(await escortsAlive(page)).toBe(4);
-  expect(await escortLocks(page)).toEqual([0, 0, 0, 0]);
+  // Only the regenerated node resets; surviving escorts retain any real hits.
+  expect((await escortLocks(page))[2]).toBe(0);
+  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(4);
+  const shieldBefore = await page.evaluate(`${SCENE}.__debug.stationShield()`);
+  const fired = await stepUntil(page, `s.__debug.stationShield() < ${shieldBefore}`, 350);
+  expect(fired.done).toBe(true);
 });
 
 test('?boss shortcut boots into the fight', async ({ page }) => {

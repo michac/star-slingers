@@ -261,15 +261,13 @@ export const VICTORY_ICON = {
 export const BOSS_LAYOUT = {
   park: { x: 180, y: 370 }, // center; both seats reach it
   radius: 32, // big but fully on screen (orbit extent stays < field edges)
-  shieldRingPad: 9, // the boss's own "invulnerable" shield ring sits this far out
-  chargeArcWidth: 5, // the filling charge telegraph drawn just outside the shield ring
   enterFromX: GAME_WIDTH + 70, // starts off the right edge, slides to park.x
   enterMs: 1900, // slower, more menacing entrance (was 1100 — too fast on the phone)
   escort: {
-    radius: 17, // outer SHIELD radius (collision + orbit size)
-    coreRadius: 10, // the bare core once the shield ring is knocked off
-    orbitRadius: 62, // > boss radius (32) so escorts never occlude the boss
-    orbitSpeedDeg: 22, // slow spin (deg/sec)
+    radius: 17, // collision + orbit size
+    coreRadius: 10, // legacy B5 core geometry
+    formationRadius: 92, // fixed clearance: the rotating shield web never clips the boss
+    orbitSpeedDeg: 20, // the diamond formation rotates as one unit
   },
   // Two vertical gauges (HEALTH + CHARGE) live in the empty band to the boss's
   // right (boss right edge ~212 → screen edge 360), evenly spaced. Each bar

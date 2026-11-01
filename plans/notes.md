@@ -649,6 +649,19 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **B34 — Boss command ship + shield web (2026-08-05):** replaced the remaining
+  circle-heavy boss presentation and the clear-all-escorts/exposed-window gate. The command
+  ship now shares the escorts' directional hull language and has no shield decoration. Four
+  station-facing escorts rotate as a rigid diamond at fixed radius; each live adjacent pair
+  creates a neon shield-web blocker. A two-player escort kill removes its two links for 6s,
+  resets and pauses the charge, then regenerates the node with fresh locks. A charged railgun
+  can damage the always-vulnerable boss only by physically travelling through a gap; web lines
+  consume ordinary and charged rockets. Homing remains escort-only and charge-exclusive.
+  Added `ShieldWeb` swept-line collision, deterministic debug reads, and replaced the boss
+  Playwright scenario with locks/gap/pause/regeneration/beam coverage. `typecheck`, build, and
+  all 9 tests green. The tap-through `prototype/boss-command-lab.html` is ready for phone review;
+  the live port remains un-phone-tested.
+
 - **B40 — Longer boss exposure (2026-08-04):** phone feedback found the original 3s
   shields-down window too brief for a 10-HP boss that only takes charged railguns, risking a
   dragged-out fight. Doubled `BOSS.exposedMs` from **3000ms to 6000ms**. Kept the 5s escort

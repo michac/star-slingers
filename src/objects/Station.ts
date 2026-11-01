@@ -81,6 +81,11 @@ export class Station {
       : STATION.hullR;
   }
 
+  /** DEV/test-friendly shield read; the live UI remains rings only. */
+  get shieldHitsLeft(): number {
+    return this.hitsLeft;
+  }
+
   /** An enemy got here. Shatters the outermost remaining ring, or reports
    *  the station destroyed when one reaches the bare hull. */
   onEnemyReached(): 'shattered' | 'destroyed' {

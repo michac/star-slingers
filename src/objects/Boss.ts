@@ -11,7 +11,7 @@
  * HomingTarget (hittable while exposed).
  */
 import Phaser from 'phaser';
-import { COLORS, STROKES } from '../tokens';
+import { COLORS } from '../tokens';
 import { BOSS_LAYOUT, STATION } from '../layout';
 import { BOSS } from '../waves';
 import { TEX } from './textures';
@@ -19,13 +19,9 @@ import { TEX } from './textures';
 export class Boss {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
   readonly radius = BOSS_LAYOUT.radius;
-  /** The plain "invulnerable" shield ring, under the boss sprite. */
-  private readonly fx: Phaser.GameObjects.Graphics;
-
   private hp = BOSS.hp;
   private active = false;
   private entering = false;
-  private vulnerable = false;
   private popping = false;
   private dead = false;
 
@@ -35,7 +31,6 @@ export class Boss {
     private readonly onDefeated: () => void
   ) {
     const { x, y } = BOSS_LAYOUT.park;
-    this.fx = scene.add.graphics().setDepth(1);
     this.sprite = scene.physics.add.sprite(x, y, TEX.boss).setDepth(2);
     this.sprite.setData('ref', this);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
@@ -63,7 +58,6 @@ export class Boss {
   activate(): void {
     this.active = true;
     this.entering = true;
-    this.vulnerable = false;
     this.dead = false;
     this.popping = false;
     this.hp = BOSS.hp;
@@ -72,8 +66,9 @@ export class Boss {
       .setVisible(true)
       .setScale(1)
       .setAlpha(1)
-      .setTint(0x8a78c8) // muted = shielded / locked
-      .setPosition(BOSS_LAYOUT.enterFromX, y);
+      .clearTint()
+      .setPosition(BOSS_LAYOUT.enterFromX, y)
+      .setRotation(Math.atan2(STATION.cy - y, STATION.cx - x) + Math.PI / 2);
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
     this.scene.tweens.add({
       targets: this.sprite,
@@ -96,34 +91,16 @@ export class Boss {
     this.entering = false;
   }
 
-  /** Per-frame render (timing is the encounter's; this just paints). */
-  update(): void {
-    this.drawFx();
-  }
-
-  /** Open the damage window: drop the shield, full color, takes hits. */
-  expose(): void {
-    this.vulnerable = true;
-    this.sprite.clearTint();
-  }
-
-  /** Re-shield between cycles: invulnerable again, muted. */
-  shield(): void {
-    this.vulnerable = false;
-    if (!this.dead) this.sprite.setTint(0x8a78c8);
-  }
-
   takeHit(charged: boolean): void {
-    // B33: exposure is a railgun-only damage window. Ordinary (including
-    // ordinary homing) rockets are visibly consumed but cannot chip the boss.
-    if (!charged || !this.vulnerable || this.dead) return;
+    // B34: the web, not a boss ring/state gate, protects the command ship.
+    // A railgun that reaches it through a missing link can always chip HP.
+    if (!charged || !this.isActive) return;
     this.hp -= 1;
     if (this.hp > 0) return;
     this.dead = true;
     this.active = false;
     this.popping = true;
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
-    this.fx.clear();
     this.scene.tweens.add({
       targets: this.sprite,
       scale: 1.8,
@@ -144,28 +121,14 @@ export class Boss {
     this.scene.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
   }
 
-  /** The plain "invulnerable" shield ring while shielded; nothing while
-   *  exposed (plain, clearly hittable). The charge urgency now lives in the
-   *  off-boss CHARGE bar (BossBars), keeping the center uncluttered. */
-  private drawFx(): void {
-    const g = this.fx;
-    g.clear();
-    if (!this.active || this.dead || this.entering || this.vulnerable) return;
-    const { x, y } = this.sprite;
-    g.lineStyle(STROKES.shield.width, COLORS.shieldOuter, 0.8);
-    g.strokeCircle(x, y, this.radius + BOSS_LAYOUT.shieldRingPad);
-  }
-
   private park(): void {
     this.active = false;
     this.entering = false;
     this.dead = false;
     this.popping = false;
-    this.vulnerable = false;
     this.sprite.setVisible(false);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;
-    this.fx.clear();
   }
 }

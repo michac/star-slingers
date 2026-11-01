@@ -12,7 +12,7 @@ export const TEX = {
   rocketP2: 'rocket-p2',
   /** One texture per distinct asteroid radius. */
   asteroid: (radius: number) => `asteroid-${radius}`,
-  boss: 'boss', // B5 final boss core
+  boss: 'boss', // B34 directional command ship
   escort: 'escort-both-locks', // B33 escort ship with both player locks
   escortP1Lock: 'escort-p1-lock', // cyan lock remains
   escortP2Lock: 'escort-p2-lock', // amber lock remains
@@ -87,31 +87,22 @@ function makeAsteroid(scene: Phaser.Scene, r: number): void {
 }
 
 /**
- * Final-boss core (B5): a menacing 2r x 2r disc — dark body, a heavy danger
- * ring, an inner accent "eye", and a couple of plate details. Drawn in the
- * enemy palette; the encounter tints it muted while invulnerable and clears
- * the tint (full color) once vulnerable. Charge glow + beam are drawn live by
- * Boss.ts, not baked here.
+ * B34 command ship: the escorts' directional hull language scaled into a
+ * flagship. It points up in texture space; Boss.activate rotates it left toward
+ * the station. No circular shield decoration remains — the escorts' web is the
+ * visible protection.
  */
 function makeBoss(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.boss)) return;
   const r = BOSS_LAYOUT.radius;
   const g = scene.make.graphics({}, false);
   g.fillStyle(COLORS.rockFill, 1);
-  g.fillCircle(r, r, r - STROKES.rock.width / 2);
-  g.lineStyle(STROKES.rock.width + 1.5, COLORS.danger, 1); // heavier than a rock
-  g.strokeCircle(r, r, r - (STROKES.rock.width + 1.5) / 2);
-  // Inner ring + glowing eye.
-  g.lineStyle(STROKES.crater.width, COLORS.crater, 1);
-  g.strokeCircle(r, r, r * 0.62);
-  g.fillStyle(COLORS.accent, 1);
-  g.fillCircle(r, r, r * 0.26);
-  g.fillStyle(COLORS.hullWindow, 0.9);
-  g.fillCircle(r, r, r * 0.12);
-  // Two plate vents flanking the eye, for menace.
-  g.fillStyle(COLORS.danger, 0.9);
-  g.fillCircle(r - r * 0.5, r, r * 0.1);
-  g.fillCircle(r + r * 0.5, r, r * 0.1);
+  g.fillPoints([new Phaser.Geom.Point(r, r * 0.08), new Phaser.Geom.Point(r * 1.82, r * 1.56), new Phaser.Geom.Point(r, r * 1.92), new Phaser.Geom.Point(r * 0.18, r * 1.56)], true);
+  g.lineStyle(STROKES.rock.width + 1.5, COLORS.danger, 1);
+  g.strokePoints([new Phaser.Geom.Point(r, r * 0.08), new Phaser.Geom.Point(r * 1.82, r * 1.56), new Phaser.Geom.Point(r, r * 1.92), new Phaser.Geom.Point(r * 0.18, r * 1.56)], true);
+  g.fillStyle(COLORS.p1, 0.8); g.fillTriangle(r, r * 0.42, r * 1.34, r * 1.27, r, r * 1.17);
+  g.fillStyle(COLORS.p2, 0.8); g.fillTriangle(r, r * 1.17, r * 1.34, r * 1.27, r, r * 1.65);
+  g.fillStyle(COLORS.hullWindow, 0.9); g.fillRect(r * 0.78, r * 1.22, r * 0.44, r * 0.26);
   g.generateTexture(TEX.boss, r * 2, r * 2);
   g.destroy();
 }

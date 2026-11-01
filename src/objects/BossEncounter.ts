@@ -2,13 +2,11 @@
  * BossEncounter (B5) — orchestrates the finale that replaces the wave-4 victory
  * seam. Owns the Boss + 4 orbiting Escorts and a repeating, urgent CYCLE:
  *
- *   idle → charging ⇄ exposed → won | lost
+ *   idle → charging → won | lost
  *
- *   CHARGING: escorts orbit, boss shielded + invulnerable, charge bar fills.
- *     · clear all 4 escorts before it fills → EXPOSED (cancel the shot)
- *     · charge fills first → boss FIRES (−1 shield ring), straight back to CHARGING
- *   EXPOSED: boss vulnerable for `exposedMs` — shoot it (HP ticks). Window ends →
- *     escorts respawn, boss re-shields → CHARGING.
+ *   CHARGING: live adjacent escorts make a physical shield web. Destroying a
+ *   node opens two gaps for 6s and pauses the charge; railguns can hit the boss
+ *   only if they physically pass through a gap.
  *   won: boss HP 0 (chipped across windows) · lost: a fired charge with no shield left.
  *
  * Boss + escort sprites are created ONCE here (parked) so the scene's
@@ -21,19 +19,20 @@ import { BOSS } from '../waves';
 import { Boss } from './Boss';
 import { BossBars } from './BossBars';
 import { Escort } from './Escort';
+import { ShieldWeb } from './ShieldWeb';
 import { Station } from './Station';
 import { Overlay } from './Overlay';
 import type { HomingTarget } from './HomingTarget';
 import type { PlayerId } from './Rocket';
 
-type BossPhase = 'idle' | 'charging' | 'exposed' | 'won' | 'lost';
+type BossPhase = 'idle' | 'charging' | 'won' | 'lost';
 
 export class BossEncounter {
   private readonly boss: Boss;
   private readonly bars: BossBars;
   private readonly escorts: Escort[];
+  private readonly web: ShieldWeb;
   private phaseState: BossPhase = 'idle';
-  private gateRemaining = BOSS.escortCount;
   private timer = 0; // ms within the current charging/exposed phase
   private orbitAngle = 0;
 
@@ -49,6 +48,7 @@ export class BossEncounter {
       { length: BOSS.escortCount },
       () => new Escort(scene, () => this.onEscortDestroyed())
     );
+    this.web = new ShieldWeb(scene, 2.5);
   }
 
   get phase(): BossPhase {
@@ -62,11 +62,6 @@ export class BossEncounter {
   /** Live (un-popped) escort count — for tests verifying the respawn cycle. */
   get aliveEscorts(): number {
     return this.escorts.filter((e) => e.isActive).length;
-  }
-
-  /** B33's narrow exception to the normal homing/railgun tradeoff. */
-  get allowsHomingRailgun(): boolean {
-    return this.phaseState === 'exposed';
   }
 
   /** Sprites for the one-time rocket↔boss overlap collider (boss + escorts). */
@@ -83,23 +78,18 @@ export class BossEncounter {
   }
 
   update(deltaMs: number): void {
-    if (this.phaseState !== 'charging' && this.phaseState !== 'exposed') return;
+    if (this.phaseState !== 'charging') return;
     this.orbitAngle += Phaser.Math.DegToRad(BOSS_LAYOUT.escort.orbitSpeedDeg) * (deltaMs / 1000);
     this.placeEscorts();
-    this.boss.update();
+    for (const escort of this.escorts) escort.update(deltaMs);
+    this.placeEscorts(); // a regenerated node must be positioned before the web redraws
+    this.web.update(deltaMs, this.escorts);
 
-    if (this.phaseState === 'charging') {
-      if (!this.boss.isEntered) {
-        // hold the charge until the slide-in ends (timer stays 0)
-      } else if (this.gateRemaining <= 0) {
-        this.enterExposed(); // cleared in time — open the window
-      } else {
-        this.timer += deltaMs;
-        if (this.timer >= BOSS.chargeMs) this.bossFires();
-      }
-    } else {
+    // B34: a live gap pauses the danger clock. Each kill resets it as the
+    // defensive payoff; it resumes only once all four nodes have regenerated.
+    if (this.boss.isEntered && this.aliveEscorts === BOSS.escortCount) {
       this.timer += deltaMs;
-      if (this.timer >= BOSS.exposedMs) this.startCharge(); // window over → re-shield
+      if (this.timer >= BOSS.chargeMs) this.bossFires();
     }
     this.drawBars();
   }
@@ -114,15 +104,14 @@ export class BossEncounter {
       maxHp: BOSS.hp,
       chargeFrac: charging ? this.timer / BOSS.chargeMs : 0,
       visible:
-        (this.phaseState === 'charging' || this.phaseState === 'exposed') && this.boss.isEntered,
+        this.phaseState === 'charging' && this.boss.isEntered,
     });
   }
 
-  /** Hittable targets for homing (B14): live escorts while charging, the boss
-   *  while exposed — so the 5yo's homing keeps working through the finale. */
+  /** Homing remains an escort aid. The boss stays railgun-only, and homing
+   * remains mutually exclusive with charging outside B33's retired window. */
   homingTargets(): HomingTarget[] {
     if (this.phaseState === 'charging') return this.escorts.filter((e) => e.isActive);
-    if (this.phaseState === 'exposed') return [this.boss];
     return [];
   }
 
@@ -144,25 +133,47 @@ export class BossEncounter {
     return this.escorts.map((e) => e.lockMask);
   }
 
+  get shieldLinkCount(): number {
+    return this.web.count;
+  }
+
+  get chargeFraction(): number {
+    return Math.min(1, this.timer / BOSS.chargeMs);
+  }
+
+  /** Called from the boss overlap process callback, before target damage. */
+  blocksRocket(rocket: Phaser.Physics.Arcade.Sprite): boolean {
+    return this.phaseState === 'charging' && this.web.blocks(rocket);
+  }
+
+  /** Global line collision, not just protection at the boss sprite: a shot
+   * that crosses a web edge is spent even if it was headed elsewhere. */
+  consumeBlockedRockets(rockets: Phaser.Physics.Arcade.Group, recycle: (rocket: Phaser.Physics.Arcade.Sprite) => void): void {
+    if (this.phaseState !== 'charging') return;
+    rockets.children.iterate((child) => {
+      const rocket = child as Phaser.Physics.Arcade.Sprite;
+      if (rocket.active && this.web.blocks(rocket)) recycle(rocket);
+      return true;
+    });
+  }
+
+  debugWebBlocks(ax: number, ay: number, bx: number, by: number): boolean {
+    return this.web.blocksSegment(ax, ay, bx, by);
+  }
+
   /** DEV/test: skip the boss slide-in tween (see Boss.snapEntered). */
   snapBossIn(): void {
     this.boss.snapEntered();
   }
 
-  /** Begin (or restart) a charge cycle: re-shield, respawn all 4 escorts. */
+  /** Start the encounter with a complete rotating web. Afterwards escorts
+   * regenerate independently; never recreate their pooled sprites. */
   private startCharge(): void {
     this.phaseState = 'charging';
     this.timer = 0;
-    this.gateRemaining = BOSS.escortCount;
-    this.boss.shield();
     for (const e of this.escorts) e.activate();
     this.placeEscorts();
-  }
-
-  private enterExposed(): void {
-    this.phaseState = 'exposed';
-    this.timer = 0;
-    this.boss.expose();
+    this.web.update(0, this.escorts);
   }
 
   private bossFires(): void {
@@ -183,7 +194,7 @@ export class BossEncounter {
   private placeEscorts(): void {
     const { x: bx, y: by } = this.boss.sprite;
     const step = (Math.PI * 2) / this.escorts.length;
-    const r = BOSS_LAYOUT.escort.orbitRadius;
+    const r = BOSS_LAYOUT.escort.formationRadius;
     this.escorts.forEach((e, i) => {
       if (!e.isActive) return;
       const a = this.orbitAngle + i * step;
@@ -192,9 +203,8 @@ export class BossEncounter {
   }
 
   private onEscortDestroyed(): void {
-    this.gateRemaining -= 1; // the charging branch polls this to open the window
-    // Each kill resets the charge — steadily clearing escorts keeps the boss
-    // from ever firing; you only get shot if you stall.
+    // A kill opens two adjacent web links and resets the charge before its
+    // 6-second gap timer begins. The update loop then keeps it paused.
     this.timer = 0;
   }
 

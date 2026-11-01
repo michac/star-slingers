@@ -106,7 +106,7 @@ export class SandboxScene extends Phaser.Scene {
           this.fireRocket(TEX.rocketP1, 'p1', x, y, vx, vy, homing1.enabled, charged);
         },
         isHoming: () => homing1.enabled,
-        canChargeWhileHoming: () => this.bossEncounter.allowsHomingRailgun,
+        canChargeWhileHoming: () => false,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
       }),
       new SlingControl(this, {
@@ -120,7 +120,7 @@ export class SandboxScene extends Phaser.Scene {
           this.fireRocket(TEX.rocketP2, 'p2', x, y, vx, vy, homing2.enabled, charged);
         },
         isHoming: () => homing2.enabled,
-        canChargeWhileHoming: () => this.bossEncounter.allowsHomingRailgun,
+        canChargeWhileHoming: () => false,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
       }),
     ];
@@ -142,7 +142,8 @@ export class SandboxScene extends Phaser.Scene {
     this.physics.add.overlap(
       this.rockets.group,
       this.bossEncounter.sprites,
-      this.handleBossHit
+      this.handleBossHit,
+      this.processBossHit
     );
 
     // Deterministic handle for headless tests (smoke/wave scripts).
@@ -167,6 +168,10 @@ export class SandboxScene extends Phaser.Scene {
         escortLocks: () => this.bossEncounter.escortLocks,
         bossHp: () => this.bossEncounter.bossHp,
         escortsAlive: () => this.bossEncounter.aliveEscorts,
+        shieldLinks: () => this.bossEncounter.shieldLinkCount,
+        bossCharge: () => this.bossEncounter.chargeFraction,
+        webBlocks: (ax: number, ay: number, bx: number, by: number) => this.bossEncounter.debugWebBlocks(ax, ay, bx, by),
+        stationShield: () => this.station.shieldHitsLeft,
       };
     }
 
@@ -192,6 +197,7 @@ export class SandboxScene extends Phaser.Scene {
     this.station.update(delta); // shield regen clock
     this.waveDirector.update(delta); // wave-clear check
     this.bossEncounter.update(delta); // boss fight (no-op until the run clears)
+    this.bossEncounter.consumeBlockedRockets(this.rockets.group, (rocket) => this.rockets.recycle(rocket));
     this.checkStationContacts();
   }
 
@@ -359,6 +365,19 @@ export class SandboxScene extends Phaser.Scene {
     // only a fully charged railgun (B33).
     if (ref instanceof Boss) ref.takeHit(charged);
     else ref.takeHit(player);
+  };
+
+  /** The web is checked before the boss/escort overlap callback, so its line
+   * collision consumes a rocket rather than letting Arcade's sprite overlap
+   * leak damage through a visible blocker. */
+  private readonly processBossHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
+    const first = a as Phaser.Physics.Arcade.Sprite;
+    const second = b as Phaser.Physics.Arcade.Sprite;
+    const rocket = first.getData('isRocket') ? first : second;
+    if (!rocket.getData('isRocket')) return false;
+    if (!this.bossEncounter.blocksRocket(rocket)) return true;
+    this.rockets.recycle(rocket);
+    return false;
   };
 
   private drawStars(): void {

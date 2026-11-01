@@ -36,6 +36,7 @@ Keep the station alive. One shared station, one shared score — there's no comp
 - **One-hit large splitters** *(B37, built 2026-08-03)*: lane rocks are either **standard** (r=13, one rocket hit, no label, 10 points) or **splitter** (r=17, one rocket hit, no label, 20 points). A rocket immediately breaks a splitter into **two standard-size, one-hit children**; the full clear is 40 points (20 + 10 + 10). Only rocket-kills split — station contact is a loss and never creates children. Children retain the self-balancing station threat: they scatter leftward, funnel toward the station, can cost a shield ring, get a brief railgun-safe spawn grace, and expire at a hard lifetime cap. They are preallocated wrappers appended to the fixed asteroid pool, retaining collision, update, homing, station-contact, and wave-clear integration; they are one-shot (no respawn) and fielded in-place via `spawnChild`. Tuning is `SPLITTER_CHILDREN` (`src/layout.ts`).
 - **Wave-clear star-shower** *(B7 visual, built 2026-06-15)*: beating a wave throws a celebratory **confetti shower** — sparkles in the two player colors + accent (`COLORS.p1/p2/accent`) seeded across the field's top and raining down over the whole playfield. Fires on **every** wave clear (including the wave-4→boss hand-off, since both branches flow through the breather). Built on **one persistent shared emitter** (created once in `Explosions.ts`, never per-event — same discipline as the asteroid burst), fired via a `celebrate()` callback threaded `SandboxScene → WaveDirector → starShower()`. Tuning in `STAR_SHOWER` (`src/layout.ts`); tints sourced from `tokens.ts`. *(Audio + haptics for wave clear stay queued in B7 — this repo has no audio-asset pipeline.)*
 - **Shot trail — violet exhaust + afterimage, tiered by charge** *(polish pass 2026-06-15; tiered for B13)*: each player's rocket leaves a trail drawn into one shared additive Graphics — a long faint **afterimage** light-streak over the shot's ~75-pt flight history, under a short tapered **exhaust** ribbon (glow halo → violet body → white-hot core) with a brightness **flux** scrolling down it. The head stays the player's color; the exhaust is violet (`COLORS.shieldMid`) for contrast. All filled additive quads — no postFX, no particles. **Two tiers (B13):** the full bright look is the **charged** (railgun) trail; a normal uncharged shot gets a **subdued** version (less alpha, shorter ribbon), so the in-flight trail itself reads as "this was a railgun." Tuning in `TRAIL` (`src/layout.ts`, with `chargedMul`/`normalMul` multiplier sets); built in `Rocket.ts` (`RocketPool.update`).
+- **Boss command-ship presentation + shield web** *(B34, 2026-08-05)*: the finale removes the last stack of concentric boss/shield/orbit circles. The boss and escorts are station-facing angular ships; four escorts rotate as one fixed-radius diamond. Their active adjacency links render as a violet/cyan neon **shield web** and physically consume rockets, while a downed escort leaves its two sides open as a visible shoot-through gap. See §9 for the encounter rules.
 
 ## 5. Controls (implemented & playtested)
 - **Abstract sling per player** — an **anchor dot** where the finger starts plus a **pull-range arc** showing draw distance and angles (not a literal slingshot).
@@ -105,30 +106,29 @@ and iPhone (iOS Safari), since it being a webpage is the whole point.
   have. All PWA URLs are relative so they resolve under the `…/star-slingers/`
   subpath; the SW registers PROD-only (dev + the headless test suite never get one).
 
-## 9. Final boss (B5) — built 2026-06-09 (reworked to a cycling fight same day)
+## 9. Final boss (B5, reworked by B34 2026-08-05)
 
 The run's finale, replacing the wave-4 placeholder card. A **boss slides in from
 the side** (slowly, menacing) and parks at **center**, fully on screen, **stationary
-while battling**, guarded by **4 escort vessels that slowly orbit it**. The fight is a
-**repeating, urgent cycle**:
+while battling**, guarded by a **fixed-radius rotating diamond** of 4 escort vessels.
 
-- **Charging:** the escorts orbit, the boss is **shielded and invulnerable** (plain
-  shield ring), and the **charge gauge fills** (the urgency telegraph). **Each escort
-  you kill resets the charge** — steadily clearing them keeps the boss from ever firing;
-  you only get shot if you stall.
-- **If you clear all 4 in time → Exposed:** the boss **drops its shield** (full color)
-  for a short **window** — shoot it and the **health gauge drains**. The window ends, the
-  **escorts respawn**, the boss re-shields, and it charges again. (A full clear is the
-  *only* thing that respawns escorts.)
+- **Shield web:** every live adjacent escort pair is joined by a glowing physical line.
+  The links are blockers: they consume any rocket that crosses them. Killing an escort
+  removes its two attached links, making a literal shoot-through gap; it returns after
+  **6 seconds** with both player locks restored. The formation rotates but never breathes
+  inward or outward, and every ship points at the protected station.
+- **Damage + urgency:** the boss itself has **no shield ring or exposed state**. It always
+  takes one HP from a **charged railgun** that physically reaches it through a web gap;
+  ordinary rockets still do no damage. Each escort kill resets the charge and the charge
+  **pauses while any escort is down**, resuming only when all four have returned.
 - **Readout = two vertical gauges** in the band to the boss's right, off its body so the
   center stays uncluttered: a green **health** bar (heart-capped) and a magenta **charge**
   bar (bolt-capped). Both fill bottom-up and carry their icon at **top and bottom** so
   either seat reads them at a glance (icon recognition, no reading).
 - **If the charge fills first:** the boss **fires** a beam that **shatters a shield
-  ring** (reusing the station shield + regen) — no damage window that round. The
-  **surviving escorts stay** (your progress on them is kept), the charge resets, and it
-  keeps charging — so it can fire again on the same set until you finish clearing them.
-- **Win:** chip the boss's ~10 HP to zero across successful windows → **"You did it!"**.
+  ring** (reusing the station shield + regen), then resets the charge; live escort lock
+  progress remains in place.
+- **Win:** chip the boss's 10 HP through successive web gaps → **"You did it!"**.
   **Loss:** a charge fires with the shield already gone → **"Try again?"** (both reuse
   the existing end-cards).
 
@@ -136,17 +136,17 @@ while battling**, guarded by **4 escort vessels that slowly orbit it**. The figh
   one amber P2. It needs **one rocket from each player**, in either order; a duplicate hit
   is consumed but rejected. The matching fin breaks on a successful hit and the remaining
   fin pulses in its player color, silently showing whose shot is needed next. They're pure
-  gating targets; partial locks survive a boss beam and a full respawn restores both locks.
+  gating targets; partial locks survive a boss beam and a timed regeneration restores both locks.
   The locked visual source is `prototype/reference/escort-coop-lock.html`.
 - **Urgency = the charge bar racing you; co-op = both kids must contribute** to every one
-  of the four escorts. **No asteroids** during the boss. Homing locks escorts while charging
-  and the boss while exposed; normal homing does not damage the boss (see the charged exception in §5).
+  of the four escorts. **No asteroids** during the boss. Homing locks live escorts; it remains
+  charge-exclusive, so it does not damage the railgun-only boss.
 - **Tuning:** `src/waves.ts` `BOSS` holds the dials — `chargeMs` (time to clear the
-  escorts), `exposedMs` (window length), `hp`, `escortHits`, `shieldRegenMs`. Boss/escort
+  escorts), `escortRegenMs` (gap duration), `hp`, `escortHits`, `shieldRegenMs`. Boss/escort
   positions, sizes, orbit, and entrance speed live in `src/layout.ts` `BOSS_LAYOUT`.
   `escortHits` remains the historical two-contribution count; the fixed player-lock rule is
-  not a balance dial. Boss HP remains 10, railgun timing is unchanged, and the exposed
-  damage window is **6 seconds** (B40; the escort charge race remains 5 seconds).
+  not a balance dial. Boss HP remains 10 and railgun timing is unchanged; the escort charge
+  race remains 5 seconds.
 
 ## Everything else
 Enemy ships, sound/juice, fairness-lever backups: the original brainstorm's drafts live as **[draft]-tagged backlog items** (B4/B8, plus the audio+haptics half of B7) — raw material to react to, not decisions. They graduate into this spec when worked out, reviewed, and built. (Waves = §3/§7; scoring = §3; homing = §5; boss = §9; wave-clear shower = §4 — all built.)
