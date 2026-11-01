@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, requiredHitsPerSec, WAVES } from './waves';
+import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredHitsPerSec, WAVES } from './waves';
 import { COLORS } from './tokens';
 import { SandboxScene } from './scenes/SandboxScene';
 
@@ -11,7 +11,7 @@ if (import.meta.env.DEV) {
   for (const [i, w] of WAVES.entries()) {
     const specs = asteroidsFor(w);
     const splitters = specs.filter((s) => s.kind === 'splitter').length;
-    const speedScale = (specs[0].speed / 40).toFixed(2); // slot 0 baseSpeed = 40
+    const speedScale = (specs[0].speed / LANE_SLOTS[0].baseSpeed).toFixed(2);
     console.log(
       `wave ${i + 1}: target ${w.required.toFixed(2)} -> achieved ` +
         `${requiredHitsPerSec(w).toFixed(2)} required hits/s ` +
@@ -22,7 +22,7 @@ if (import.meta.env.DEV) {
 }
 
 // Register the offline service worker (B12 PWA) — PROD only, so dev and
-// smoke.mjs (run against the dev server) never register one. Relative path →
+// the e2e suite (run against the dev server) never register one. Relative path →
 // scope auto-set to the subpath dir; no {scope} option. Failure is swallowed so
 // a SW problem can never block the game.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -53,7 +53,7 @@ function boot(): void {
     scene: [SandboxScene],
   });
 
-  // Debug handle for headless smoke tests (smoke.mjs) and console poking.
+  // Debug handle for the headless e2e suite (e2e/sandbox.spec.ts) and console poking.
   (window as unknown as { __game: Phaser.Game }).__game = game;
 }
 

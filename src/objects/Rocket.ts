@@ -8,8 +8,17 @@ import Phaser from 'phaser';
 import { HOMING, TRAIL } from '../layout';
 import { COLORS } from '../tokens';
 import type { HomingTarget } from './HomingTarget';
+import { TEX } from './textures';
 
 export type PlayerId = 'p1' | 'p2';
+
+/** Optional shot modifiers applied at fire time. */
+export interface ShotOptions {
+  /** B13 railgun: pierces asteroids and wears the bright trail tier. */
+  charged?: boolean;
+  /** B14 homing lock picked at fire; null/absent = a straight shot. */
+  target?: HomingTarget | null;
+}
 
 /** A point on a rocket's flight history; stored per-sprite via setData. */
 type TrailPoint = { x: number; y: number };
@@ -44,15 +53,17 @@ export class RocketPool {
     );
   }
 
-  /** Returns the launched sprite (or null if the pool is exhausted) so the
-   *  caller can tag it as homing; a fresh rocket always starts non-homing. */
+  /** Returns the launched sprite (or null if the pool is exhausted). A fresh
+   *  rocket starts plain; `opts` makes it a railgun and/or locks a homing target.
+   *  (The e2e suite also tags rockets directly via the same setData keys.) */
   fire(
     textureKey: string,
     x: number,
     y: number,
     vx: number,
     vy: number,
-    player: PlayerId = textureKey === 'rocket-p2' ? 'p2' : 'p1'
+    player: PlayerId = textureKey === TEX.rocketP2 ? 'p2' : 'p1',
+    opts: ShotOptions = {}
   ): Phaser.Physics.Arcade.Sprite | null {
     const rocket = this.group.get(x, y, textureKey) as Phaser.Physics.Arcade.Sprite | null;
     if (!rocket) return null; // pool exhausted
@@ -65,6 +76,8 @@ export class RocketPool {
     rocket.setData('hitSet', new Set()); // B13: rocks this railgun has chipped
     rocket.setData('dist', 0); // reset travelled distance for the arm/ramp curve
     rocket.setData('history', [{ x, y }] as TrailPoint[]); // fresh trail history
+    if (opts.charged) rocket.setData('charged', true);
+    if (opts.target) this.lockOn(rocket, opts.target, x, y, vx, vy);
 
     const body = rocket.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y); // clears stale pooled velocity + syncs position
@@ -75,6 +88,26 @@ export class RocketPool {
     // Texture nose points at -y, so offset atan2's +x convention by 90°.
     rocket.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
     return rocket;
+  }
+
+  /** Recycle every live rocket the predicate selects (e.g. ones the boss's
+   *  shield web blocks this frame). */
+  recycleWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): void {
+    this.group.children.iterate((child) => {
+      const rocket = child as Phaser.Physics.Arcade.Sprite;
+      if (rocket.active && pred(rocket)) this.recycle(rocket);
+      return true;
+    });
+  }
+
+  /** Arm a homing shot (B14): steer() reads these keys. The straight arming
+   *  run is capped so it can't sail past a closer target. */
+  private lockOn(rocket: Phaser.Physics.Arcade.Sprite, target: HomingTarget, x: number, y: number, vx: number, vy: number): void {
+    rocket.setData('homing', true);
+    rocket.setData('target', target);
+    rocket.setData('speed', Math.hypot(vx, vy));
+    const toTarget = Phaser.Math.Distance.Between(x, y, target.sprite.x, target.sprite.y);
+    rocket.setData('armAt', Math.min(HOMING.armDistancePx, toTarget * HOMING.armFraction));
   }
 
   /** Per-frame homing steer (B14). Each in-flight homing rocket flies STRAIGHT
@@ -142,8 +175,11 @@ export class RocketPool {
         history = [{ x: rocket.x, y: rocket.y }];
         rocket.setData('history', history);
       }
-      history.unshift({ x: rocket.x, y: rocket.y });
-      if (history.length > TRAIL.afterLen) history.pop();
+      // Reuse the dropped tail point as the new head (no per-frame allocation).
+      const head = history.length >= TRAIL.afterLen ? history.pop()! : { x: 0, y: 0 };
+      head.x = rocket.x;
+      head.y = rocket.y;
+      history.unshift(head);
 
       // Per-rocket trail tier (B13): the absolute TRAIL values are the CHARGED
       // (railgun) baseline; a normal shot gets a subdued multiplier set. So the
@@ -152,7 +188,7 @@ export class RocketPool {
       this.afterimage(history, m.alpha, m.width, m.len); // long faint light-streak (under)
       this.strip(history, TRAIL.bodyHalf * TRAIL.glowMul * m.width, EXHAUST, TRAIL.glowAlpha * m.alpha, TRAIL.bodyFlux, m.len); // glow halo
       this.strip(history, TRAIL.bodyHalf * m.width, EXHAUST, TRAIL.bodyAlpha * m.alpha, TRAIL.bodyFlux, m.len); // violet body
-      this.strip(history, TRAIL.coreHalf * m.width, 0xffffff, TRAIL.coreAlpha * m.alpha, TRAIL.coreFlux, m.len); // white-hot core
+      this.strip(history, TRAIL.coreHalf * m.width, COLORS.white, TRAIL.coreAlpha * m.alpha, TRAIL.coreFlux, m.len); // white-hot core
       return true;
     });
   }
@@ -176,15 +212,7 @@ export class RocketPool {
       const px = (-dy / len) * half;
       const py = (dx / len) * half;
       this.trail.fillStyle(EXHAUST, alpha);
-      this.trail.fillPoints(
-        [
-          new Phaser.Geom.Point(a.x + px, a.y + py),
-          new Phaser.Geom.Point(b.x + px, b.y + py),
-          new Phaser.Geom.Point(b.x - px, b.y - py),
-          new Phaser.Geom.Point(a.x - px, a.y - py),
-        ],
-        true
-      );
+      this.quad(a.x + px, a.y + py, b.x + px, b.y + py, b.x - px, b.y - py, a.x - px, a.y - py);
     }
   }
 
@@ -210,15 +238,20 @@ export class RocketPool {
       const wave = 0.5 + 0.5 * Math.sin(this.elapsed * TRAIL.fluxW - i * TRAIL.fluxPhase);
       const flux = 1 - fluxDepth + fluxDepth * wave;
       this.trail.fillStyle(color, maxAlpha * tA * flux);
-      this.trail.fillPoints(
-        [
-          new Phaser.Geom.Point(a.x + px * wA, a.y + py * wA),
-          new Phaser.Geom.Point(b.x + px * wB, b.y + py * wB),
-          new Phaser.Geom.Point(b.x - px * wB, b.y - py * wB),
-          new Phaser.Geom.Point(a.x - px * wA, a.y - py * wA),
-        ],
-        true
+      this.quad(
+        a.x + px * wA, a.y + py * wA,
+        b.x + px * wB, b.y + py * wB,
+        b.x - px * wB, b.y - py * wB,
+        a.x - px * wA, a.y - py * wA
       );
     }
+  }
+
+  /** Convex quad p0→p1→p2→p3 as two triangles: plain numbers, so no Point /
+   *  path allocation or Earcut pass per segment per frame (fillPoints did
+   *  both). Shared-edge triangles don't overlap, so ADD blending is unchanged. */
+  private quad(x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number): void {
+    this.trail.fillTriangle(x0, y0, x1, y1, x2, y2);
+    this.trail.fillTriangle(x0, y0, x2, y2, x3, y3);
   }
 }

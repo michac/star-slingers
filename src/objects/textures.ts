@@ -96,10 +96,11 @@ function makeBoss(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.boss)) return;
   const r = BOSS_LAYOUT.radius;
   const g = scene.make.graphics({}, false);
+  const hull = [new Phaser.Geom.Point(r, r * 0.08), new Phaser.Geom.Point(r * 1.82, r * 1.56), new Phaser.Geom.Point(r, r * 1.92), new Phaser.Geom.Point(r * 0.18, r * 1.56)];
   g.fillStyle(COLORS.rockFill, 1);
-  g.fillPoints([new Phaser.Geom.Point(r, r * 0.08), new Phaser.Geom.Point(r * 1.82, r * 1.56), new Phaser.Geom.Point(r, r * 1.92), new Phaser.Geom.Point(r * 0.18, r * 1.56)], true);
+  g.fillPoints(hull, true);
   g.lineStyle(STROKES.rock.width + 1.5, COLORS.danger, 1);
-  g.strokePoints([new Phaser.Geom.Point(r, r * 0.08), new Phaser.Geom.Point(r * 1.82, r * 1.56), new Phaser.Geom.Point(r, r * 1.92), new Phaser.Geom.Point(r * 0.18, r * 1.56)], true);
+  g.strokePoints(hull, true);
   g.fillStyle(COLORS.p1, 0.8); g.fillTriangle(r, r * 0.42, r * 1.34, r * 1.27, r, r * 1.17);
   g.fillStyle(COLORS.p2, 0.8); g.fillTriangle(r, r * 1.17, r * 1.34, r * 1.27, r, r * 1.65);
   g.fillStyle(COLORS.hullWindow, 0.9); g.fillRect(r * 0.78, r * 1.22, r * 0.44, r * 0.26);
@@ -111,27 +112,26 @@ function makeBoss(scene: Phaser.Scene): void {
  * state textures share the same canvas/body so lock changes never shift orbit. */
 function makeEscort(scene: Phaser.Scene): void {
   const R = BOSS_LAYOUT.escort.radius;
+  const hull = [
+    new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
+    new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
+  ];
   const drawShip = (g: Phaser.GameObjects.Graphics, p1: boolean, p2: boolean) => {
     // Nose points up; Escort.place rotates it toward the shared station.
     g.fillStyle(COLORS.rockFill, 1);
-    g.fillPoints([
-      new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
-      new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
-    ], true);
+    g.fillPoints(hull, true);
     g.lineStyle(STROKES.rock.width, COLORS.danger, 1);
-    g.strokePoints([
-      new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
-      new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
-    ], true);
+    g.strokePoints(hull, true);
     g.fillStyle(COLORS.accent, 1);
     g.fillCircle(R, R * 0.95, R * 0.18);
     const fin = (left: boolean, color: number, on: boolean) => {
       if (!on) return;
       const sign = left ? -1 : 1;
+      const tri = [R + sign * R * 0.34, R * 1.18, R + sign * R * 0.88, R * 1.58, R + sign * R * 0.33, R * 1.62] as const;
       g.fillStyle(color, 1);
-      g.fillTriangle(R + sign * R * 0.34, R * 1.18, R + sign * R * 0.88, R * 1.58, R + sign * R * 0.33, R * 1.62);
-      g.lineStyle(1.5, 0xffffff, 0.72);
-      g.strokeTriangle(R + sign * R * 0.34, R * 1.18, R + sign * R * 0.88, R * 1.58, R + sign * R * 0.33, R * 1.62);
+      g.fillTriangle(...tri);
+      g.lineStyle(1.5, COLORS.white, 0.72);
+      g.strokeTriangle(...tri);
     };
     fin(true, COLORS.p1, p1);
     fin(false, COLORS.p2, p2);
@@ -153,7 +153,7 @@ function makeHeart(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.heart)) return;
   const s = BOSS_LAYOUT.bars.iconSize;
   const g = scene.make.graphics({}, false);
-  g.fillStyle(0xffffff, 1);
+  g.fillStyle(COLORS.white, 1);
   g.fillCircle(s * 0.3, s * 0.32, s * 0.22); // left lobe
   g.fillCircle(s * 0.7, s * 0.32, s * 0.22); // right lobe
   g.fillPoints(
@@ -172,7 +172,7 @@ function makeHeart(scene: Phaser.Scene): void {
 function makeSpark(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.spark)) return;
   const g = scene.make.graphics({}, false);
-  g.fillStyle(0xffffff, 1);
+  g.fillStyle(COLORS.white, 1);
   g.fillCircle(4, 4, 4);
   g.generateTexture(TEX.spark, 8, 8);
   g.destroy();
@@ -196,7 +196,7 @@ function makeBolt(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.bolt)) return;
   const s = BOSS_LAYOUT.bars.iconSize;
   const g = scene.make.graphics({}, false);
-  g.fillStyle(0xffffff, 1);
+  g.fillStyle(COLORS.white, 1);
   g.fillPoints(
     [
       new Phaser.Geom.Point(s * 0.58, 0),

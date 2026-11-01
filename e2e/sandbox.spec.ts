@@ -60,9 +60,24 @@ async function gotoGame(page: Page, query = ''): Promise<void> {
   // is slow, and any page.evaluate that touches the scene stalls waiting for the
   // in-flight frame (~0.8s each) — the dominant cost once screenshots are off.
   // The interaction cases drive time via stepGame anyway, so nothing needs the
-  // live loop; this makes every subsequent evaluate cheap. (loop.sleep is
-  // idempotent — stepGame calls it again harmlessly.)
-  await page.evaluate(() => (window as any).__game.loop.sleep());
+  // live loop; this makes every subsequent evaluate cheap.
+  // Then install the ONE fixed-timestep stepper every case drives time through:
+  // window.__step(n, d) advances n frames of exactly d ms game-time via
+  // game.scene.update on a manual clock (window.__stepTime). The loop is parked,
+  // so loop.time is frozen and seeding the clock here is the same as seeding it
+  // on first use.
+  await page.evaluate(() => {
+    const w = window as any;
+    const g = w.__game;
+    g.loop.sleep();
+    w.__stepTime = g.loop.time;
+    w.__step = (n = 1, d = 16) => {
+      for (let i = 0; i < n; i++) {
+        w.__stepTime += d;
+        g.scene.update(w.__stepTime, d);
+      }
+    };
+  });
 }
 
 /** Eyeball-aid screenshot — OFF by default (a headless swiftshader ReadPixels
@@ -73,37 +88,14 @@ async function shot(page: Page, path: string): Promise<void> {
   if (SMOKE_SHOTS) await page.screenshot({ path });
 }
 
-/** Tap a screen coordinate. The canvas FIT-fills the viewport (360×740), so
- *  game coords map onto the canvas box — robust to any centering. */
-async function tap(page: Page, x: number, y: number): Promise<void> {
-  const box = await page.locator('#game canvas').boundingBox();
-  if (!box) throw new Error('game canvas has no bounding box');
-  const sx = box.width / 360;
-  const sy = box.height / 740;
-  await page.mouse.click(box.x + x * sx, box.y + y * sy);
-}
-
-/** Take deterministic control of the game clock: park the RAF loop and advance
- *  `count` frames of exactly `deltaMs` game-time via game.scene.update — physics,
- *  overlaps and every deltaMs timer step in lockstep, no rendering and no
- *  wall-clock racing. The manual clock persists on window across calls; each case
- *  runs serial on a fresh page (fresh game), so owning the loop per test is clean.
+/** Advance `count` frames of exactly `deltaMs` game-time on the parked loop (via
+ *  the window.__step stepper gotoGame installs) — physics, overlaps and every
+ *  deltaMs timer step in lockstep, no rendering and no wall-clock racing. Each
+ *  case runs serial on a fresh page (fresh game), so owning the clock is clean.
  *  NB Phaser's TweenManager is wall-clock driven and does NOT advance here — use
  *  the __debug snap hooks (e.g. snapBossIn) for tween-gated state. */
 async function stepGame(page: Page, deltaMs = 16, count = 1): Promise<void> {
-  await page.evaluate(
-    ({ d, n }) => {
-      const g = (window as any).__game;
-      g.loop.sleep(); // park the RAF loop (idempotent) so only manual steps advance time
-      const w = window as any;
-      if (w.__stepTime === undefined) w.__stepTime = g.loop.time;
-      for (let i = 0; i < n; i++) {
-        w.__stepTime += d;
-        g.scene.update(w.__stepTime, d);
-      }
-    },
-    { d: deltaMs, n: count }
-  );
+  await page.evaluate(({ d, n }) => (window as any).__step(n, d), { d: deltaMs, n: count });
 }
 
 /** Step the game up to `maxSteps` fixed 16ms frames INSIDE the browser — the
@@ -120,17 +112,13 @@ async function stepUntil(
 ): Promise<{ done: boolean; steps: number }> {
   return page.evaluate(
     ({ cond, maxSteps }) => {
-      const g = (window as any).__game;
-      g.loop.sleep(); // park the RAF loop so only manual steps advance time
       const w = window as any;
-      if (w.__stepTime === undefined) w.__stepTime = g.loop.time;
-      const s = g.scene.keys['Sandbox'];
+      const s = w.__game.scene.keys['Sandbox'];
       // eslint-disable-next-line no-new-func
       const test = new Function('s', `return (${cond});`) as (scene: unknown) => boolean;
       let steps = 0;
       while (steps < maxSteps && !test(s)) {
-        w.__stepTime += 16;
-        g.scene.update(w.__stepTime, 16);
+        w.__step();
         steps++;
       }
       return { done: test(s), steps };
@@ -150,7 +138,7 @@ async function fieldRock(
     x,
     y,
     kind = 'standard',
-    radius,
+    radius = ASTEROID_KIND[kind].radius,
     slot = 0,
   }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number }
 ): Promise<void> {
@@ -158,7 +146,7 @@ async function fieldRock(
     ({ x, y, kind, radius, slot }) => {
       const s = (window as any).__game.scene.keys['Sandbox'];
       const a = s.asteroids[slot]; // a lane wrapper (NOT a child)
-      a.reconfigure({ kind, radius: radius ?? (kind === 'splitter' ? 17 : 13), y, speed: 0 }, 0);
+      a.reconfigure({ kind, radius, y, speed: 0 }, 0);
       a.spawn(); // field it (off the right edge)...
       a.sprite.setPosition(x, y); // ...then place it in-field, clear of the station
       a.sprite.body.reset(x, y);
@@ -169,6 +157,9 @@ async function fieldRock(
 }
 
 // --- thin wrappers over the scene's DEV __debug surface + public fields ---
+/** Fire a plain P1 rocket through the public pool (no railgun/homing tags). */
+const fire = (page: Page, x: number, y: number, vx: number, vy: number) =>
+  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy})`);
 const hits = (page: Page) => page.evaluate(`${SCENE}.__debug.hits()`) as Promise<number>;
 const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
 const splitCount = (page: Page) => page.evaluate(`${SCENE}.__debug.splitCount()`) as Promise<number>;
@@ -178,14 +169,10 @@ const bossPhase = (page: Page) => page.evaluate(`${SCENE}.__debug.bossPhase()`) 
 const bossHp = (page: Page) => page.evaluate(`${SCENE}.__debug.bossHp()`) as Promise<number>;
 const escortsAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.escortsAlive()`) as Promise<number>;
-const killEscort = (page: Page, i: number) =>
-  page.evaluate(`${SCENE}.__debug.killEscort(${i})`);
 const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
   page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
 const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
 const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBoss()`);
-const setHoming = (page: Page, player: number, on: boolean) =>
-  page.evaluate(`${SCENE}.__debug.setHoming(${player}, ${on})`);
 
 test.beforeEach(async ({ page }) => {
   errors = [];
@@ -217,9 +204,7 @@ test('head-on rocket ticks the hit counter', async ({ page }) => {
   // dependency on which toughness the difficulty solver happened to pick.
   const hitsBefore = await hits(page);
   await fieldRock(page, { x: 250, y: 300 });
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 170, 300, 400, 0)
-  );
+  await fire(page, 170, 300, 400, 0);
 
   const ticked = await stepUntil(page, `s.__debug.hits() > ${hitsBefore}`, 120);
   await shot(page, 'smoke-hit.png');
@@ -235,9 +220,7 @@ test('one splitter hit scores and creates children', async ({ page }) => {
   await fieldRock(page, { x: 250, y: 300, kind: 'splitter' });
 
   const hitsBefore = await hits(page);
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 170, 300, 400, 0)
-  );
+  await fire(page, 170, 300, 400, 0);
   const scored = await stepUntil(page, 's.__debug.score() >= 20', 120);
   expect(scored.done).toBe(true);
   expect(await score(page)).toBe(20);
@@ -300,18 +283,14 @@ test('charged shot rails through', async ({ page }) => {
   // hitSet).
   await fieldRock(page, { x: 250, y: 300 });
   const pierce = (await page.evaluate(() => {
-    const g = (window as any).__game;
-    g.loop.sleep();
     const w = window as any;
-    if (w.__stepTime === undefined) w.__stepTime = g.loop.time;
-    const s = g.scene.keys['Sandbox'];
+    const s = w.__game.scene.keys['Sandbox'];
     const r = s.rockets.fire('rocket-p1', 170, 300, 400, 0);
     r.setData('charged', true);
     for (let n = 0; n < 60; n++) {
       const hs = r.getData('hitSet');
       if (hs && hs.size > 0) return { hit: true, active: r.active };
-      w.__stepTime += 16;
-      g.scene.update(w.__stepTime, 16);
+      w.__step();
     }
     const hs = r.getData('hitSet');
     return { hit: !!(hs && hs.size > 0), active: r.active };
@@ -333,9 +312,7 @@ test('a splitter immediately splits into two standard children', async ({ page }
   await fieldRock(page, { x: 260, y: 300, kind: 'splitter' });
 
   // One head-on rocket splits it immediately.
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 180, 300, 400, 0)
-  );
+  await fire(page, 180, 300, 400, 0);
   const split = await stepUntil(page, `s.__debug.splitCount() > ${splitBefore}`, 120);
   expect(split.done).toBe(true);
 
@@ -348,11 +325,8 @@ test('a splitter immediately splits into two standard children', async ({ page }
   // Pop the scattered children in one in-browser loop. Each is standard-size
   // and one-hit, so the two pops add exactly 20.
   const scoreDelta = (await page.evaluate((scoreAfterKill) => {
-    const g = (window as any).__game;
-    g.loop.sleep();
     const w = window as any;
-    if (w.__stepTime === undefined) w.__stepTime = g.loop.time;
-    const s = g.scene.keys['Sandbox'];
+    const s = w.__game.scene.keys['Sandbox'];
     let delta = 0;
     for (let n = 0; n < 400 && delta < 20; n++) {
       if (n % 3 === 0) {
@@ -363,8 +337,7 @@ test('a splitter immediately splits into two standard children', async ({ page }
           }
         });
       }
-      w.__stepTime += 16;
-      g.scene.update(w.__stepTime, 16);
+      w.__step();
       delta = s.__debug.score() - scoreAfterKill;
     }
     return delta;
@@ -404,9 +377,7 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
 
   // Ordinary gap shots remain harmless; a railgun through the same missing
   // links damages the boss.
-  await page.evaluate(() =>
-    (window as any).__game.scene.keys['Sandbox'].rockets.fire('rocket-p1', 60, 370, 350, 0)
-  );
+  await fire(page, 60, 370, 350, 0);
   await stepGame(page, 16, 30);
   expect(await bossHp(page)).toBe(hpStart);
   await page.evaluate(() => {

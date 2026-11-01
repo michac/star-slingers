@@ -4,16 +4,16 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright Test config for Star Slingers. Drives the game in a Pixel-6-sized
  * touch viewport and auto-starts the Vite dev server. Runner-only (no
  * toHaveScreenshot baselines — OS-AA-sensitive and the game has few static
- * frames); the suite still emits manual smoke-*.png screenshots as eyeball aids.
+ * frames); SMOKE_SHOTS=1 opts into manual smoke-*.png screenshots as eyeball aids.
  */
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   // Software-WebGL contexts are heavy; serialize the cases on one worker.
   workers: 1,
-  // Headless game-time runs ~10× slower than wall-clock (software-WebGL
-  // ReadPixels stalls clamp Phaser's per-frame delta), so waiting for an
-  // asteroid to drift on-screen alone can eat the default 30s budget.
+  // Generous budget for headless software-WebGL: boot is slow, and each opt-in
+  // SMOKE_SHOTS screenshot is a ~7s ReadPixels render. (The cases themselves
+  // step a fixed-timestep clock, so they no longer wait on asteroid drift.)
   timeout: 90_000,
   forbidOnly: !!process.env.CI,
   reporter: 'list',

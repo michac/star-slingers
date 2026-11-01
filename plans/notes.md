@@ -649,6 +649,20 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **Whole-repo simplify pass (2026-11-01):** a background `/simplify` session ran over all the
+  code in an orphan worktree, and its changes were reviewed hunk by hunk before being applied.
+  Behaviour is unchanged. Removed the dead code B34 left behind: `BOSS.exposedMs` and
+  `escortHits`, the always-false `canChargeWhileHoming`, the boss's unused `popping`/`dead`
+  state, and the B37-blank asteroid label. Shared helpers now replace duplicated code
+  (`splitPair`, `startBossNow`, `popField`, `RocketPool.recycleWhere`, a single `window.__step`
+  test stepper). The rocket trails and the charge arc lost their per-frame allocations, and
+  side-by-side screenshots of the old and new versions came out identical. Added
+  `COLORS.white` and `BOSS_LAYOUT.escort.webWidth`. Rejected two changes that saved almost
+  nothing and made the code harder to read: `ShieldWeb` link-slot reuse and a hand-rolled
+  `aliveEscorts` loop. spec §5/§9 synced (the stale B33 homing-charge exception is gone).
+  Its "left alone" list is a future to-do: the shield web pads its width twice, and the
+  deploy scripts share ~60 duplicated lines.
+
 - **B34 — Boss command ship + shield web (2026-08-05):** replaced the remaining
   circle-heavy boss presentation and the clear-all-escorts/exposed-window gate. The command
   ship now shares the escorts' directional hull language and has no shield decoration. Four

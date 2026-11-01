@@ -90,23 +90,22 @@ export const BREATHER = {
 
 /**
  * Final boss (B5) BALANCE dials — the run's finale (geometry is in layout.ts).
- * A repeating, urgent CYCLE (reworked 2026-06-09 from the flat two-phase fight):
+ * One continuous CHARGING phase (B34 shield web):
  *
  *   CHARGING: four escorts rotate a physical shield web around the boss.
- *     ├ a downed escort opens two links for escortRegenMs and pauses charge
+ *     ├ a downed escort (one hit from EACH seat) opens two links for
+ *     │ escortRegenMs and resets + pauses the charge
  *     └ charge fills only with all nodes live → boss FIRES (−1 shield ring)
- *   win: boss HP 0 (chipped across windows) · lose: shield gone when it fires
+ *   win: boss HP 0 (railguns through web gaps) · lose: shield gone when it fires
  *
- * Urgency = the charge bar racing you; co-op = needing both slings to clear the
- * every gap to land railguns on the boss while keeping the charge paused. A
- * completed charge shatters a ring (reuses the wave shield + regen).
+ * Urgency = the charge bar racing you; co-op = needing both slings to down an
+ * escort and open a gap, then land railguns on the boss through it. A completed
+ * charge shatters a ring (reuses the wave shield + regen).
  */
 export const BOSS = {
   hp: 10, // charged railgun hits to destroy through shield-web gaps
   escortCount: 4,
-  escortHits: 2, // one unique contribution from each player
-  chargeMs: 5000, // time to clear the escorts before the boss fires (the urgency)
-  exposedMs: 6000, // legacy cycle dial; retired when the shield-web mechanic lands
+  chargeMs: 5000, // time to open a gap before the boss fires (the urgency)
   escortRegenMs: 6000, // a downed web node returns with both co-op locks restored
   shieldRegenMs: 14000, // regen during the boss (the leak allowance)
 } as const;

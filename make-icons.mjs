@@ -1,6 +1,6 @@
 // Build-time icon rasterizer (B12 PWA) — run manually, NOT shipped / NOT in CI.
 //   node make-icons.mjs
-// Reuses the same chromium discovery as smoke.mjs: loads an inline neon SVG and
+// Reuses the chromium discovery from the old smoke.mjs: loads an inline neon SVG and
 // screenshots it to PNG. Echoes the in-game art — deep-purple field, 3 concentric
 // shield rings (cyan -> purple -> magenta), a cyan/amber diamond rocket.
 // Commit the PNG outputs in public/icons/; this script is the regenerator.

@@ -10,7 +10,7 @@ import { HOMING, HUD_P1, HUD_P2, P1_ANCHOR, P2_ANCHOR, STARS, STATION } from '..
 import { generateTextures, TEX } from '../objects/textures';
 import { SlingControl } from '../objects/SlingControl';
 import { HomingToggle } from '../objects/HomingToggle';
-import { RocketPool } from '../objects/Rocket';
+import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
 import { Asteroid } from '../objects/Asteroid';
 import { PlayerHud } from '../objects/PlayerHud';
@@ -24,6 +24,19 @@ import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import type { HomingTarget } from '../objects/HomingTarget';
 
+/** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
+ *  order for group-vs-array overlaps, so go by the rocket flag. */
+function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Sprite; other: Phaser.Physics.Arcade.Sprite } | null {
+  const first = a as Phaser.Physics.Arcade.Sprite;
+  const second = b as Phaser.Physics.Arcade.Sprite;
+  if (first.getData('isRocket')) return { rocket: first, other: second };
+  if (second.getData('isRocket')) return { rocket: second, other: first };
+  return null;
+}
+
+/** Homing lock cone (B14), as tan(half-angle) for the perpendicular test. */
+const HOMING_MAX_TAN = Math.tan(Phaser.Math.DegToRad(HOMING.coneHalfAngleDeg));
+
 export class SandboxScene extends Phaser.Scene {
   private controls: SlingControl[] = [];
   private homingToggles: HomingToggle[] = [];
@@ -36,7 +49,7 @@ export class SandboxScene extends Phaser.Scene {
   private bossEncounter!: BossEncounter;
   private failOverlay!: Overlay;
   private victoryOverlay!: Overlay;
-  /** Cumulative rocket→asteroid hits — a deterministic signal for smoke.mjs. */
+  /** Cumulative rocket→asteroid hits — a deterministic signal for the e2e suite. */
   private hitCount = 0;
 
   constructor() {
@@ -78,52 +91,35 @@ export class SandboxScene extends Phaser.Scene {
     );
     this.asteroids = this.waveDirector.asteroids;
 
-    // Homing toggles (B14) — one per seat, beside each sling; state persists
-    // across scene.restart() via the registry keys.
-    const homing1 = new HomingToggle(this, {
-      anchor: P1_ANCHOR,
-      color: COLORS.p1,
-      edge: 'top',
-      registryKey: 'homingP1',
-    });
-    const homing2 = new HomingToggle(this, {
-      anchor: P2_ANCHOR,
-      color: COLORS.p2,
-      edge: 'bottom',
-      registryKey: 'homingP2',
-    });
-    this.homingToggles = [homing1, homing2];
+    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom.
+    const seats = [
+      { player: 'p1', anchor: P1_ANCHOR, color: COLORS.p1, edge: 'top', tex: TEX.rocketP1, hud: hud1, registryKey: 'homingP1' },
+      { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, edge: 'bottom', tex: TEX.rocketP2, hud: hud2, registryKey: 'homingP2' },
+    ] as const;
 
-    this.controls = [
-      new SlingControl(this, {
-        anchor: P1_ANCHOR,
-        color: COLORS.p1,
-        edge: 'top',
-        rocketTexture: TEX.rocketP1,
-        canFire: () => hud1.canFire(),
+    // Homing toggles (B14) — one per seat, beside each sling; state persists
+    // across scene.restart() via the registry keys. (Both toggles are created
+    // before both slings, which keeps the display-list order.)
+    this.homingToggles = seats.map(
+      ({ anchor, color, edge, registryKey }) => new HomingToggle(this, { anchor, color, edge, registryKey })
+    );
+
+    this.controls = seats.map(({ player, anchor, color, edge, tex, hud }, i) => {
+      const homing = this.homingToggles[i];
+      return new SlingControl(this, {
+        anchor,
+        color,
+        edge,
+        rocketTexture: tex,
+        canFire: () => hud.canFire(),
         onFire: (x, y, vx, vy, charged) => {
-          hud1.spend();
-          this.fireRocket(TEX.rocketP1, 'p1', x, y, vx, vy, homing1.enabled, charged);
+          hud.spend();
+          this.fireRocket(tex, player, x, y, vx, vy, homing.enabled, charged);
         },
-        isHoming: () => homing1.enabled,
-        canChargeWhileHoming: () => false,
+        isHoming: () => homing.enabled,
         homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
-      }),
-      new SlingControl(this, {
-        anchor: P2_ANCHOR,
-        color: COLORS.p2,
-        edge: 'bottom',
-        rocketTexture: TEX.rocketP2,
-        canFire: () => hud2.canFire(),
-        onFire: (x, y, vx, vy, charged) => {
-          hud2.spend();
-          this.fireRocket(TEX.rocketP2, 'p2', x, y, vx, vy, homing2.enabled, charged);
-        },
-        isHoming: () => homing2.enabled,
-        canChargeWhileHoming: () => false,
-        homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
-      }),
-    ];
+      });
+    });
 
     this.wireInput();
 
@@ -146,7 +142,7 @@ export class SandboxScene extends Phaser.Scene {
       this.processBossHit
     );
 
-    // Deterministic handle for headless tests (smoke/wave scripts).
+    // Deterministic handle for the headless e2e suite (e2e/sandbox.spec.ts).
     if (import.meta.env.DEV) {
       (this as unknown as { __debug: object }).__debug = {
         clearWave: () => this.waveDirector.forceClear(),
@@ -157,14 +153,11 @@ export class SandboxScene extends Phaser.Scene {
         childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
         splitCount: () => this.waveDirector.splitCount,
         setHoming: (player: number, on: boolean) => this.homingToggles[player - 1]?.set(on),
-        startBoss: () => {
-          this.waveDirector.endRunNow();
-          this.bossEncounter.start();
-        },
+        startBoss: () => this.startBossNow(),
         bossPhase: () => this.bossEncounter.phase,
         snapBossIn: () => this.bossEncounter.snapBossIn(),
         killEscort: (i: number) => this.bossEncounter.killEscort(i),
-        hitEscort: (i: number, player: 'p1' | 'p2') => this.bossEncounter.hitEscort(i, player),
+        hitEscort: (i: number, player: PlayerId) => this.bossEncounter.hitEscort(i, player),
         escortLocks: () => this.bossEncounter.escortLocks,
         bossHp: () => this.bossEncounter.bossHp,
         escortsAlive: () => this.bossEncounter.aliveEscorts,
@@ -179,10 +172,13 @@ export class SandboxScene extends Phaser.Scene {
     // skipping the 4 waves (testing the fight via the waves is slow). Survives
     // the tap-to-restart (the query string sticks), so you can re-run it. Harm-
     // less in normal play — nobody types ?boss by accident.
-    if (new URLSearchParams(window.location.search).has('boss')) {
-      this.waveDirector.endRunNow(); // pop wave 1's just-spawned rocks, stop respawns
-      this.bossEncounter.start();
-    }
+    if (new URLSearchParams(window.location.search).has('boss')) this.startBossNow();
+  }
+
+  /** Skip the waves: pop wave 1's just-spawned rocks, stop respawns, start the boss. */
+  private startBossNow(): void {
+    this.waveDirector.endRunNow();
+    this.bossEncounter.start();
   }
 
   update(_time: number, delta: number): void {
@@ -197,7 +193,8 @@ export class SandboxScene extends Phaser.Scene {
     this.station.update(delta); // shield regen clock
     this.waveDirector.update(delta); // wave-clear check
     this.bossEncounter.update(delta); // boss fight (no-op until the run clears)
-    this.bossEncounter.consumeBlockedRockets(this.rockets.group, (rocket) => this.rockets.recycle(rocket));
+    // Global web line collision (B34): a shot crossing a live link is spent.
+    this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
     this.checkStationContacts();
   }
 
@@ -224,7 +221,7 @@ export class SandboxScene extends Phaser.Scene {
    *  shot. A locked shot is meant to connect (see HOMING.turnRateDeg). */
   private fireRocket(
     tex: string,
-    player: 'p1' | 'p2',
+    player: PlayerId,
     x: number,
     y: number,
     vx: number,
@@ -232,22 +229,11 @@ export class SandboxScene extends Phaser.Scene {
     homing: boolean,
     charged: boolean
   ): void {
-    const rocket = this.rockets.fire(tex, x, y, vx, vy, player);
-    if (!rocket) return;
     // A charged shot is a railgun (B13): it pierces asteroids (see handleHit)
     // and wears the bright trail tier. Charge & homing are mutually exclusive
-    // at the sling, so a shot is never both.
-    if (charged) rocket.setData('charged', true);
-    if (!homing) return;
-    const target = this.pickHomingTarget(x, y, vx, vy);
-    if (!target) return; // no lock → leave it a straight shot
-    rocket.setData('homing', true);
-    rocket.setData('target', target);
-    rocket.setData('speed', Math.hypot(vx, vy));
-    rocket.setData('dist', 0); // travelled distance, for the arm/ramp curve
-    // Cap the straight arming run so it can't sail past a closer target.
-    const toTarget = Phaser.Math.Distance.Between(x, y, target.sprite.x, target.sprite.y);
-    rocket.setData('armAt', Math.min(HOMING.armDistancePx, toTarget * HOMING.armFraction));
+    // at the sling, so a shot is never both. No lock → a straight shot.
+    const target = homing ? this.pickHomingTarget(x, y, vx, vy) : null;
+    this.rockets.fire(tex, x, y, vx, vy, player, { charged, target });
   }
 
   /** The asteroid closest to the launch ray (origin + direction), within a
@@ -258,27 +244,28 @@ export class SandboxScene extends Phaser.Scene {
     if (len === 0) return null;
     const ux = dirx / len;
     const uy = diry / len;
-    const maxTan = Math.tan(Phaser.Math.DegToRad(HOMING.coneHalfAngleDeg));
-
     let best: HomingTarget | null = null;
     let bestPerp = Infinity;
-    // Asteroids during the waves, plus the boss/escorts during the finale, so
-    // homing keeps working all the way through (B14 × B5).
-    for (const cand of [...this.asteroids, ...this.bossEncounter.homingTargets()]) {
-      if (!cand.isActive || cand.isPopping) continue;
+    // Asteroids during the waves, plus the escorts during the finale, so
+    // homing keeps working all the way through (B14 × B5). Two plain loops —
+    // this runs every frame while a homing seat aims, so no merged array.
+    const consider = (cand: HomingTarget) => {
+      if (!cand.isActive || cand.isPopping) return;
       const s = cand.sprite;
       const dx = s.x - ox;
       const dy = s.y - oy;
       const proj = dx * ux + dy * uy; // distance along the ray (forward only)
-      if (proj <= 0 || proj > HOMING.maxRange) continue;
+      if (proj <= 0 || proj > HOMING.maxRange) return;
       const perp = Math.abs(dx * uy - dy * ux); // perpendicular distance to the ray
-      if (perp > HOMING.maxPerp) continue; // must pass close to the target's center
-      if (perp > proj * maxTan) continue; // and within the cone
+      if (perp > HOMING.maxPerp) return; // must pass close to the target's center
+      if (perp > proj * HOMING_MAX_TAN) return; // and within the cone
       if (perp < bestPerp) {
         bestPerp = perp;
         best = cand;
       }
-    }
+    };
+    for (const cand of this.asteroids) consider(cand);
+    for (const cand of this.bossEncounter.homingTargets()) consider(cand);
     return best;
   }
 
@@ -308,61 +295,46 @@ export class SandboxScene extends Phaser.Scene {
   }
 
   private readonly handleHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
-    // Phaser does NOT guarantee arg order for group-vs-array overlaps, so
-    // sort out which sprite is which by the rocket flag.
-    const first = a as Phaser.Physics.Arcade.Sprite;
-    const second = b as Phaser.Physics.Arcade.Sprite;
-    const rocket = first.getData('isRocket') ? first : second;
-    const target = rocket === first ? second : first;
-    const asteroid = target.getData('ref') as Asteroid | undefined;
-    if (!rocket.getData('isRocket') || !asteroid) return;
+    const pair = splitPair(a, b);
+    const asteroid = pair?.other.getData('ref') as Asteroid | undefined;
+    if (!pair || !asteroid) return;
+    const { rocket } = pair;
 
-    // Charged = railgun (B13): pierce every asteroid in the path, chipping each
-    // ONCE (one normal takeHit per rock — 1-hit rocks pop, tough rocks chip
-    // down) and railing on instead of recycling. The per-rocket hitSet guards
-    // the multi-frame overlap window so a surviving chipped rock isn't double-
-    // chipped during a single pass; a popped rock disables its body and stops
-    // overlapping. The rocket recycles normally on world-bounds.
+    // Charged = railgun (B13): pierce every asteroid in the path, hitting each
+    // ONCE and railing on instead of recycling. The per-rocket hitSet guards
+    // the multi-frame overlap window so one pass never hits the same rock
+    // twice; a popped rock disables its body and stops overlapping. The
+    // rocket recycles normally on world-bounds.
     if (rocket.getData('charged')) {
       const hitSet = rocket.getData('hitSet') as Set<Asteroid>;
-      if (hitSet.has(asteroid)) return; // already chipped this rock on this pass
+      if (hitSet.has(asteroid)) return; // already hit this rock on this pass
       hitSet.add(asteroid);
-      const pts = asteroid.takeHit();
-      if (pts > 0) {
-        this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
-        // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
-        // station consume() never scores, so it never splits). Read position
-        // now — the pop tween only scales/fades the sprite, never moves it.
-        this.waveDirector.spawnChildren(asteroid);
-      }
-      this.hitCount += 1;
-      return; // pierce — do NOT recycle
+    } else {
+      this.rockets.recycle(rocket);
     }
 
-    this.rockets.recycle(rocket);
     const pts = asteroid.takeHit();
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
+      // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
+      // station consume() never scores, so it never splits). Read position
+      // now — the pop tween only scales/fades the sprite, never moves it.
       this.waveDirector.spawnChildren(asteroid);
     }
     this.hitCount += 1;
   };
 
-  /** Rocket vs boss/escort (B5). Same arg-order trick as handleHit; the
-   *  wrapper's takeHit() decides what a hit means (the boss ignores hits while
-   *  invulnerable). */
+  /** Rocket vs boss/escort (B5). The wrapper's takeHit() decides what a hit
+   *  means: escorts take the firing seat's identity (B33); the boss takes only
+   *  a fully charged railgun that got through a web gap (B34). */
   private readonly handleBossHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
-    const first = a as Phaser.Physics.Arcade.Sprite;
-    const second = b as Phaser.Physics.Arcade.Sprite;
-    const rocket = first.getData('isRocket') ? first : second;
-    const target = rocket === first ? second : first;
-    const ref = target.getData('ref') as Boss | Escort | undefined;
-    if (!rocket.getData('isRocket') || !ref) return;
+    const pair = splitPair(a, b);
+    const ref = pair?.other.getData('ref') as Boss | Escort | undefined;
+    if (!pair || !ref) return;
+    const { rocket } = pair;
     const charged = rocket.getData('charged') === true;
-    const player = rocket.getData('player') as 'p1' | 'p2';
+    const player = rocket.getData('player') as PlayerId;
     this.rockets.recycle(rocket);
-    // Escorts consume the firing seat's identity; the exposed boss consumes
-    // only a fully charged railgun (B33).
     if (ref instanceof Boss) ref.takeHit(charged);
     else ref.takeHit(player);
   };
@@ -371,12 +343,10 @@ export class SandboxScene extends Phaser.Scene {
    * collision consumes a rocket rather than letting Arcade's sprite overlap
    * leak damage through a visible blocker. */
   private readonly processBossHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
-    const first = a as Phaser.Physics.Arcade.Sprite;
-    const second = b as Phaser.Physics.Arcade.Sprite;
-    const rocket = first.getData('isRocket') ? first : second;
-    if (!rocket.getData('isRocket')) return false;
-    if (!this.bossEncounter.blocksRocket(rocket)) return true;
-    this.rockets.recycle(rocket);
+    const pair = splitPair(a, b);
+    if (!pair) return false;
+    if (!this.bossEncounter.blocksRocket(pair.rocket)) return true;
+    this.rockets.recycle(pair.rocket);
     return false;
   };
 

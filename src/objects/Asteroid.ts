@@ -1,7 +1,6 @@
 /**
- * Asteroid — a drifting target: physics Sprite + a separate centered
- * label Text synced every frame (NOT a Container body — Arcade Container
- * bodies have offset traps). Pops when its hits run out, then asks the
+ * Asteroid — a drifting target: a bare physics Sprite (B37: size alone
+ * tells standards from splitters, so there's no label). Pops on a hit, then asks the
  * WaveDirector for respawn permission (the wave's finite quota); denied
  * respawns park it inactive instead. The wrapper itself is NEVER destroyed
  * or recreated — the scene's rocket→asteroid overlap collider is built once
@@ -9,14 +8,12 @@
  * Between waves the director reconfigure()s the same wrappers in place.
  */
 import Phaser from 'phaser';
-import { CSS, FONTS } from '../tokens';
 import { APPROACH_X, GAME_WIDTH, SCORE, SPLITTER_CHILDREN, STATION } from '../layout';
 import { ASTEROID_KIND, type AsteroidSpec } from '../waves';
 import { TEX } from './textures';
 
 export class Asteroid {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
-  private readonly label: Phaser.GameObjects.Text;
   private _spec: AsteroidSpec;
   private spawnGapMax: number;
   private popping = false;
@@ -48,14 +45,10 @@ export class Asteroid {
     body.setAllowGravity(false);
     body.setCircle(spec.radius); // texture is exactly 2r x 2r, so no offset
 
-    this.label = scene.add
-      .text(0, spec.y, '', { fontFamily: FONTS.display, fontSize: '14px', color: CSS.ink })
-      .setOrigin(0.5);
-
     this.park(); // starts parked; the director spawn()s it when fielded
   }
 
-  /** Read-only view kept for the scene's contact math and smoke.mjs. */
+  /** Read-only view kept for the scene's contact math and the e2e suite. */
   get spec(): AsteroidSpec {
     return this._spec;
   }
@@ -75,7 +68,8 @@ export class Asteroid {
     return this.active;
   }
 
-  /** Splitter children move fast on spawn — smoke selectors skip them. */
+  /** Splitter children move fast on spawn — the e2e suite's
+   *  childrenAlive() hook counts them. */
   get isChild(): boolean {
     return this.child;
   }
@@ -119,18 +113,14 @@ export class Asteroid {
     this.aliveMs = 0;
     this.graceUntilMs = SPLITTER_CHILDREN.spawnGraceMs;
     this.sprite.setVisible(true).setScale(1).setAlpha(1).setPosition(x, y);
-    this.label.setPosition(x, y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y); // resets position AND zeroes velocity — set velocity AFTER
     body.enable = false; // grace: re-enabled in update() once aliveMs passes graceUntilMs
     body.setVelocity(vx, vy);
-    this.refreshLabel();
   }
 
   update(delta: number): void {
-    if (!this.active) return;
-    this.label.setPosition(this.sprite.x, this.sprite.y);
-    if (this.popping) return;
+    if (!this.active || this.popping) return;
     if (this.child) {
       this.aliveMs += delta;
       // Spawn grace: keep the body off briefly so an in-flight railgun (whose
@@ -151,11 +141,7 @@ export class Asteroid {
     // per-frame Angle.RotateTo steering only if the kink reads badly.
     if (!this.funnelling && this.sprite.x <= APPROACH_X) {
       this.funnelling = true;
-      const dir = new Phaser.Math.Vector2(
-        STATION.cx - this.sprite.x,
-        STATION.cy - this.sprite.y
-      ).setLength(this._spec.speed);
-      (this.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(dir.x, dir.y);
+      this.scene.physics.moveTo(this.sprite, STATION.cx, STATION.cy, this._spec.speed);
     }
     if (this.sprite.x < -this._spec.radius) {
       this.respawnOrPark(); // safety net; station contact catches funnelled ones first
@@ -182,7 +168,6 @@ export class Asteroid {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;
-    this.label.setText('');
     // The composed burst (B29) lives independently and self-cleans; the rock
     // itself just snaps bigger and vanishes under the flash, then recycles.
     this.boom(this.sprite.x, this.sprite.y, this._spec.radius);
@@ -212,17 +197,13 @@ export class Asteroid {
     this.funnelling = false; // back to lane phase
     const x = GAME_WIDTH + radius + Phaser.Math.Between(0, this.spawnGapMax);
     this.sprite.setVisible(true).setScale(1).setAlpha(1).setPosition(x, y);
-    // Move the label too — update() syncs it each frame, but update() is
-    // frozen while an overlay shows, which left labels stranded.
-    this.label.setPosition(x, y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y);
     body.enable = true;
     body.setVelocityX(-speed);
-    this.refreshLabel();
   }
 
-  /** Strictly inactive: invisible, body off, label cleared, flags reset —
+  /** Strictly inactive: invisible, body off, flags reset —
    *  the wave-clear check relies on this being unambiguous. */
   private park(): void {
     this.active = false;
@@ -235,11 +216,5 @@ export class Asteroid {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;
-    this.label.setText('');
-  }
-
-  /** B37: size alone distinguishes standards from splitters. */
-  private refreshLabel(): void {
-    this.label.setText('');
   }
 }

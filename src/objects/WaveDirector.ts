@@ -6,10 +6,9 @@
  *   live → breather → (next wave) live … → done (boss takes over)
  *
  * Wave 1 starts directly in `live` with no banner — a banner before the
- * very first wave adds nothing, and smoke.mjs needs asteroids on-field
- * within seconds of boot. A run lost mid-wave restarts via scene.restart()
- * (the fail overlay), which rebuilds this object from constants — so no
- * reset logic lives here.
+ * very first wave adds nothing, and play should start within seconds of boot.
+ * A run lost mid-wave restarts via scene.restart() (the fail overlay), which
+ * rebuilds this object from constants — so no reset logic lives here.
  */
 import Phaser from 'phaser';
 import { SPLITTER_CHILDREN } from '../layout';
@@ -40,7 +39,7 @@ export class WaveDirector {
   private waveIndex = 0;
   private quotaRemaining = 0;
   private state: WaveState = 'live';
-  /** Cumulative split events (B30) — a deterministic signal for smoke.mjs. */
+  /** Cumulative split events (B30) — a deterministic signal for the e2e suite. */
   splitCount = 0;
 
   constructor(
@@ -120,9 +119,7 @@ export class WaveDirector {
   forceClear(): void {
     if (this.state !== 'live') return;
     this.quotaRemaining = 0;
-    for (const a of this.asteroids) {
-      if (a.isActive && !a.isPopping) a.consume();
-    }
+    this.popField();
   }
 
   /** Split a rocket-killed splitter into standard children. Standards never
@@ -179,6 +176,11 @@ export class WaveDirector {
   endRunNow(): void {
     this.quotaRemaining = 0;
     this.state = 'done';
+    this.popField();
+  }
+
+  /** Pop every live asteroid (DEV/test shortcuts; never scores or splits). */
+  private popField(): void {
     for (const a of this.asteroids) {
       if (a.isActive && !a.isPopping) a.consume();
     }

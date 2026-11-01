@@ -26,6 +26,42 @@ This repo is the game and its design record — nothing else.
   orchestrating scene · `main.ts` — Phaser bootstrap.
 - Art is **code-drawn** (procedural textures in `objects/textures.ts`), not loaded asset files.
 
+## Dependencies — where to look before deciding how to use an API
+
+**Version-exact local copies in `node_modules/` are the ground truth.** Look there before the web
+or memory: these majors may be newer than an agent's training, and the web defaults to other
+versions. Exact installed versions are in `package-lock.json` (check with
+`node -p "require('phaser/package.json').version"`). A fresh worktree has no `node_modules`, so run
+`npm ci` first.
+
+| Package (installed) | Types — grep, don't read whole | Source / extras | Web |
+|---|---|---|---|
+| **phaser 3.90.0** (runtime) | `node_modules/phaser/types/phaser.d.ts` (~119k lines, full JSDoc) | `node_modules/phaser/src/<area>/` (e.g. `gameobjects/particles/`, `physics/arcade/`, `tweens/`); release notes in `node_modules/phaser/changelog/3.90/` | Source at tag [`v3.90.0`](https://github.com/phaserjs/phaser/tree/v3.90.0); examples at [phaserjs/examples](https://github.com/phaserjs/examples) |
+| **typescript 6.0** | `node_modules/typescript/lib/*.d.ts` | — | typescriptlang.org |
+| **vite 8.0** (dev server, build, `prototype-gallery` plugin in `vite.config.ts`) | `node_modules/vite/types/`, `node_modules/vite/dist/node/index.d.ts` | — | vite.dev (tracks the latest major) |
+| **@playwright/test 1.61** (e2e) | `node_modules/playwright/types/test.d.ts` (runner), `node_modules/playwright-core/types/types.d.ts` (Page/Locator API) | — | playwright.dev |
+
+**⚠ Phaser 4 trap.** This game is on **Phaser 3** (3.90, the final v3 line). `docs.phaser.io`'s
+API docs now default to **Phaser 4.x**, and many current tutorials and examples are v4. The v4 API
+differs: the renderer, FX/filters and some game-object APIs changed. Treat any web Phaser snippet as
+suspect until the symbol is confirmed in the local `phaser.d.ts`. Don't upgrade Phaser as a side
+effect of a fix.
+
+**Lookup recipe:** `grep -n "class ParticleEmitter" node_modules/phaser/types/phaser.d.ts` to find
+the declaration and its JSDoc, then read the matching file under `node_modules/phaser/src/` for real
+behaviour. This repo's own `src/` is the best example of house patterns (pooling, code-drawn
+textures, tokens).
+
+**Phaser 3.90 behaviours we've already hit** (details in `plans/notes.md`):
+- `TweenManager` runs on **wall-clock time**, so it doesn't advance under the test suite's manual
+  `scene.update()` stepping. That's why the boss slide-in needs `__debug.snapBossIn()`.
+- `game.step()` **renders** a frame, which is slow under headless swiftshader. Step with
+  `scene.update(t, dt)` instead.
+- `postFX` can be undefined under headless software WebGL, so guard it with `?.`. Keep glow
+  `quality` around 0.3: sharper lagged the Pixel 6.
+- An Arcade collider binds to the sprites that exist when it's built. Mutate pooled wrappers in
+  place; never recreate them, or the collider silently stops firing.
+
 ## Working agreement
 
 - **Change flow:** Michael lists wants → recorded in `plans/backlog.md` as numbered items → worked

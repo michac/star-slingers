@@ -112,8 +112,8 @@ export const STATION = {
 export const SHIELD_RINGS = [46, 39, 32] as const;
 
 /** Where the funnel turn happens: asteroids re-aim at the station once
- *  their x crosses this. Keep <= 150 so smoke.mjs's head-on hit test still
- *  catches its target in lane phase. */
+ *  their x crosses this. (Kept <= 150 historically so the old smoke.mjs
+ *  head-on hit test caught its target in lane phase.) */
 export const APPROACH_X = 150;
 
 /** Worried-shake tween on the station when a ring shatters. */
@@ -265,9 +265,9 @@ export const BOSS_LAYOUT = {
   enterMs: 1900, // slower, more menacing entrance (was 1100 — too fast on the phone)
   escort: {
     radius: 17, // collision + orbit size
-    coreRadius: 10, // legacy B5 core geometry
     formationRadius: 92, // fixed clearance: the rotating shield web never clips the boss
     orbitSpeedDeg: 20, // the diamond formation rotates as one unit
+    webWidth: 2.5, // stroke + collision width of each shield-web link (B34)
   },
   // Two vertical gauges (HEALTH + CHARGE) live in the empty band to the boss's
   // right (boss right edge ~212 → screen edge 360), evenly spaced. Each bar

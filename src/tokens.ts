@@ -43,6 +43,10 @@ export const COLORS = {
   // shield-mid purple (== the trail's EXHAUST hue) so "charged" ties visually
   // to the railgun trail. Not a new hue — an alias onto an existing stop.
   charge: 0x9d6bff, // == shieldMid violet
+
+  // Pure white: the trail's white-hot core, the explosion flash, and the
+  // neutral base for textures that are tinted at runtime.
+  white: 0xffffff,
 } as const;
 
 /** Same palette as CSS strings — Phaser Text styles want strings. */

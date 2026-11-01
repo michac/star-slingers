@@ -1,8 +1,8 @@
 /**
  * Escort (B5) — one of the 4 small guards that orbit the final boss. Pure
- * gating target: it doesn't threaten the station, but while any escort lives
- * the boss is invulnerable, and destroying one INTERRUPTS the boss's charge
- * (the defensive payoff). The BossEncounter places it on the orbit each frame
+ * gating target: it doesn't threaten the station, but each live escort anchors
+ * two links of the shield web (B34); destroying one opens a gap and RESETS the
+ * boss's charge (the defensive payoff). The BossEncounter places it on the orbit each frame
  * (kinematic — we set position, the arcade body follows). Satisfies
  * HomingTarget so the 5yo's homing can lock it.
  */
@@ -55,7 +55,7 @@ export class Escort {
     this.popping = false;
     this.downMs = 0;
     this.contributions = 0;
-    this.sprite.setTexture(TEX.escort).setVisible(true).setScale(1).setAlpha(1); // shield ring back on
+    this.sprite.setTexture(TEX.escort).setVisible(true).setScale(1).setAlpha(1); // un-locked look back on
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
   }
 

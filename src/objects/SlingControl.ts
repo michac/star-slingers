@@ -19,10 +19,9 @@ export interface SlingControlConfig {
   canFire: () => boolean;
   /** `charged` (B13): a full-charge railgun shot — pierces every asteroid. */
   onFire: (x: number, y: number, vx: number, vy: number, charged: boolean) => void;
-  /** Homing mode (B14): is this seat's toggle on right now? */
+  /** Homing mode (B14): is this seat's toggle on right now? A homing seat
+   *  never charges — homing and railgun are mutually exclusive. */
   isHoming?: () => boolean;
-  /** B33: only the exposed boss lets a homing seat charge a railgun. */
-  canChargeWhileHoming?: () => boolean;
   /** The rock the shot would lock onto for a given aim ray (anchor + dir),
    *  as a position + ring radius — or null if none. Drives the aim preview. */
   homingTargetAt?: (ox: number, oy: number, dirx: number, diry: number) => { x: number; y: number; r: number } | null;
@@ -76,13 +75,8 @@ export class SlingControl {
     const len = this.pull.length();
     this.dynamicGfx.clear();
     this.nockedRocket.setVisible(false).setScale(1);
-    // A full charge fires a railgun. Homing normally excludes charge, except
-    // during B33's exposed-boss window.
-    const charged =
-      this.charge >= 1 &&
-      this.canCharge() &&
-      len >= SLING.minFirePull &&
-      this.config.canFire();
+    // A full charge fires a railgun (never from a homing seat).
+    const charged = this.charge >= 1 && this.canCharge();
     this.charge = 0;
     if (len < SLING.minFirePull || !this.config.canFire()) return;
 
@@ -134,9 +128,7 @@ export class SlingControl {
     g.fillStyle(color, 1);
     g.fillCircle(anchor.x, anchor.y, SLING.anchorRadius);
 
-    // Arc angles in screen space (y down): the top player's arc bulges up
-    // through -PI/2 (pi..2pi), the bottom player's down through +PI/2 (0..pi).
-    const [start, end] = edge === 'top' ? [Math.PI, Math.PI * 2] : [0, Math.PI];
+    const [start, end] = arcSpan(edge);
     const arc = STROKES.rangeArc;
     g.lineStyle(arc.width, color, arc.alpha);
     drawDashedArc(g, anchor.x, anchor.y, SLING.pullRadius, start, end, arc.dash, arc.gap);
@@ -200,15 +192,13 @@ export class SlingControl {
         g.strokeCircle(lock.x, lock.y, lock.r);
       }
     }
-    // B33's boss-only exception deliberately shows BOTH the homing lock and
-    // railgun progress, so the assisted player can still hurt the exposed boss.
     if (this.canCharge()) {
       this.drawChargeArc();
     }
   }
 
   private canCharge(): boolean {
-    return !this.config.isHoming?.() || this.config.canChargeWhileHoming?.() === true;
+    return !this.config.isHoming?.();
   }
 
   /** Charge cue (B35): the pull arc doubles as a railgun progress bar. Below the
@@ -216,12 +206,12 @@ export class SlingControl {
    *  in staticGfx shows through. At/above threshold the arc goes SOLID
    *  player-color (covering the dashed base), with a charge-violet arc filling
    *  from `start` toward `start + charge·span`. At full charge the fill breathes
-   *  on `elapsed` so "armed" is unmistakable. Reuses drawStatic's angle logic. */
+   *  on `elapsed` so "armed" is unmistakable. Same span as drawStatic's arc. */
   private drawChargeArc(): void {
     if (this.charge <= 0) return; // dashed base shows through
     const { anchor, color, edge } = this.config;
     const g = this.dynamicGfx;
-    const [start, end] = edge === 'top' ? [Math.PI, Math.PI * 2] : [0, Math.PI];
+    const [start, end] = arcSpan(edge);
     const arc = STROKES.chargeArc;
     const r = SLING.pullRadius;
 
@@ -239,6 +229,29 @@ export class SlingControl {
     g.lineStyle(arc.width, COLORS.charge, alpha);
     drawSolidArc(g, anchor.x, anchor.y, r, start, sweptEnd);
   }
+}
+
+/** Pull-range arc angles in screen space (y down): the top player's arc bulges
+ *  up through -PI/2 (pi..2pi), the bottom player's down through +PI/2 (0..pi). */
+function arcSpan(edge: 'top' | 'bottom'): [number, number] {
+  return edge === 'top' ? [Math.PI, Math.PI * 2] : [0, Math.PI];
+}
+
+/** Solid arc (B35) as ONE stroked path — redrawn every frame while charging, so
+ *  it avoids the per-segment lineBetween paths the dashed walk needs. Passing
+ *  `endAngle` short of the full span yields the partial (start→swept) fill. */
+function drawSolidArc(
+  g: Phaser.GameObjects.Graphics,
+  cx: number,
+  cy: number,
+  r: number,
+  startAngle: number,
+  endAngle: number
+): void {
+  if (endAngle === startAngle) return;
+  g.beginPath();
+  g.arc(cx, cy, r, startAngle, endAngle, endAngle < startAngle);
+  g.strokePath();
 }
 
 // ---- dashed-stroke helpers (Phaser Graphics has no native dash) ----
@@ -261,34 +274,6 @@ function drawDashedLine(
   for (let s = 0; s < len; s += dash + gap) {
     const e = Math.min(s + dash, len);
     g.lineBetween(x1 + ux * s, y1 + uy * s, x1 + ux * e, y1 + uy * e);
-  }
-}
-
-/** Solid arc (B35): drawDashedArc's arc-length walk with no gaps. Passing
- *  `endAngle` short of the full span yields the partial (start→swept) fill —
- *  same call, so one helper covers both the solid base and the charge fill. */
-function drawSolidArc(
-  g: Phaser.GameObjects.Graphics,
-  cx: number,
-  cy: number,
-  r: number,
-  startAngle: number,
-  endAngle: number
-): void {
-  const total = Math.abs(endAngle - startAngle) * r;
-  if (total === 0) return;
-  const sign = Math.sign(endAngle - startAngle);
-  const seg = 4; // segment length (px) — short enough to read as a smooth arc
-  for (let s = 0; s < total; s += seg) {
-    const e = Math.min(s + seg, total);
-    const a0 = startAngle + (s / r) * sign;
-    const a1 = startAngle + (e / r) * sign;
-    g.lineBetween(
-      cx + r * Math.cos(a0),
-      cy + r * Math.sin(a0),
-      cx + r * Math.cos(a1),
-      cy + r * Math.sin(a1)
-    );
   }
 }
 

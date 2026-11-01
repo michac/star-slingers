@@ -88,7 +88,7 @@ export class Explosions {
   /** A white core disc under a transient magenta glow that blows out fast. */
   private flash(x: number, y: number, radius: number): void {
     const g = this.scene.add.graphics({ x, y }).setDepth(EXPLOSION.depth);
-    g.fillStyle(0xffffff, 1);
+    g.fillStyle(COLORS.white, 1);
     g.fillCircle(0, 0, radius * EXPLOSION.flash.sizeFactor);
     g.postFX?.addGlow(COLORS.danger, EXPLOSION.flash.glowStrength, 0, false, EXPLOSION.glowQuality, 22);
     g.setScale(EXPLOSION.flash.scaleFrom);

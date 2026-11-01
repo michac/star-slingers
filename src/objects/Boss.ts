@@ -1,14 +1,13 @@
 /**
  * Boss (B5) — the run's finale. Slides in from the right, parks at center, and
- * holds stationary. The fight is a repeating CYCLE driven by the BossEncounter:
- * while shielded (`shield()`) the boss is invulnerable and shows a plain shield
- * ring; clear the escorts in time and the encounter `expose()`s it for a window
- * to take hits; otherwise the charge fills and the encounter calls `fireBeam()`
- * (it shatters a shield ring).
+ * holds stationary. The BossEncounter drives the fight: the escorts' shield
+ * web (B34) is the boss's only protection — any railgun that physically reaches
+ * it through a gap chips HP — and when the charge fills the encounter calls
+ * `fireBeam()` (it shatters a shield ring).
  *
  * HP and the charge countdown are read off the two off-boss gauges (BossBars,
- * owned by the encounter), so the center stays uncluttered. Satisfies
- * HomingTarget (hittable while exposed).
+ * owned by the encounter), so the center stays uncluttered. Not a homing
+ * target: the boss is railgun-only.
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
@@ -22,8 +21,6 @@ export class Boss {
   private hp = BOSS.hp;
   private active = false;
   private entering = false;
-  private popping = false;
-  private dead = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -40,13 +37,7 @@ export class Boss {
     this.park();
   }
 
-  // HomingTarget: hittable once it has finished entering and isn't dead.
-  get isActive(): boolean {
-    return this.active && !this.entering && !this.dead;
-  }
-  get isPopping(): boolean {
-    return this.popping;
-  }
+  /** Hittable (and charging) once it has finished entering; false again once dead. */
   get isEntered(): boolean {
     return this.active && !this.entering;
   }
@@ -58,8 +49,6 @@ export class Boss {
   activate(): void {
     this.active = true;
     this.entering = true;
-    this.dead = false;
-    this.popping = false;
     this.hp = BOSS.hp;
     const { x, y } = BOSS_LAYOUT.park;
     this.sprite
@@ -94,22 +83,17 @@ export class Boss {
   takeHit(charged: boolean): void {
     // B34: the web, not a boss ring/state gate, protects the command ship.
     // A railgun that reaches it through a missing link can always chip HP.
-    if (!charged || !this.isActive) return;
+    if (!charged || !this.isEntered) return;
     this.hp -= 1;
     if (this.hp > 0) return;
-    this.dead = true;
     this.active = false;
-    this.popping = true;
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.scene.tweens.add({
       targets: this.sprite,
       scale: 1.8,
       alpha: 0,
       duration: 280,
-      onComplete: () => {
-        this.popping = false;
-        this.onDefeated();
-      },
+      onComplete: () => this.onDefeated(),
     });
   }
 
@@ -124,8 +108,6 @@ export class Boss {
   private park(): void {
     this.active = false;
     this.entering = false;
-    this.dead = false;
-    this.popping = false;
     this.sprite.setVisible(false);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
