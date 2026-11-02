@@ -1,6 +1,6 @@
 /**
  * ScoreKeeper (B6) — the shared, live-only score. Holds one running total,
- * mirrored onto both PlayerHuds' SCORE rows, and throws a floating "+N" at each
+ * mirrored onto every live PlayerHud's SCORE row (one in solo), and throws a floating "+N" at each
  * kill site. The popup grows-and-fades IN PLACE (no directional rise) on
  * purpose: a rising number would read upside-down for the top seat, while
  * grow-and-fade reads the same from both ends. The HUD number is the canonical

@@ -1,6 +1,7 @@
 /**
  * WaveBanner — the between-waves announcement: a small "WAVE" label + big
- * numeral, shown once per seat (P1's copy rotated 180°) at field center.
+ * numeral, shown once per live seat (P1's copy rotated 180°; solo shows only
+ * P2's) at field center.
  * Numeral-forward by design: number recognition is fine, reading isn't.
  */
 import Phaser from 'phaser';
@@ -11,7 +12,7 @@ export class WaveBanner {
   private readonly container: Phaser.GameObjects.Container;
   private readonly numerals: Phaser.GameObjects.Text[];
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, players: 1 | 2) {
     const seat = (sign: 1 | -1, angle: 0 | 180) => {
       const group = scene.add.container(
         BANNER.center.x,
@@ -28,10 +29,11 @@ export class WaveBanner {
     };
 
     const p2 = seat(1, 0); // bottom seat, below center
-    const p1 = seat(-1, 180); // top seat, above center, flipped
-    this.numerals = [p1.numeral, p2.numeral];
+    const p1 = players === 2 ? seat(-1, 180) : null; // top seat, above center, flipped
+    const copies = p1 ? [p1, p2] : [p2];
+    this.numerals = copies.map((c) => c.numeral);
     this.container = scene.add
-      .container(0, 0, [p1.group, p2.group])
+      .container(0, 0, copies.map((c) => c.group))
       .setDepth(DEPTHS.banner)
       .setVisible(false)
       .setAlpha(0);

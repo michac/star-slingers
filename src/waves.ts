@@ -106,6 +106,25 @@ export const WAVES: WaveConfig[] = [
   { required: 0.75, quota: 14, shieldRegenMs: 15000 },
 ];
 
+/**
+ * Solo (?players=1, #6 prototype slice) difficulty dial. A solo run fields the
+ * same waves with each target scaled: `required × requiredScale`. Shipped at
+ * 1.0 (no change) — the playtest finds the real value. Ammo regen is per seat,
+ * so one player already has half the team's firepower; the dev boot log's
+ * break-even % accounts for that. Boss timing is NOT scaled (out of this slice).
+ */
+export const SOLO = {
+  requiredScale: 1.0,
+} as const;
+
+/** The target damage/s the solver realizes for this wave at this player count.
+ *  `soloScale` exists only so a test can catch the solo wiring (scale applied
+ *  in solo, never in two-player) while the shipped SOLO.requiredScale is 1.0;
+ *  callers leave it at its default. */
+export function waveTarget(wave: WaveConfig, players: 1 | 2, soloScale: number = SOLO.requiredScale): number {
+  return players === 1 ? wave.required * soloScale : wave.required;
+}
+
 /** Breather between waves: celebration beat + shield restore + banner. */
 export const BREATHER = {
   ringRestoreStaggerMs: 300, // rings regrow one-by-one at this spacing
@@ -192,14 +211,14 @@ export function solveWave(required: number, leak: number): AsteroidSpec[] {
   return build();
 }
 
-/** The asteroid field a wave fields — solved from its target. */
-export function asteroidsFor(wave: WaveConfig): AsteroidSpec[] {
-  return solveWave(wave.required, leakAllowancePerSec(wave));
+/** The asteroid field a wave fields — solved from its (player-count) target. */
+export function asteroidsFor(wave: WaveConfig, players: 1 | 2): AsteroidSpec[] {
+  return solveWave(waveTarget(wave, players), leakAllowancePerSec(wave));
 }
 
 /** Accurate damage/s a wave actually demands (post-solve). */
-export function threatDamagePerSec(wave: WaveConfig): number {
-  return threatOf(asteroidsFor(wave));
+export function threatDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
+  return threatOf(asteroidsFor(wave, players));
 }
 
 /** Damage/s (missed hits) the wave's shield regen forgives forever. */
@@ -208,12 +227,12 @@ export function leakAllowancePerSec(wave: WaveConfig): number {
 }
 
 /** THE difficulty scalar: accurate team damage/s actually required (achieved). */
-export function requiredDamagePerSec(wave: WaveConfig): number {
-  return Math.max(0, threatDamagePerSec(wave) - leakAllowancePerSec(wave));
+export function requiredDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
+  return Math.max(0, threatDamagePerSec(wave, players) - leakAllowancePerSec(wave));
 }
 
-/** Fraction of the two players' damage ceiling (ammo rate × a normal shot's
- *  damage) that must land. */
-export function breakEvenAccuracy(wave: WaveConfig): number {
-  return requiredDamagePerSec(wave) / (2 * (1000 / AMMO_REGEN_MS) * DAMAGE.normal);
+/** Fraction of the players' damage ceiling (seats × ammo rate × a normal
+ *  shot's damage) that must land. */
+export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
+  return requiredDamagePerSec(wave, players) / (players * (1000 / AMMO_REGEN_MS) * DAMAGE.normal);
 }

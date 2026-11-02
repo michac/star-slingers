@@ -2,7 +2,7 @@
  * Overlay — the end-of-round modal pattern shared by the fail ("Try
  * again?") and victory ("You did it!") cards: calm dim, an opaque rounded
  * card (field clutter never shows through — playtest 2), a central icon
- * that reads either way up, mirrored decorative text for each seat (never
+ * that reads either way up, mirrored decorative text for each live seat (never
  * load-bearing — the 5yo can't read), and tap-ANYWHERE-to-restart via an
  * invisible full-field Zone (a Graphics icon isn't tappable without an
  * explicit hit area, and a full-field zone is friendlier than a target).
@@ -12,7 +12,7 @@ import { COLORS, CSS, FONTS, STROKES } from '../tokens';
 import { DEPTHS, GAME_HEIGHT, GAME_WIDTH, OVERLAY, VICTORY_ICON } from '../layout';
 
 export interface OverlayConfig {
-  /** Decorative text, shown once per seat (P1's copy rotated 180°). */
+  /** Decorative text, shown once per live seat (P1's copy rotated 180°). */
   text: string;
   /** Draws the central icon at (cx, cy); must read either way up. */
   drawIcon: (scene: Phaser.Scene, cx: number, cy: number) => Phaser.GameObjects.GameObject;
@@ -22,7 +22,8 @@ export class Overlay {
   private readonly container: Phaser.GameObjects.Container;
   private readonly tapZone: Phaser.GameObjects.Zone;
 
-  constructor(scene: Phaser.Scene, cfg: OverlayConfig) {
+  /** `players`: solo (1) draws only the bottom seat's text copy. */
+  constructor(scene: Phaser.Scene, cfg: OverlayConfig, players: 1 | 2) {
     const { x: cx, y: cy } = OVERLAY.center;
     const textGap = OVERLAY.iconR + 34;
 
@@ -44,15 +45,18 @@ export class Overlay {
     const icon = cfg.drawIcon(scene, cx, cy);
     const textStyle = { fontFamily: FONTS.body, fontSize: '16px', color: CSS.ink };
     const textP2 = scene.add.text(cx, cy + textGap, cfg.text, textStyle).setOrigin(0.5);
-    const textP1 = scene.add
-      .text(cx, cy - textGap, cfg.text, textStyle)
-      .setOrigin(0.5)
-      .setAngle(180); // reads right-side-up from the top edge, like P1's HUD
+    const textP1 =
+      players === 2
+        ? scene.add
+            .text(cx, cy - textGap, cfg.text, textStyle)
+            .setOrigin(0.5)
+            .setAngle(180) // reads right-side-up from the top edge, like P1's HUD
+        : null;
 
     // Explicit depth: the WaveDirector creates asteroids after this exists,
     // so creation order alone would put them above the card.
     this.container = scene.add
-      .container(0, 0, [dim, card, icon, textP1, textP2])
+      .container(0, 0, textP1 ? [dim, card, icon, textP1, textP2] : [dim, card, icon, textP2])
       .setDepth(DEPTHS.overlay)
       .setVisible(false);
 

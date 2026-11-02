@@ -42,13 +42,15 @@ export class BossEncounter {
     private readonly scene: Phaser.Scene,
     private readonly station: Station,
     private readonly failOverlay: Overlay,
-    private readonly victoryOverlay: Overlay
+    private readonly victoryOverlay: Overlay,
+    /** Seats in play (?players): solo relaxes the escort co-op lock (Escort.takeHit). */
+    players: 1 | 2
   ) {
     this.boss = new Boss(scene, () => this.onDefeated());
     this.bars = new BossBars(scene);
     this.escorts = Array.from(
       { length: BOSS.escortCount },
-      () => new Escort(scene, () => this.onEscortDestroyed())
+      () => new Escort(scene, () => this.onEscortDestroyed(), players === 1)
     );
     this.web = new ShieldWeb(scene, BOSS_LAYOUT.escort.webWidth);
   }

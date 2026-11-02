@@ -35,8 +35,17 @@
  * evaluate, so a 200-frame window is one round-trip, not one per frame.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { ASTEROID_KIND, clearDamage, solveWave } from '../src/waves';
-import { HAPTICS, SLING } from '../src/layout';
+import {
+  ASTEROID_KIND,
+  breakEvenAccuracy,
+  clearDamage,
+  requiredDamagePerSec,
+  SOLO,
+  solveWave,
+  waveTarget,
+  WAVES,
+} from '../src/waves';
+import { GAME_HEIGHT, GAME_WIDTH, HAPTICS, P2_ANCHOR, SLING } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -236,6 +245,20 @@ test('wave solver uses only standards and three-hit splitters', () => {
   expect(specs.every((spec) => spec.radius === ASTEROID_KIND[spec.kind].radius)).toBe(true);
   const cost = specs.reduce((sum, spec) => sum + clearDamage(spec), 0);
   expect(cost).toBeGreaterThan(specs.length); // a splitter contributes 3, not 2
+});
+
+test('solo scales wave targets; two-player targets are untouched', () => {
+  // SOLO.requiredScale ships at 1.0, so drive the wiring with an explicit scale.
+  for (const w of WAVES) {
+    expect(waveTarget(w, 2, 0.5)).toBe(w.required);
+    expect(waveTarget(w, 1, 0.5)).toBeCloseTo(w.required * 0.5, 10);
+    expect(waveTarget(w, 1)).toBeCloseTo(w.required * SOLO.requiredScale, 10);
+    // Break-even is over the seats in play: per unit of required damage/s, one
+    // seat must land twice the share two seats do (whatever SOLO's scale is).
+    const perRequired = (players: 1 | 2) => breakEvenAccuracy(w, players) / requiredDamagePerSec(w, players);
+    expect(requiredDamagePerSec(w, 1)).toBeGreaterThan(0);
+    expect(perRequired(1) / perRequired(2)).toBeCloseTo(2, 10);
+  }
 });
 
 test('off-axis homing shot curves in', async ({ page }) => {
@@ -489,6 +512,23 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   expect(probe.links).toBe(4);
   expect(probe.wrong).toEqual([]);
   expect(probe.activeAfter).toBe(probe.activeBefore); // probes never leak into later play
+});
+
+test('solo: one player downs an escort with two of their own hits', async ({ page }) => {
+  // ?players=1 (#6 slice): an escort still takes two hits, but a repeat from the
+  // one seat fills the absent seat's lock instead of being rejected. (Two-player
+  // rejection of a repeat colour is covered by the boss co-op case above.)
+  await gotoGame(page, '?players=1');
+  await startBoss(page);
+  await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
+  await stepGame(page, 16, 1);
+  await hitEscort(page, 0, 'p2');
+  expect(await escortsAlive(page)).toBe(4); // one hit is not enough
+  expect((await escortLocks(page))[0]).toBe(2);
+  await hitEscort(page, 0, 'p2');
+  await stepGame(page, 16, 1);
+  expect(await escortsAlive(page)).toBe(3);
+  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(2);
 });
 
 test('?boss shortcut boots into the fight', async ({ page }) => {
@@ -829,4 +869,89 @@ test('?controls=sling boots the old controls and is remembered', async ({ page }
   // The choice is saved: a bare reload (like the home-screen PWA) keeps it.
   await gotoGame(page);
   expect(await controlsMode(page)).toBe('sling');
+});
+
+const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
+const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
+const hudCount = (page: Page) => page.evaluate(`${SCENE}.scoreKeeper.huds.length`) as Promise<number>;
+/** Per-seat copies of the wave banner's numeral / an end card's text. */
+const bannerCopies = (page: Page) => page.evaluate(`${SCENE}.waveDirector.banner.numerals.length`) as Promise<number>;
+const overlayCopies = (page: Page, which: 'failOverlay' | 'victoryOverlay') =>
+  page.evaluate(`${SCENE}.${which}.container.list.filter((o) => o.type === 'Text').length`) as Promise<number>;
+/** P1's spot for a P2 point: the top seat is P2's layout rotated 180° about the centre. */
+const mirrored = (p: Pt): Pt => ({ x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y });
+
+test('solo (?players=1) keeps only the bottom seat, ignores the top, and is remembered', async ({ page }) => {
+  await gotoGame(page, '?players=1');
+  expect(await players(page)).toBe('1');
+  expect(await seats(page)).toEqual(['p2']);
+  expect(await v2Layout(page, 1)).toBeNull();
+  expect(await hudCount(page)).toBe(1);
+  // Nothing is drawn toward the empty top seat: one wave-banner copy, and one
+  // text copy on each end-of-round card.
+  expect(await bannerCopies(page)).toBe(1);
+  expect(await overlayCopies(page, 'failOverlay')).toBe(1);
+  expect(await overlayCopies(page, 'victoryOverlay')).toBe(1);
+
+  // Touches where P1's FIRE, HOME and aim pad would be do nothing (and throw
+  // nothing: afterEach gates on a clean console).
+  const L = await v2Layout(page, 2);
+  const t = await touchscreen(page);
+  for (const p of [L.fire, L.home, L.pad]) {
+    const at = mirrored(p);
+    await t.down(1, at.x, at.y);
+    await stepGame(page, 16, 3);
+    await t.up(1);
+  }
+  expect(await liveShots(page)).toHaveLength(0);
+
+  // P2 still fires.
+  await t.down(1, L.fire.x, L.fire.y);
+  await stepGame(page, 16, 3);
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  expect(shots[0].player).toBe('p2');
+
+  // The "Try again" restart (scene.restart) keeps solo.
+  await page.evaluate(`${SCENE}.scene.restart()`);
+  await stepGame(page, 16, 1); // the scene manager processes the restart
+  expect(await liveShots(page)).toHaveLength(0); // a fresh scene: P2's shot is gone
+  expect(await seats(page)).toEqual(['p2']);
+
+  // Saved: a bare reload stays solo; ?players=2 brings the top seat back.
+  await gotoGame(page);
+  expect(await players(page)).toBe('1');
+  expect(await seats(page)).toEqual(['p2']);
+  await gotoGame(page, '?players=2');
+  expect(await seats(page)).toEqual(['p1', 'p2']);
+  expect(await v2Layout(page, 1)).not.toBeNull();
+  expect(await hudCount(page)).toBe(2);
+  expect(await bannerCopies(page)).toBe(2);
+  expect(await overlayCopies(page, 'failOverlay')).toBe(2);
+});
+
+test('solo with ?controls=sling: one sling, one homing toggle, the top seat ignored', async ({ page }) => {
+  await gotoGame(page, '?controls=sling&players=1');
+  expect(await seats(page)).toEqual(['p2']);
+  expect(await page.evaluate(`${SCENE}.homingToggles.length`)).toBe(1);
+  expect(await hudCount(page)).toBe(1);
+  const t = await touchscreen(page);
+  // P2's pull: grab just below the sling, drag down. P1's is the same pull mirrored.
+  const grab = { x: P2_ANCHOR.x, y: P2_ANCHOR.y + 2 };
+  const pull = { x: P2_ANCHOR.x, y: P2_ANCHOR.y + 60 };
+  // A pull in P1's old sling zone fires nothing.
+  await t.down(1, mirrored(grab).x, mirrored(grab).y);
+  await t.move(1, mirrored(pull).x, mirrored(pull).y);
+  await stepGame(page, 16, 1);
+  await t.up(1);
+  expect(await liveShots(page)).toHaveLength(0);
+  // P2's pull-and-release fires up the field.
+  await t.down(1, grab.x, grab.y);
+  await t.move(1, pull.x, pull.y);
+  await stepGame(page, 16, 1);
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  expect(shots[0].player).toBe('p2');
 });
