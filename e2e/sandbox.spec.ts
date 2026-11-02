@@ -410,6 +410,57 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   expect(fired.done).toBe(true);
 });
 
+test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
+  await gotoGame(page);
+
+  // A link stops a rocket exactly when the drawn rocket touches the drawn
+  // stroke: centre distance <= rocket half-size + web width / 2 (#8). Park real
+  // stationary rockets on BOTH sides of all four links, 0.5 outside that reach
+  // and 0.5 inside it, then run ONE real frame: the scene's own global web check
+  // (recycleWhere -> BossEncounter.blocksRocket -> ShieldWeb.blocks, sweeping
+  // from the body's previous position as Arcade's preUpdate records it) must
+  // spend every inside probe and none of the outside ones. Both sides of every
+  // diagonal link means some probe sits where a mis-anchored sweep would point
+  // into the link. One frame turns the web ~0.3 deg, which moves a midpoint
+  // probe's distance to its link by ~0.001: negligible against the 0.5 margin.
+  await startBoss(page);
+  await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
+  await stepGame(page, 16, 1);
+  expect(await bossPhase(page)).toBe('charging');
+
+  const probe = await page.evaluate(() => {
+    const w = window as any;
+    const s = w.__game.scene.keys['Sandbox'];
+    const { width, links } = s.__debug.webLinks();
+    const activeBefore = s.rockets.group.countActive(true);
+    const wrong: string[] = [];
+    for (const [label, margin, expectBlocked] of [['clear', 0.5, false], ['touch', -0.5, true]] as const) {
+      const probes: { name: string; r: any }[] = [];
+      for (const [i, l] of links.entries()) {
+        const len = Math.hypot(l.bx - l.ax, l.by - l.ay);
+        const nx = -(l.by - l.ay) / len, ny = (l.bx - l.ax) / len;
+        const mx = (l.ax + l.bx) / 2, my = (l.ay + l.by) / 2;
+        for (const side of [1, -1]) {
+          const r = s.rockets.fire('rocket-p1', mx, my, 0, 0);
+          const d = Math.max(r.displayWidth, r.displayHeight) / 2 + width / 2 + margin;
+          r.body.reset(mx + side * nx * d, my + side * ny * d);
+          probes.push({ name: `link ${i} side ${side > 0 ? '+' : '-'} ${label}`, r });
+        }
+      }
+      w.__step(1, 16);
+      for (const { name, r } of probes) {
+        const blocked = !r.active;
+        if (blocked !== expectBlocked) wrong.push(`${name}: blocked=${blocked}`);
+        if (r.active) s.rockets.recycle(r);
+      }
+    }
+    return { links: links.length, wrong, activeBefore, activeAfter: s.rockets.group.countActive(true) };
+  });
+  expect(probe.links).toBe(4);
+  expect(probe.wrong).toEqual([]);
+  expect(probe.activeAfter).toBe(probe.activeBefore); // probes never leak into later play
+});
+
 test('?boss shortcut boots into the fight', async ({ page }) => {
   // A fresh load with ?boss must boot straight into the boss fight (phase
   // 'charging'), skipping the waves.
