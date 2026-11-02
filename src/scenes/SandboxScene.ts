@@ -62,8 +62,9 @@ const SEAT_DEFS: readonly SeatDef[] = [
   { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, colorCss: CSS.p2, edge: 'bottom', tex: TEX.rocketP2, hudAt: HUD_P2, registryKey: 'homingP2' },
 ];
 
-/** DEV seat lookups take the player number: 1 = P1 (top), 2 = P2 (bottom). */
-const seatId = (player: number): PlayerId => (player === 1 ? 'p1' : 'p2');
+/** DEV seat lookups take the player number: 1 = P1 (top), 2 = P2 (bottom);
+ *  any other number is no seat. */
+const seatId = (player: number): PlayerId | undefined => (player === 1 ? 'p1' : player === 2 ? 'p2' : undefined);
 
 /** Homing lock cone (B14), as tan(half-angle) for the perpendicular test. */
 const HOMING_MAX_TAN = Math.tan(Phaser.Math.DegToRad(HOMING.coneHalfAngleDeg));
@@ -188,8 +189,8 @@ export class SandboxScene extends Phaser.Scene {
     // Deterministic handle for the headless e2e suite (e2e/sandbox.spec.ts).
     if (import.meta.env.DEV) {
       // Seat lookups take the player number (1 = top, 2 = bottom). controls and
-      // homingToggles are index-aligned with seats; a seat absent in solo is -1,
-      // which reads as undefined.
+      // homingToggles are index-aligned with seats; a seat absent in solo (or a
+      // number that names no seat) is -1, which reads as undefined.
       const seatIndex = (player: number) => seats.findIndex((seat) => seat.player === seatId(player));
       (this as unknown as { __debug: object }).__debug = {
         clearWave: () => this.waveDirector.forceClear(),
@@ -237,7 +238,7 @@ export class SandboxScene extends Phaser.Scene {
 
   /** Today's controls (?controls=sling): a SlingControl per seat plus the B14
    *  homing toggle beside it. Toggle state persists across scene.restart() via
-   *  the registry keys. (Both toggles are created before both slings, which
+   *  the registry keys. (Every toggle is created before any sling, which
    *  keeps the display-list order.) */
   private createSlingControls(seats: readonly Seat[]): void {
     this.homingToggles = seats.map(
@@ -362,7 +363,7 @@ export class SandboxScene extends Phaser.Scene {
     return { x: target.sprite.x, y: target.sprite.y, r: target.radius + HOMING.ringPad };
   }
 
-  /** Scene-level pointer events fanned out to both seats' controls (either
+  /** Scene-level pointer events fanned out to every live seat's controls (either
    *  scheme); each claims its own pointers by id, so several fingers work at once. */
   private wireInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {

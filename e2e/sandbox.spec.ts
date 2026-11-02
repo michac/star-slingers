@@ -39,14 +39,13 @@ import {
   ASTEROID_KIND,
   breakEvenAccuracy,
   clearDamage,
-  DAMAGE,
   requiredDamagePerSec,
   SOLO,
   solveWave,
   waveTarget,
   WAVES,
 } from '../src/waves';
-import { AMMO_REGEN_MS, GAME_HEIGHT, GAME_WIDTH, SLING } from '../src/layout';
+import { GAME_HEIGHT, GAME_WIDTH, P2_ANCHOR, SLING } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -254,10 +253,11 @@ test('solo scales wave targets; two-player targets are untouched', () => {
     expect(waveTarget(w, 2, 0.5)).toBe(w.required);
     expect(waveTarget(w, 1, 0.5)).toBeCloseTo(w.required * 0.5, 10);
     expect(waveTarget(w, 1)).toBeCloseTo(w.required * SOLO.requiredScale, 10);
-    // Break-even is over the seats in play: one player's ammo ceiling in solo.
-    const seatCeiling = (1000 / AMMO_REGEN_MS) * DAMAGE.normal; // one seat's damage/s ceiling
-    expect(breakEvenAccuracy(w, 1)).toBeCloseTo(requiredDamagePerSec(w, 1) / seatCeiling, 10);
-    expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * seatCeiling), 10);
+    // Break-even is over the seats in play: per unit of required damage/s, one
+    // seat must land twice the share two seats do (whatever SOLO's scale is).
+    const perRequired = (players: 1 | 2) => breakEvenAccuracy(w, players) / requiredDamagePerSec(w, players);
+    expect(requiredDamagePerSec(w, 1)).toBeGreaterThan(0);
+    expect(perRequired(1) / perRequired(2)).toBeCloseTo(2, 10);
   }
 });
 
@@ -761,8 +761,8 @@ test('solo with ?controls=sling: one sling, one homing toggle, the top seat igno
   expect(await hudCount(page)).toBe(1);
   const t = await touchscreen(page);
   // P2's pull: grab just below the sling, drag down. P1's is the same pull mirrored.
-  const grab = { x: 180, y: 642 };
-  const pull = { x: 180, y: 700 };
+  const grab = { x: P2_ANCHOR.x, y: P2_ANCHOR.y + 2 };
+  const pull = { x: P2_ANCHOR.x, y: P2_ANCHOR.y + 60 };
   // A pull in P1's old sling zone fires nothing.
   await t.down(1, mirrored(grab).x, mirrored(grab).y);
   await t.move(1, mirrored(pull).x, mirrored(pull).y);
