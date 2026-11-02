@@ -37,13 +37,12 @@ async function expectGameBooted(page: Page): Promise<void> {
   );
 }
 
-test('service worker survives redirects and boots the game offline', async ({ page, context, baseURL }) => {
+test('service worker survives redirects and boots the game offline', async ({ page, context }) => {
   const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(String(e)));
-  const at = (path: string) => new URL(path, baseURL).href;
 
   await test.step('boot / and let the service worker take control', async () => {
     await page.goto('/');
@@ -60,7 +59,7 @@ test('service worker survives redirects and boots the game offline', async ({ pa
   // redirecting (say, swapped for `vite preview`) instead of silently losing coverage.
   await test.step('/index.html redirects to /', async () => {
     await page.goto('/index.html');
-    await expect(page).toHaveURL(at('/'));
+    await expect(page).toHaveURL('/');
     await expectGameBooted(page);
   });
 
@@ -71,38 +70,28 @@ test('service worker survives redirects and boots the game offline', async ({ pa
 
   await test.step('/prototype/glow-lab.html redirects to /prototype/glow-lab', async () => {
     await page.goto('/prototype/glow-lab.html');
-    await expect(page).toHaveURL(at('/prototype/glow-lab'));
+    await expect(page).toHaveURL('/prototype/glow-lab');
   });
 
-  await test.step('no cached response came through a redirect', async () => {
-    expect(await redirectedInCache(page)).toEqual([]);
-  });
-
+  // The test's context is discarded afterwards, so it never has to go back online.
   await test.step('offline: reload / and the game still boots', async () => {
     await page.goto('/');
     await expectGameBooted(page);
     await context.setOffline(true);
-    try {
-      await page.reload();
-      await expectGameBooted(page);
-    } finally {
-      await context.setOffline(false);
-    }
+    await page.reload();
+    await expectGameBooted(page);
   });
 
   // Never visited online, so only the SW's navigation fallback can answer it.
   await test.step('offline: an uncached query URL (/?controls=v2) still boots the game', async () => {
-    await context.setOffline(true);
-    try {
-      await page.goto('/?controls=v2');
-      await expect(page).toHaveURL(at('/?controls=v2'));
-      await expectGameBooted(page);
-    } finally {
-      await context.setOffline(false);
-    }
+    await page.goto('/?controls=v2');
+    await expect(page).toHaveURL('/?controls=v2');
+    await expectGameBooted(page);
   });
 
-  await test.step('still no cached redirect after the offline visits', async () => {
+  // Offline fetches fail before anything is cached, so this one check covers the
+  // online visits above too.
+  await test.step('no cached response came through a redirect', async () => {
     expect(await redirectedInCache(page)).toEqual([]);
   });
 

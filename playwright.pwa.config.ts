@@ -17,7 +17,6 @@ const PORT = Number(process.env.PWA_PORT ?? 5182);
  */
 export default defineConfig({
   testDir: './e2e-pwa',
-  fullyParallel: false,
   workers: 1,
   timeout: 90_000,
   forbidOnly: !!process.env.CI,
