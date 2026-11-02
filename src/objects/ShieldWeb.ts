@@ -49,8 +49,11 @@ export class ShieldWeb {
     return this.blocksSegment(px, py, rocket.x, rocket.y, r);
   }
 
-  blocksSegment(ax: number, ay: number, bx: number, by: number, radius = 0): boolean {
-    const r = radius + this.width / 2;
+  /** True when the segment a→b, thickened by `sweptRadius`, touches a live
+   * link's drawn stroke. Adds the web's half-width itself; callers pass only
+   * the swept object's own radius. */
+  blocksSegment(ax: number, ay: number, bx: number, by: number, sweptRadius = 0): boolean {
+    const r = sweptRadius + this.width / 2;
     return this.links.some((link) => segmentsWithin(ax, ay, bx, by, link.ax, link.ay, link.bx, link.by, r));
   }
 
@@ -58,9 +61,10 @@ export class ShieldWeb {
     return this.links.length;
   }
 
-  /** DEV/test read: copies of the live link segments and the web's width. */
-  get segments(): { width: number; links: Link[] } {
-    return { width: this.width, links: this.links.map((link) => ({ ...link })) };
+  /** DEV/test read: this frame's live link segments and the web's width.
+   * update() builds a fresh links array each frame, so no copy is needed. */
+  get segments(): { width: number; links: readonly Link[] } {
+    return { width: this.width, links: this.links };
   }
 }
 
