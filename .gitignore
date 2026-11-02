@@ -6,3 +6,4 @@ prototype/*.png
 /playwright-report/
 /blob-report/
 .last-run.json
+.wrangler/

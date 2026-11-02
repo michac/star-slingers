@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
     "deploy": "node deploy.mjs",
-    "deploy:prototype": "node deploy-prototype.mjs"
+    "deploy:prototype": "node deploy-prototype.mjs",
+    "deploy:preview": "node deploy-preview.mjs"
   },
   "dependencies": {
     "phaser": "^3.90.0"
@@ -19,6 +20,7 @@
     "@playwright/test": "^1.64.1",
     "@types/node": "^24.19.2",
     "typescript": "^6.0.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "wrangler": "^4.156.1"
   }
 }

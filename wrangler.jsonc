@@ -1,0 +1,26 @@
+// Cloudflare Workers (static assets only — no Worker script) for BRANCH PREVIEWS.
+// GitHub Pages stays the stable production host (deploy.mjs); this Worker exists
+// so a long-lived branch (e.g. controls-v2) gets its own installable URL. Each
+// preview alias is its own hostname, so its service worker + caches never touch
+// the stable game's.
+//
+// Shares a Cloudflare account with the card-games Worker — keep this `name`
+// distinct or a deploy overwrites that project.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "star-slingers",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {
+    "directory": "./dist"
+    // html_handling stays the default (auto-trailing-slash) so `/` and the
+    // `/prototype/` shelf resolve to their index.html ("none" 404s both, and the
+    // SPA fallback would serve the game for /prototype/). The default redirects
+    // /index.html → / and x.html → x, which is safe ONLY because public/sw.js
+    // never precaches HTML and never caches a redirect (cacheable() requires a
+    // basic 200). A service worker that caches a redirected HTML response breaks
+    // navigation on WebKit/iOS ("served by service worker has redirections"),
+    // which bit the card-games prototype. Don't add .html to the precache list.
+  }
+}

@@ -110,6 +110,16 @@ textures, tokens).
   remote review. Unlike `deploy`, it commits `prototype/**` itself and tolerates other in-progress
   edits — an automated path to push review artifacts (glow spikes, sketches) to Michael's phone.
   Drop a `prototype/<name>.html` (+ `.ts`) and it auto-lists on the shelf (see `prototype/README.md`).
+- `npm run deploy:preview` — upload the **current branch** as a **Cloudflare Workers preview**
+  (`wrangler versions upload --preview-alias <branch>`), so a long-lived branch such as `controls-v2`
+  gets its own installable phone URL beside the stable game. GitHub Pages stays production; this never
+  touches it. It tolerates a dirty tree and tags the version `branch@sha[-dirty]`. Config is in
+  `wrangler.jsonc`. The Worker is named `star-slingers` and **shares a Cloudflare account with the
+  card-games Worker, so never reuse that name.** Keep Cloudflare's default HTML handling: `/` and the
+  `/prototype/` shelf need it, and it's safe only because `public/sw.js` never precaches HTML or caches
+  a redirect (the WebKit/iOS service-worker pitfall is explained in `wrangler.jsonc`). Do the
+  first-ever upload by hand with `npx wrangler deploy`, because the Worker has to exist before it can
+  take previews.
 
 > Note: this repo split off from a multi-game hub; deploy scripts assume a GitHub remote named for
 > this repo with Pages turned on. Set the remote up before the first `npm run deploy`.
