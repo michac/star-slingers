@@ -28,6 +28,7 @@ import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import type { HomingTarget } from '../objects/HomingTarget';
 import { DAMAGE } from '../waves';
+import { shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
  *  order for group-vs-array overlaps, so go by the rocket flag. */
@@ -294,7 +295,8 @@ export class SandboxScene extends Phaser.Scene {
     // and wears the bright trail tier. Charge & homing are mutually exclusive
     // at the sling, so a shot is never both. No lock → a straight shot.
     const target = homing ? this.pickHomingTarget(x, y, vx, vy) : null;
-    this.rockets.fire(tex, x, y, vx, vy, player, { charged, target });
+    // Every control's shot lands here, so this one buzz (#3) covers them all.
+    if (this.rockets.fire(tex, x, y, vx, vy, player, { charged, target })) shotBuzz({ charged, homing });
   }
 
   /** The asteroid closest to the launch ray (origin + direction), within a

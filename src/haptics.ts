@@ -7,14 +7,9 @@ import { HAPTICS } from './layout';
 
 /** Vibrate for `ms`, if this device can. */
 export function buzz(ms: number): void {
-  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
   // Chrome logs a console ERROR for a vibrate before the first tap, and the armed tick fires from update(), outside any touch handler.
   if (navigator.userActivation?.hasBeenActive === false) return;
-  try {
-    navigator.vibrate(ms);
-  } catch {
-    // Haptics are a nicety; never let one break a shot.
-  }
+  navigator.vibrate?.(ms);
 }
 
 /** The buzz for a shot that just fired: railgun > homing > plain. */

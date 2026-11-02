@@ -653,45 +653,31 @@ test('v2: haptics — FIRE ticks once on arming, each shot fired buzzes by kind'
   await t.up(1);
   expect(await vibes(page)).toEqual([HAPTICS.armedMs, HAPTICS.railgunMs, HAPTICS.shotMs, HAPTICS.homingMs]);
   expect(await liveShots(page)).toHaveLength(3);
-});
 
-test('v2: haptics — a release that fires nothing (no ammo) does not buzz', async ({ page }) => {
-  await stubVibrate(page);
-  await gotoGame(page);
-  const L = await v2Layout(page, 2);
+  // A release that fires nothing (no ammo) doesn't buzz.
   await page.evaluate(`${SCENE}.controls[1].config.canFire = () => false`);
-  const t = await touchscreen(page);
   await t.down(1, L.fire.x, L.fire.y);
   await stepGame(page, 16, 3);
   await t.up(1);
-  expect(await liveShots(page)).toHaveLength(0);
-  expect(await vibes(page)).toEqual([]);
+  expect(await vibes(page)).toHaveLength(4); // a shot that did fire would have buzzed
 });
 
-test('v2: haptics — no vibrate API (iPhone) is a silent no-op', async ({ page }) => {
-  await stubVibrate(page, 'missing');
-  await gotoGame(page);
-  expect(await page.evaluate(() => typeof navigator.vibrate)).toBe('undefined');
-  const L = await v2Layout(page, 2);
-  const t = await touchscreen(page);
-  await t.down(1, L.fire.x, L.fire.y);
-  await stepGame(page, 16, 45); // through the armed tick
-  await t.up(1);
-  // The shot still fires; the afterEach console gate proves nothing threw.
-  expect(await liveShots(page)).toHaveLength(1);
-});
-
-test('v2: haptics — nothing buzzes before the first tap (Chrome blocks + logs it)', async ({ page }) => {
-  await stubVibrate(page, 'unactivated');
-  await gotoGame(page);
-  const L = await v2Layout(page, 2);
-  const t = await touchscreen(page);
-  await t.down(1, L.fire.x, L.fire.y);
-  await stepGame(page, 16, 45);
-  await t.up(1);
-  expect(await liveShots(page)).toHaveLength(1);
-  expect(await vibes(page)).toEqual([]);
-});
+// 'missing': no vibrate API (iPhone). 'unactivated': before the first tap
+// (Chrome blocks + logs it). Either way the shot still fires, nothing buzzes,
+// and the afterEach console gate proves nothing threw or logged.
+for (const mode of ['missing', 'unactivated'] as const) {
+  test(`v2: haptics — ${mode} vibrate is a silent no-op`, async ({ page }) => {
+    await stubVibrate(page, mode);
+    await gotoGame(page);
+    const L = await v2Layout(page, 2);
+    const t = await touchscreen(page);
+    await t.down(1, L.fire.x, L.fire.y);
+    await stepGame(page, 16, 45); // through the armed tick
+    await t.up(1);
+    expect(await liveShots(page)).toHaveLength(1);
+    expect(await vibes(page)).toEqual([]);
+  });
+}
 
 test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   await gotoGame(page);
@@ -733,19 +719,8 @@ test('v2: ?aim=drag turns the aim by sideways motion; ?lefty mirrors a seat', as
   await t.up(1);
 });
 
-test('sling: haptics — a release that fires buzzes like v2', async ({ page }) => {
-  await stubVibrate(page);
-  await gotoGame(page, '?controls=sling');
-  const t = await touchscreen(page);
-  await t.down(1, 180, 642); // P2's sling: pull back and release (no charge)
-  await t.move(1, 180, 700);
-  await stepGame(page, 16, 1);
-  await t.up(1);
-  expect(await liveShots(page)).toHaveLength(1);
-  expect(await vibes(page)).toEqual([HAPTICS.shotMs]);
-});
-
 test('?controls=sling boots the old controls and is remembered', async ({ page }) => {
+  await stubVibrate(page);
   await gotoGame(page, '?controls=sling');
   expect(await controlsMode(page)).toBe('sling');
   expect(await page.evaluate(`${SCENE}.homingToggles.length`)).toBe(2);
@@ -758,6 +733,7 @@ test('?controls=sling boots the old controls and is remembered', async ({ page }
   const shots = await liveShots(page);
   expect(shots).toHaveLength(1);
   expect(shots[0].vy).toBeLessThan(0);
+  expect(await vibes(page)).toEqual([HAPTICS.shotMs]); // buzzes like v2 (#3)
   // The choice is saved: a bare reload (like the home-screen PWA) keeps it.
   await gotoGame(page);
   expect(await controlsMode(page)).toBe('sling');

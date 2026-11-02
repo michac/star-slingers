@@ -4,14 +4,12 @@
  *
  * The scene forwards all pointer events to every control; each control claims
  * at most one pointer by id, so two controls track two fingers independently.
- * A release that fires buzzes the phone like controls v2 does (#3, src/haptics.ts).
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { CHARGE, SLING } from '../layout';
 import { arcSpan, drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
 import type { SeatControl } from './SeatControl';
-import { shotBuzz } from '../haptics';
 
 export interface SlingControlConfig {
   anchor: { x: number; y: number };
@@ -88,7 +86,6 @@ export class SlingControl implements SeatControl {
     // Launch opposite the pull; speed scales with how far back it was drawn.
     const dir = this.pull.clone().scale(-1).normalize();
     const speed = Math.max(SLING.minSpeed, (len / SLING.pullRadius) * SLING.maxSpeed);
-    shotBuzz({ charged, homing: this.config.isHoming?.() ?? false });
     this.config.onFire(anchor.x, anchor.y, dir.x * speed, dir.y * speed, charged);
   }
 

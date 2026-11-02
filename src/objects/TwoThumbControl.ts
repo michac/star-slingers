@@ -8,8 +8,8 @@
  *  - HOME: while held, rings the rock the shot would lock; release fires a
  *    homing shot. Never charges.
  *  - One button at a time: while either is held, a press on the other is ignored.
- *  - Haptics (#3): each shot fired buzzes by its kind, and FIRE ticks once the
- *    moment its charge fills (HAPTICS dials, src/haptics.ts).
+ *  - Haptics (#3): FIRE ticks once the moment its charge fills (HAPTICS dials,
+ *    src/haptics.ts). The per-shot buzz is the scene's, in fireRocket.
  *  - Aim pad, `arc` mode: thumb direction from the pad centre sets the aim
  *    (outside a small deadzone). `drag` mode: sideways motion anywhere in the aim
  *    zone turns the aim. Both clamp to CONTROLS_V2.aim; aim persists.
@@ -25,7 +25,7 @@ import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, SLING } from '../layout';
 import type { AimMode } from '../controlsVariant';
-import { buzz, shotBuzz } from '../haptics';
+import { buzz } from '../haptics';
 import { drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
 import type { SeatControl } from './SeatControl';
 
@@ -170,7 +170,6 @@ export class TwoThumbControl implements SeatControl {
     if (!this.config.canFire()) return;
     const dir = this.worldDir();
     const { anchor } = this.config;
-    shotBuzz(kind);
     this.config.onFire(anchor.x, anchor.y, dir.x * SLING.maxSpeed, dir.y * SLING.maxSpeed, kind);
   }
 
