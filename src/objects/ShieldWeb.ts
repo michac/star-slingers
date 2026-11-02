@@ -37,16 +37,20 @@ export class ShieldWeb {
     }
   }
 
-  /** True when the rocket's swept center (previous frame's center → now) comes
+  /** True when the rocket's center, swept over this frame's motion, comes
    * within the rocket's half-size + the web's half-width of a live link, i.e.
-   * the drawn rocket touches the drawn stroke. The sweep keeps a high-speed shot
-   * from slipping between adjacent Arcade physics frames. */
+   * the drawn rocket touches the drawn stroke. The sweep keeps a fast shot from
+   * slipping through a link between frames. */
   blocks(rocket: Phaser.Physics.Arcade.Sprite): boolean {
     const body = rocket.body as Phaser.Physics.Arcade.Body;
-    // body.prev is the body's previous TOP-LEFT; shift it to the previous center.
-    const px = body.prev.x + body.halfWidth, py = body.prev.y + body.halfHeight;
+    // Arcade moves the body during the physics step but only copies it onto the
+    // sprite in postUpdate, after scene.update, so rocket.x/y still holds the
+    // frame-start position here. Sweep the body instead: prevFrame is its
+    // TOP-LEFT at frame start (prev only covers the last of several steps), so
+    // shift it to the center; body.center is already post-step.
+    const px = body.prevFrame.x + body.halfWidth, py = body.prevFrame.y + body.halfHeight;
     const r = Math.max(rocket.displayWidth, rocket.displayHeight) / 2; // blocksSegment adds the web's half-width
-    return this.blocksSegment(px, py, rocket.x, rocket.y, r);
+    return this.blocksSegment(px, py, body.center.x, body.center.y, r);
   }
 
   /** True when the segment a→b, thickened by `sweptRadius`, touches a live

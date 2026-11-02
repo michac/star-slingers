@@ -414,15 +414,21 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   await gotoGame(page);
 
   // A link stops a rocket exactly when the drawn rocket touches the drawn
-  // stroke: centre distance <= rocket half-size + web width / 2 (#8). Park real
-  // stationary rockets on BOTH sides of all four links, 0.5 outside that reach
-  // and 0.5 inside it, then run ONE real frame: the scene's own global web check
-  // (recycleWhere -> BossEncounter.blocksRocket -> ShieldWeb.blocks, sweeping
-  // from the body's previous position as Arcade's preUpdate records it) must
-  // spend every inside probe and none of the outside ones. Both sides of every
-  // diagonal link means some probe sits where a mis-anchored sweep would point
-  // into the link. One frame turns the web ~0.3 deg, which moves a midpoint
-  // probe's distance to its link by ~0.001: negligible against the 0.5 margin.
+  // stroke: centre distance <= reach = rocket half-size + web width / 2 (#8).
+  // Each group fields real rockets on BOTH sides of all four links and runs ONE
+  // real frame; the scene's own global web check (recycleWhere ->
+  // BossEncounter.blocksRocket -> ShieldWeb.blocks) must spend exactly the
+  // probes marked blocked:
+  //  - clear / touch: stationary, 0.5 outside / inside reach. Both sides of
+  //    every diagonal link means some probe sits where a mis-anchored sweep
+  //    would point into the link.
+  //  - cross: starts 5 outside reach and flies straight through the link in
+  //    one 16ms step (30 units), ending outside reach on the far side, so only
+  //    a sweep over this frame's motion can catch it.
+  //  - graze: flies 20 units parallel to the link, 0.5 outside reach; the
+  //    sweep must not widen the reach.
+  // One frame turns the web ~0.3 deg, moving a probe's distance to its link by
+  // <= ~0.11 (graze, 10 units off-midpoint): under the 0.5 margins.
   await startBoss(page);
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
@@ -434,23 +440,32 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
     const { width, links } = s.__debug.webLinks();
     const activeBefore = s.rockets.group.countActive(true);
     const wrong: string[] = [];
-    for (const [label, margin, expectBlocked] of [['clear', 0.5, false], ['touch', -0.5, true]] as const) {
+    // (normal offset from reach, along-link offset, normal speed px/s toward the link, along speed px/s)
+    const groups = [
+      { label: 'clear', blocked: false, off: 0.5, along: 0, vn: 0, vt: 0 },
+      { label: 'touch', blocked: true, off: -0.5, along: 0, vn: 0, vt: 0 },
+      { label: 'cross', blocked: true, off: 5, along: 0, vn: 1875, vt: 0 },
+      { label: 'graze', blocked: false, off: 0.5, along: -10, vn: 0, vt: 1250 },
+    ];
+    for (const g of groups) {
       const probes: { name: string; r: any }[] = [];
       for (const [i, l] of links.entries()) {
         const len = Math.hypot(l.bx - l.ax, l.by - l.ay);
-        const nx = -(l.by - l.ay) / len, ny = (l.bx - l.ax) / len;
+        const tx = (l.bx - l.ax) / len, ty = (l.by - l.ay) / len;
+        const nx = -ty, ny = tx;
         const mx = (l.ax + l.bx) / 2, my = (l.ay + l.by) / 2;
         for (const side of [1, -1]) {
           const r = s.rockets.fire('rocket-p1', mx, my, 0, 0);
-          const d = Math.max(r.displayWidth, r.displayHeight) / 2 + width / 2 + margin;
-          r.body.reset(mx + side * nx * d, my + side * ny * d);
-          probes.push({ name: `link ${i} side ${side > 0 ? '+' : '-'} ${label}`, r });
+          const d = Math.max(r.displayWidth, r.displayHeight) / 2 + width / 2 + g.off;
+          r.body.reset(mx + side * nx * d + tx * g.along, my + side * ny * d + ty * g.along);
+          r.body.setVelocity(-side * nx * g.vn + tx * g.vt, -side * ny * g.vn + ty * g.vt);
+          probes.push({ name: `link ${i} side ${side > 0 ? '+' : '-'} ${g.label}`, r });
         }
       }
       w.__step(1, 16);
       for (const { name, r } of probes) {
         const blocked = !r.active;
-        if (blocked !== expectBlocked) wrong.push(`${name}: blocked=${blocked}`);
+        if (blocked !== g.blocked) wrong.push(`${name}: blocked=${blocked}`);
         if (r.active) s.rockets.recycle(r);
       }
     }
