@@ -68,6 +68,11 @@ textures, tokens).
   one at a time (or batched into a workflow when several are big and independent).
 - **Finishing an item includes syncing `plans/spec.md`** and appending a line to `plans/notes.md`.
   The spec must never drift from decisions again; chat-only decisions don't count as recorded.
+- **Docs state what's true now; only `plans/notes.md` keeps history.** When a decision changes,
+  rewrite the old text in place so it says the new thing. Don't add a correction further down
+  ("update: actually…", "superseded by…") and leave the stale sentence standing. A reader who stops
+  early would act on it. This applies to `spec.md`, backlog items, `polish-pass.md`, this file and
+  code comments. The story of what changed and why belongs in `notes.md`.
 - Backlog items tagged `[draft]` are unreviewed auto-generated material — raw ideas to react
   to, not decisions. Don't build them as-is without review.
 - **Mockups:** geometry lives in the HTML, paint in `tokens-<style>.css`; superseded mocks move
