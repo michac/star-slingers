@@ -152,6 +152,10 @@ export class BossEncounter {
     return this.web.blocksSegment(ax, ay, bx, by);
   }
 
+  debugWebLinks(): ShieldWeb['segments'] {
+    return this.web.segments;
+  }
+
   /** DEV/test: skip the boss slide-in tween (see Boss.snapEntered). */
   snapBossIn(): void {
     this.boss.snapEntered();

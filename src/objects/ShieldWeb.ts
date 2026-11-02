@@ -42,7 +42,7 @@ export class ShieldWeb {
   blocks(rocket: Phaser.Physics.Arcade.Sprite): boolean {
     const body = rocket.body as Phaser.Physics.Arcade.Body;
     const prev = body.prev;
-    const r = Math.max(rocket.displayWidth, rocket.displayHeight) / 2 + this.width / 2;
+    const r = Math.max(rocket.displayWidth, rocket.displayHeight) / 2; // blocksSegment adds the web's half-width
     return this.blocksSegment(prev.x, prev.y, rocket.x, rocket.y, r);
   }
 
@@ -53,6 +53,11 @@ export class ShieldWeb {
 
   get count(): number {
     return this.links.length;
+  }
+
+  /** DEV/test read: copies of the live link segments and the web's width. */
+  get segments(): { width: number; links: Link[] } {
+    return { width: this.width, links: this.links.map((link) => ({ ...link })) };
   }
 }
 
