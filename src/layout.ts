@@ -367,7 +367,7 @@ export const CONTROLS_V2 = {
  *  Android motors. See src/haptics.ts. */
 export const HAPTICS = {
   shotMs: 20,
-  homingMs: 20,
+  homingMs: 25,
   railgunMs: 40,
   armedMs: 20,
 } as const;
