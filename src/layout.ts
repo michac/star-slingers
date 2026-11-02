@@ -301,6 +301,66 @@ export const AMMO_REGEN_MS = 1000;
 export const HUD_P1 = { x: 344, y: 85, angle: 180 } as const;
 export const HUD_P2 = { x: 16, y: 655, angle: 0 } as const;
 
+/**
+ * Controls v2 (#7): two-thumb aim + fire buttons. ALL v2 geometry lives here.
+ *
+ * Written in the BOTTOM seat's (P2's) frame, as screen coords for P2:
+ *
+ *    [FIRE]  [HOME]     (launcher)      ( aim pad )
+ *    player's left     P2_ANCHOR        player's right
+ *
+ * P1 (top edge) is the same layout rotated 180° about the field centre, i.e.
+ * (x, y) → (GAME_WIDTH − x, GAME_HEIGHT − y); P2_ANCHOR maps onto P1_ANCHOR, so
+ * both launchers stay where the slings were. A `?lefty` seat mirrors x within
+ * its own frame (x → GAME_WIDTH − x) BEFORE that rotation: pad on the player's
+ * left, buttons on their right. Aim directions are not mirrored.
+ *
+ * Aim angle (seat frame): 0° = toward the player's right, 90° = straight across
+ * the field at the other player, 180° = toward the player's left.
+ *
+ * Clearances (checked against the trajectory at the aim clamps, 15°/165°, from
+ * the launcher at (180,640)): the line passes 2px outside HOME and ~20px above
+ * the pad; FIRE/HOME centres are 74 apart (gap 11); HOME's right edge is 145
+ * and the pad's left edge 254, which bracket the HUD column (x 150..~250 with a
+ * 4-digit score). Controls stay below y≈625, well under the lanes (y≤480).
+ * Sized for small thumbs; exact numbers are for tuning on the phone.
+ */
+export const CONTROLS_V2 = {
+  /** Big round FIRE button (hold to charge the railgun, release to fire). */
+  fire: { x: 52, y: 682, r: 38 },
+  /** Smaller round HOME button beside FIRE, a little higher and inward. */
+  home: { x: 120, y: 652, r: 25 },
+  /** Touch slop outside a button's drawn radius (a down in the overlap goes
+   *  to the button whose centre is nearer, relative to its radius). */
+  buttonHitPad: 5,
+  /** Gap between a button's edge and its charge ring. */
+  chargeRingGap: 5,
+  /** Aim pad (arc mode): thumb direction from the centre = launch direction.
+   *  `deadzone` ignores a thumb resting on the centre; `knobFrac` places the
+   *  aim knob along the current aim; `hitPad` is touch slop outside `r`. */
+  pad: { x: 300, y: 678, r: 46, hitPad: 14, deadzone: 10, knobR: 9, knobFrac: 0.62 },
+  /** Drag mode: a thumb anywhere in the aim zone (seat-frame x ≥ minX, y ≥
+   *  minY: the player's right side of their band) turns the aim by sideways
+   *  motion. 0.8°/px sweeps the whole 150° clamp in ~190 units (~4cm). */
+  drag: { minX: 165, minY: 540, gainDegPerPx: 0.8 },
+  /** Aim clamp (seat-frame degrees) + the boot aim (straight across). */
+  aim: { minDeg: 15, maxDeg: 165, startDeg: 90 },
+  /** Nocked-rocket draw-back along −aim: FIRE eases to `pullBack` with the
+   *  charge (from `pullBackMinFrac`); HOME holds at `homePullBack`. */
+  pullBack: 12,
+  pullBackMinFrac: 0.3,
+  homePullBack: 6,
+  /** Resting trajectory alpha, as a fraction of STROKES.trajectory.alpha (it
+   *  brightens to full while the seat aims or holds a button). */
+  trajectoryRestFrac: 0.35,
+  /** HUD group origin under the launcher (rows run +x/+y from here, see
+   *  HUD_ROWS): below the nocked rocket's furthest draw-back (y≈659), between
+   *  HOME and the pad. `hudLefty` shifts it left to clear the mirrored HOME
+   *  (x≥215) while staying right of the mirrored pad's range arc (x≤111). */
+  hud: { x: 150, y: 670 },
+  hudLefty: { x: 116, y: 670 },
+} as const;
+
 /** Mock HUD group row offsets (local y): WAVE 0, SCORE 20, AMMO 40. */
 export const HUD_ROWS = {
   wave: 0,

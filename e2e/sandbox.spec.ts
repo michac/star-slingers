@@ -36,6 +36,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND, clearDamage, solveWave } from '../src/waves';
+import { SLING } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -448,4 +449,218 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
   expect(popped.done).toBe(true);
   expect(await hits(page)).toBe(hitsBefore + 3);
   expect(await score(page)).toBe(10); // a standard's points, awarded once on the kill
+});
+
+// ---------------------------------------------------------------------------
+// Controls v2 (#7): two-thumb aim + fire buttons, driven by REAL touches.
+//
+// Touches go through a CDP session (Input.dispatchTouchEvent), so they travel
+// the browser's real touch path into Phaser's TouchManager. Does that still work
+// with the RAF loop parked by gotoGame()? Yes, and synchronously. Read in
+// node_modules/phaser/src/input/: TouchManager's DOM listeners call
+// InputManager.onTouchStart/Move/End directly; those call updateInputPlugins()
+// → InputPlugin.update(type, pointers) → processDownEvents/processMoveEvents/
+// processUpEvents, which emit the scene-level 'pointerdown' / 'pointermove' /
+// 'pointerup' (or 'pointerupoutside') inside the DOM event itself. Nothing is
+// queued for the next game step: loop.sleep() only stops the TimeStep's RAF,
+// and the gates (manager.enabled, InputPlugin.isActive → scene.sys.canInput())
+// don't look at the loop. So the seats' handleDown/Move/Up have run by the
+// time dispatchTouchEvent resolves (the first case asserts this without
+// stepping); __step is only needed to advance GAME time (FIRE's charge).
+// ---------------------------------------------------------------------------
+
+type Pt = { x: number; y: number };
+type V2Layout = { anchor: Pt; fire: Pt & { r: number }; home: Pt & { r: number }; pad: Pt & { r: number } };
+type LiveShot = { vx: number; vy: number; charged: boolean; homing: boolean; player: string; targetIsRock0: boolean };
+
+/** A multi-touch screen over CDP, in GAME coords (mapped through the canvas
+ *  rect). touchStart/touchMove carry every currently-down point with a stable
+ *  id (Chromium presses the new ids and moves the rest). Lifting is a touchEnd
+ *  carrying ONLY the lifted point: a touchMove that merely omits a finger does
+ *  NOT release it (found empirically; the same shape Puppeteer's TouchHandle
+ *  uses). */
+async function touchscreen(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  const rect = await page.evaluate(() => {
+    const r = document.querySelector('#game canvas')!.getBoundingClientRect();
+    return { left: r.left, top: r.top, sx: r.width / 360, sy: r.height / 740 };
+  });
+  const down = new Map<number, Pt>();
+  const toPage = (id: number, p: Pt) => ({ id, x: rect.left + p.x * rect.sx, y: rect.top + p.y * rect.sy, radiusX: 4, radiusY: 4, force: 1 });
+  const points = () => [...down].map(([id, p]) => toPage(id, p));
+  const send = (type: string, touchPoints: ReturnType<typeof points>) =>
+    cdp.send('Input.dispatchTouchEvent', { type: type as 'touchStart', touchPoints });
+  return {
+    async down(id: number, x: number, y: number) {
+      down.set(id, { x, y });
+      await send('touchStart', points());
+    },
+    async move(id: number, x: number, y: number) {
+      down.set(id, { x, y });
+      await send('touchMove', points());
+    },
+    async up(id: number) {
+      const p = down.get(id)!;
+      down.delete(id);
+      await send('touchEnd', [toPage(id, p)]);
+    },
+  };
+}
+
+const v2Layout = (page: Page, player: 1 | 2) =>
+  page.evaluate(`${SCENE}.__debug.v2Layout(${player})`) as Promise<V2Layout>;
+const aimDeg = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.aimDeg(${player})`) as Promise<number>;
+const controlsMode = (page: Page) => page.evaluate(`${SCENE}.__debug.controlsMode()`) as Promise<string>;
+
+/** Every in-flight rocket, read straight off the pool. */
+const liveShots = (page: Page) =>
+  page.evaluate(() => {
+    const s = (window as any).__game.scene.keys['Sandbox'];
+    return s.rockets.group.getChildren()
+      .filter((r: any) => r.active)
+      .map((r: any) => ({
+        vx: r.body.velocity.x,
+        vy: r.body.velocity.y,
+        charged: r.getData('charged') === true,
+        homing: r.getData('homing') === true,
+        player: r.getData('player'),
+        targetIsRock0: r.getData('target') === s.asteroids[0],
+      }));
+  }) as Promise<LiveShot[]>;
+
+/** A point on a seat's aim pad at seat-frame angle `deg` (0 = that player's
+ *  right, 90 = across the field). The top seat's frame is rotated 180°. */
+function padPoint(pad: V2Layout['pad'], player: 1 | 2, deg: number, frac = 0.8): Pt {
+  const a = (deg * Math.PI) / 180;
+  const sign = player === 2 ? 1 : -1;
+  return { x: pad.x + sign * Math.cos(a) * pad.r * frac, y: pad.y - sign * Math.sin(a) * pad.r * frac };
+}
+
+/** Launch direction of a shot in that seat's frame, degrees. */
+const shotDeg = (shot: LiveShot, player: 1 | 2) => {
+  const sign = player === 2 ? 1 : -1;
+  return (Math.atan2(-sign * shot.vy, sign * shot.vx) * 180) / Math.PI;
+};
+
+test('v2: hold FIRE + aim with a second finger fires an aimed railgun', async ({ page }) => {
+  await gotoGame(page);
+  expect(await controlsMode(page)).toBe('v2');
+  const L = await v2Layout(page, 2);
+  const t = await touchscreen(page);
+
+  await t.down(1, L.fire.x, L.fire.y);
+  // No step yet: the scene's pointerdown already ran during the dispatch.
+  expect(await page.evaluate(`${SCENE}.controls[1].held`)).toBe('fire');
+
+  const aim = padPoint(L.pad, 2, 60);
+  await t.down(2, aim.x, aim.y);
+  expect(await aimDeg(page, 2)).toBeCloseTo(60, 0);
+
+  await stepGame(page, 16, 45); // 720ms of game time > CHARGE.fullMs (600)
+  expect(await liveShots(page)).toHaveLength(0); // fires on release, not press
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  const [shot] = shots;
+  expect(shot.player).toBe('p2');
+  expect(shot.charged).toBe(true);
+  expect(shot.homing).toBe(false);
+  expect(Math.hypot(shot.vx, shot.vy)).toBeCloseTo(SLING.maxSpeed, 3);
+  expect(Math.abs(shotDeg(shot, 2) - 60)).toBeLessThan(2);
+  await t.up(2);
+  expect(await aimDeg(page, 2)).toBeCloseTo(60, 0); // aim persists after the thumb lifts
+});
+
+test('v2: a tap on FIRE fires one plain shot straight across', async ({ page }) => {
+  await gotoGame(page);
+  const L = await v2Layout(page, 2);
+  const t = await touchscreen(page);
+  await t.down(1, L.fire.x, L.fire.y);
+  await stepGame(page, 16, 3); // ~50ms: well short of a charge
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  expect(shots[0].charged).toBe(false);
+  expect(shots[0].homing).toBe(false);
+  expect(Math.abs(shotDeg(shots[0], 2) - 90)).toBeLessThan(1); // boot aim = straight across
+  expect(Math.hypot(shots[0].vx, shots[0].vy)).toBeCloseTo(SLING.maxSpeed, 3);
+});
+
+test('v2: releasing HOME fires a homing shot locked on the rock in line', async ({ page }) => {
+  await gotoGame(page);
+  const L = await v2Layout(page, 2);
+  // On P2's boot aim line (straight up from the launcher), inside the lanes.
+  await fieldRock(page, { x: L.anchor.x, y: 400 });
+  const t = await touchscreen(page);
+  await t.down(1, L.home.x, L.home.y);
+  expect(await page.evaluate(`${SCENE}.controls[1].held`)).toBe('home');
+  // A press on FIRE while HOME is held is ignored (one button at a time).
+  await t.down(2, L.fire.x, L.fire.y);
+  await stepGame(page, 16, 45); // HOME never charges, however long it's held
+  await t.up(2);
+  expect(await liveShots(page)).toHaveLength(0);
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  expect(shots[0].homing).toBe(true);
+  expect(shots[0].charged).toBe(false);
+  expect(shots[0].targetIsRock0).toBe(true);
+});
+
+test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
+  await gotoGame(page);
+  const L1 = await v2Layout(page, 1);
+  const L2 = await v2Layout(page, 2);
+  // P1's controls are P2's rotated about the field centre.
+  expect(L1.fire.x).toBeCloseTo(360 - L2.fire.x, 5);
+  expect(L1.fire.y).toBeCloseTo(740 - L2.fire.y, 5);
+  expect(L1.pad.x).toBeCloseTo(360 - L2.pad.x, 5);
+  const t = await touchscreen(page);
+  const aim = padPoint(L1.pad, 1, 130);
+  await t.down(1, aim.x, aim.y);
+  expect(await aimDeg(page, 1)).toBeCloseTo(130, 0);
+  await t.down(2, L1.fire.x, L1.fire.y);
+  await stepGame(page, 16, 2);
+  await t.up(2);
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  expect(shots[0].player).toBe('p1');
+  expect(shots[0].vy).toBeGreaterThan(0); // P1 shoots down the screen
+  expect(Math.abs(shotDeg(shots[0], 1) - 130)).toBeLessThan(2);
+});
+
+test('v2: ?aim=drag turns the aim by sideways motion; ?lefty mirrors a seat', async ({ page }) => {
+  await gotoGame(page, '?aim=drag&lefty=p2');
+  expect(await page.evaluate(`${SCENE}.__debug.aimMode()`)).toBe('drag');
+  const L = await v2Layout(page, 2);
+  expect(L.fire.x).toBeGreaterThan(L.anchor.x); // lefty: buttons on the player's right
+  expect(L.pad.x).toBeLessThan(L.anchor.x);
+  const t = await touchscreen(page);
+  // Thumb down anywhere in the (mirrored) aim zone: no jump, then drag right.
+  await t.down(1, 60, 600);
+  expect(await aimDeg(page, 2)).toBe(90);
+  await t.move(1, 85, 600); // +25 units to the player's right
+  expect(await aimDeg(page, 2)).toBeCloseTo(90 - 25 * 0.8, 3);
+  await t.move(1, 300, 600); // way past: clamps
+  expect(await aimDeg(page, 2)).toBe(15);
+  await t.up(1);
+});
+
+test('?controls=sling boots the old controls and is remembered', async ({ page }) => {
+  await gotoGame(page, '?controls=sling');
+  expect(await controlsMode(page)).toBe('sling');
+  expect(await page.evaluate(`${SCENE}.homingToggles.length`)).toBe(2);
+  // A real pull-and-release on P2's sling fires a rocket up the field.
+  const t = await touchscreen(page);
+  await t.down(1, 180, 642);
+  await t.move(1, 180, 700);
+  await stepGame(page, 16, 1);
+  await t.up(1);
+  const shots = await liveShots(page);
+  expect(shots).toHaveLength(1);
+  expect(shots[0].vy).toBeLessThan(0);
+  // The choice is saved: a bare reload (like the home-screen PWA) keeps it.
+  await gotoGame(page);
+  expect(await controlsMode(page)).toBe('sling');
 });

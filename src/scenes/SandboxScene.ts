@@ -1,14 +1,18 @@
 /**
  * SandboxScene — game orchestrator. Wires together stars, the station +
- * shield, two SlingControls (multitouch), the rocket pool, the WaveDirector
+ * shield, two seat controls (multitouch: SlingControls, or the controls-v2
+ * TwoThumbControls per ?controls=, see controlsVariant.ts), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 4-wave run), per-player HUDs, the wave
  * banner, and the fail/victory overlays. All logic lives in objects/.
  */
 import Phaser from 'phaser';
 import { COLORS, CSS } from '../tokens';
-import { HOMING, HUD_P1, HUD_P2, P1_ANCHOR, P2_ANCHOR, STARS, STATION } from '../layout';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, HUD_P1, HUD_P2, P1_ANCHOR, P2_ANCHOR, STARS, STATION } from '../layout';
+import { controlsVariant, isLefty } from '../controlsVariant';
 import { generateTextures, TEX } from '../objects/textures';
 import { SlingControl } from '../objects/SlingControl';
+import { TwoThumbControl } from '../objects/TwoThumbControl';
+import type { SeatControl } from '../objects/SeatControl';
 import { HomingToggle } from '../objects/HomingToggle';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
@@ -39,7 +43,7 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
 const HOMING_MAX_TAN = Math.tan(Phaser.Math.DegToRad(HOMING.coneHalfAngleDeg));
 
 export class SandboxScene extends Phaser.Scene {
-  private controls: SlingControl[] = [];
+  private controls: SeatControl[] = [];
   private homingToggles: HomingToggle[] = [];
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
@@ -64,8 +68,18 @@ export class SandboxScene extends Phaser.Scene {
 
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
-    const hud1 = new PlayerHud(this, { ...HUD_P1, colorCss: CSS.p1 });
-    const hud2 = new PlayerHud(this, { ...HUD_P2, colorCss: CSS.p2 });
+    const variant = controlsVariant();
+    const v2 = variant.controls === 'v2';
+    // v2 puts FIRE where the corner HUDs were, so its HUDs move into the centre
+    // column under each launcher (P1's rotated 180° about the field centre).
+    const hudV2 = (player: 'p1' | 'p2') => {
+      const at = isLefty(variant.lefty, player) ? CONTROLS_V2.hudLefty : CONTROLS_V2.hud;
+      return player === 'p2'
+        ? { x: at.x, y: at.y, angle: 0 }
+        : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
+    };
+    const hud1 = new PlayerHud(this, { ...(v2 ? hudV2('p1') : HUD_P1), colorCss: CSS.p1 });
+    const hud2 = new PlayerHud(this, { ...(v2 ? hudV2('p2') : HUD_P2), colorCss: CSS.p2 });
     this.scoreKeeper = new ScoreKeeper(this, [hud1, hud2]); // shared score (B6)
     const banner = new WaveBanner(this);
     this.failOverlay = new Overlay(this, FAIL_CONFIG);
@@ -98,29 +112,28 @@ export class SandboxScene extends Phaser.Scene {
       { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, edge: 'bottom', tex: TEX.rocketP2, hud: hud2, registryKey: 'homingP2' },
     ] as const;
 
-    // Homing toggles (B14) — one per seat, beside each sling; state persists
-    // across scene.restart() via the registry keys. (Both toggles are created
-    // before both slings, which keeps the display-list order.)
-    this.homingToggles = seats.map(
-      ({ anchor, color, edge, registryKey }) => new HomingToggle(this, { anchor, color, edge, registryKey })
-    );
-
-    this.controls = seats.map(({ player, anchor, color, edge, tex, hud }, i) => {
-      const homing = this.homingToggles[i];
-      return new SlingControl(this, {
-        anchor,
-        color,
-        edge,
-        rocketTexture: tex,
-        canFire: () => hud.canFire(),
-        onFire: (x, y, vx, vy, charged) => {
-          hud.spend();
-          this.fireRocket(tex, player, x, y, vx, vy, homing.enabled, charged);
-        },
-        isHoming: () => homing.enabled,
-        homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
-      });
-    });
+    if (v2) {
+      // Controls v2 (#7): homing is the HOME button, so no toggles.
+      this.controls = seats.map(
+        ({ player, anchor, color, edge, tex, hud }) =>
+          new TwoThumbControl(this, {
+            anchor,
+            color,
+            edge,
+            aimMode: variant.aim,
+            lefty: isLefty(variant.lefty, player),
+            rocketTexture: tex,
+            canFire: () => hud.canFire(),
+            onFire: (x, y, vx, vy, { charged, homing }) => {
+              hud.spend();
+              this.fireRocket(tex, player, x, y, vx, vy, homing, charged);
+            },
+            homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
+          })
+      );
+    } else {
+      this.createSlingControls(seats);
+    }
 
     this.wireInput();
 
@@ -154,7 +167,17 @@ export class SandboxScene extends Phaser.Scene {
         childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
         splitCount: () => this.waveDirector.splitCount,
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
+        // No-op under v2 (no toggles; homing is the HOME button).
         setHoming: (player: number, on: boolean) => this.homingToggles[player - 1]?.set(on),
+        controlsMode: () => variant.controls,
+        aimMode: () => variant.aim,
+        lefty: () => variant.lefty,
+        // Controls v2: seat aim (seat-frame degrees) + world-space control layout.
+        aimDeg: (player: number) => (this.controls[player - 1] as TwoThumbControl | undefined)?.aimDegrees,
+        v2Layout: (player: number) =>
+          this.controls[player - 1] instanceof TwoThumbControl
+            ? (this.controls[player - 1] as TwoThumbControl).worldLayout()
+            : null,
         startBoss: () => this.startBossNow(),
         bossPhase: () => this.bossEncounter.phase,
         snapBossIn: () => this.bossEncounter.snapBossIn(),
@@ -175,6 +198,42 @@ export class SandboxScene extends Phaser.Scene {
     // the tap-to-restart (the query string sticks), so you can re-run it. Harm-
     // less in normal play — nobody types ?boss by accident.
     if (new URLSearchParams(window.location.search).has('boss')) this.startBossNow();
+  }
+
+  /** Today's controls (?controls=sling): a SlingControl per seat plus the B14
+   *  homing toggle beside it. Toggle state persists across scene.restart() via
+   *  the registry keys. (Both toggles are created before both slings, which
+   *  keeps the display-list order.) */
+  private createSlingControls(
+    seats: readonly {
+      player: PlayerId;
+      anchor: { x: number; y: number };
+      color: number;
+      edge: 'top' | 'bottom';
+      tex: string;
+      hud: PlayerHud;
+      registryKey: string;
+    }[]
+  ): void {
+    this.homingToggles = seats.map(
+      ({ anchor, color, edge, registryKey }) => new HomingToggle(this, { anchor, color, edge, registryKey })
+    );
+    this.controls = seats.map(({ player, anchor, color, edge, tex, hud }, i) => {
+      const homing = this.homingToggles[i];
+      return new SlingControl(this, {
+        anchor,
+        color,
+        edge,
+        rocketTexture: tex,
+        canFire: () => hud.canFire(),
+        onFire: (x, y, vx, vy, charged) => {
+          hud.spend();
+          this.fireRocket(tex, player, x, y, vx, vy, homing.enabled, charged);
+        },
+        isHoming: () => homing.enabled,
+        homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
+      });
+    });
   }
 
   /** Skip the waves: pop wave 1's just-spawned rocks, stop respawns, start the boss. */
@@ -278,8 +337,8 @@ export class SandboxScene extends Phaser.Scene {
     return { x: target.sprite.x, y: target.sprite.y, r: target.radius + HOMING.ringPad };
   }
 
-  /** Scene-level pointer events fanned out to both controls; each control
-   *  claims its own pointer by id, so two fingers work simultaneously. */
+  /** Scene-level pointer events fanned out to both seats' controls (either
+   *  scheme); each claims its own pointers by id, so several fingers work at once. */
   private wireInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       for (const c of this.controls) c.handleDown(p);
