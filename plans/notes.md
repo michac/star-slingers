@@ -649,6 +649,28 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **#7 controls v2 prototype + asteroid health (2026-11-01, `controls-v2` branch only):** two
+  parallel builds, merged with history kept. **Health/damage:** `takeHit(damage)`, an `hp` per
+  `ASTEROID_KIND` (1 for both kinds), a `DAMAGE` table (normal/homing/railgun all 1), and the
+  solver now counts *clear damage* (a splitter = 1 + 2 children = 3). Every wave's solver output
+  was byte-identical before and after. Rocks with max hp > 1 show code-drawn cracks plus a white
+  hit flash, which nothing in the run uses yet. spec §5/§7 synced. **Controls v2:** one thumb aims
+  on a pad (`arc`: thumb direction is the aim; `?aim=drag`: sideways motion turns it), and the
+  other holds FIRE (release fires at `SLING.maxSpeed`; held ≥ `CHARGE.fullMs` it fires the
+  railgun) or HOME (shows the lock ring while held; release fires homing, never charged).
+  Launchers stay at the old anchors, HUDs move to the centre column, the homing toggles are
+  hidden, `activePointers` goes 3 → 6, and the geometry lives in `CONTROLS_V2` (`layout.ts`).
+  `?controls=sling` keeps today's game; `?controls`/`?aim`/`?lefty` are remembered in
+  localStorage for the installed PWA. The shelf page `prototype/controls-v2.html` links every
+  variant. `playwright.config.ts` takes `PW_PORT` so parallel worktrees don't share a dev
+  server. The e2e cases drive real multi-touch through CDP `Input.dispatchTouchEvent`, which
+  Phaser 3.90 processes synchronously even with the RAF loop parked. A `touchMove` that omits a
+  finger does *not* lift it; it needs a `touchEnd` carrying only that finger. typecheck, build,
+  and all 16 tests are green, 48/48 at `--repeat-each=3`. Deployed to the Workers preview only;
+  `main`/Pages untouched. The controls design stays out of spec.md until the Pixel 6 playtest
+  accepts it: arc vs drag, thumb clearance vs HUD/launcher, can the 5yo hold to charge, is HOME
+  a good assist.
+
 - **Whole-repo simplify pass (2026-11-01):** a background `/simplify` session ran over all the
   code in an orphan worktree, and its changes were reviewed hunk by hunk before being applied.
   Behaviour is unchanged. Removed the dead code B34 left behind: `BOSS.exposedMs` and
