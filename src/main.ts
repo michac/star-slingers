@@ -47,9 +47,10 @@ function boot(): void {
       default: 'arcade',
       arcade: { gravity: { x: 0, y: 0 } },
     },
-    // Two thumbs + one spare; Phaser's default is 2 total, which drops the
-    // second simultaneous touch.
-    input: { activePointers: 3 },
+    // Touch pointers to track at once: controls v2 (#7) is two thumbs per seat,
+    // so four thumbs + two spares (a resting palm, a stray finger). Phaser's
+    // default is 1, which drops every simultaneous touch after the first.
+    input: { activePointers: 6 },
     scene: [SandboxScene],
   });
 

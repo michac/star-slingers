@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Controls v2 (#7) — variant picker</title>
+  <!-- One dir deeper than the game root → fonts live at ../fonts -->
+  <link rel="preload" as="font" type="font/woff2" href="../fonts/Audiowide-Regular.woff2" crossorigin />
+  <style>
+    @font-face {
+      font-family: "Audiowide";
+      src: url('../fonts/Audiowide-Regular.woff2') format('woff2');
+      font-display: swap;
+    }
+    :root { --bg: #0a0626; --ink: #fdf4ff; --muted: #9d7fd6; --p1: #38f6ff; --p2: #ffb13b; --card: #160f3a; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+    body { font-family: "Audiowide", system-ui, sans-serif; padding: 24px 16px 40px; -webkit-text-size-adjust: 100%; }
+    h1 { font-size: 20px; margin: 0 0 8px; color: var(--p1); }
+    p { font-size: 12px; line-height: 1.55; color: var(--muted); margin: 0 0 18px; }
+    h2 { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+    ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+    a {
+      display: block; padding: 20px 18px; border-radius: 14px; background: var(--card);
+      border: 1px solid rgba(56, 246, 255, 0.3); color: var(--ink); text-decoration: none; font-size: 16px;
+    }
+    a:active { transform: scale(0.99); }
+    a small { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }
+    a.old { border-color: rgba(255, 177, 59, 0.35); }
+  </style>
+</head>
+<body>
+  <h1>Controls v2 — pick a variant</h1>
+  <p>
+    Each link opens the game with that variant. The choice is saved on this phone, so the
+    home-screen app keeps it until you pick another. FIRE: hold to charge, release to shoot.
+    HOME: hold to see the lock, release for a homing shot.
+  </p>
+
+  <h2>Two-thumb</h2>
+  <ul>
+    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=none">Arc aim<small>thumb direction on the pad sets the aim</small></a></li>
+    <li><a href="../?controls=v2&amp;aim=drag&amp;lefty=none">Drag aim<small>slide sideways anywhere on your right to turn the aim</small></a></li>
+  </ul>
+
+  <h2>Left-handed (pad on the left, buttons on the right)</h2>
+  <ul>
+    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=p1">Arc, top seat lefty</a></li>
+    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=p2">Arc, bottom seat lefty</a></li>
+    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=both">Arc, both seats lefty</a></li>
+    <li><a href="../?controls=v2&amp;aim=drag&amp;lefty=both">Drag, both seats lefty</a></li>
+  </ul>
+
+  <h2>Old controls</h2>
+  <ul>
+    <li><a class="old" href="../?controls=sling">Slingshot (pull and release)<small>today's game, with the homing switches</small></a></li>
+  </ul>
+</body>
+</html>

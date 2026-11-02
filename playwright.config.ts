@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Dev-server port. Override with PW_PORT when another worktree's suite may be
+// running on 5181 (reuseExistingServer would otherwise hit ITS server).
+const PORT = Number(process.env.PW_PORT ?? 5181);
+
 /**
  * Playwright Test config for Star Slingers. Drives the game in a Pixel-6-sized
  * touch viewport and auto-starts the Vite dev server. Runner-only (no
@@ -21,7 +25,7 @@ export default defineConfig({
     // Dedicated test port (5181, distinct from reflex's 5180) so both suites
     // can run without colliding, and so the suite never picks up an unrelated
     // Vite dev server already on 5173.
-    baseURL: 'http://localhost:5181',
+    baseURL: `http://localhost:${PORT}`,
     ...devices['Desktop Chrome'],
     // Logical FIT game size, so canvas coords == page coords.
     viewport: { width: 360, height: 740 },
@@ -35,8 +39,8 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'npm run dev -- --port 5181 --strictPort',
-    url: 'http://localhost:5181',
+    command: `npm run dev -- --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
   },
 });
