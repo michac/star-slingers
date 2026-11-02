@@ -8,7 +8,7 @@
 import Phaser from 'phaser';
 import { COLORS, CSS } from '../tokens';
 import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, HUD_P1, HUD_P2, P1_ANCHOR, P2_ANCHOR, STARS, STATION } from '../layout';
-import { controlsVariant, isLefty } from '../controlsVariant';
+import { controlsVariant, isLefty, playerCount } from '../controlsVariant';
 import { generateTextures, TEX } from '../objects/textures';
 import { SlingControl } from '../objects/SlingControl';
 import { TwoThumbControl } from '../objects/TwoThumbControl';
@@ -102,7 +102,8 @@ export class SandboxScene extends Phaser.Scene {
       banner,
       () => this.bossEncounter.start(),
       (x, y, r) => this.explosions.boom(x, y, r),
-      () => this.explosions.starShower() // B7: wave-clear celebration
+      () => this.explosions.starShower(), // B7: wave-clear celebration
+      playerCount(variant)
     );
     this.asteroids = this.waveDirector.asteroids;
 

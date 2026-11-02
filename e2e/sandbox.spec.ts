@@ -35,8 +35,17 @@
  * evaluate, so a 200-frame window is one round-trip, not one per frame.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { ASTEROID_KIND, clearDamage, solveWave } from '../src/waves';
-import { SLING } from '../src/layout';
+import {
+  ASTEROID_KIND,
+  breakEvenAccuracy,
+  clearDamage,
+  requiredDamagePerSec,
+  SOLO,
+  solveWave,
+  waveTarget,
+  WAVES,
+} from '../src/waves';
+import { AMMO_REGEN_MS, SLING } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -236,6 +245,18 @@ test('wave solver uses only standards and three-hit splitters', () => {
   expect(specs.every((spec) => spec.radius === ASTEROID_KIND[spec.kind].radius)).toBe(true);
   const cost = specs.reduce((sum, spec) => sum + clearDamage(spec), 0);
   expect(cost).toBeGreaterThan(specs.length); // a splitter contributes 3, not 2
+});
+
+test('solo scales wave targets; two-player targets are untouched', () => {
+  // SOLO.requiredScale ships at 1.0, so drive the wiring with an explicit scale.
+  for (const w of WAVES) {
+    expect(waveTarget(w, 2, 0.5)).toBe(w.required);
+    expect(waveTarget(w, 1, 0.5)).toBeCloseTo(w.required * 0.5, 10);
+    expect(waveTarget(w, 1)).toBeCloseTo(w.required * SOLO.requiredScale, 10);
+    // Break-even is over the seats in play: one player's ammo ceiling in solo.
+    expect(breakEvenAccuracy(w, 1)).toBeCloseTo(requiredDamagePerSec(w, 1) / (1000 / AMMO_REGEN_MS), 10);
+    expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * (1000 / AMMO_REGEN_MS)), 10);
+  }
 });
 
 test('off-axis homing shot curves in', async ({ page }) => {

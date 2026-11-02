@@ -52,9 +52,11 @@ export class WaveDirector {
     /** The shared asteroid burst (B29), forwarded into every Asteroid. */
     private readonly boom: (x: number, y: number, radius: number) => void,
     /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
-    private readonly celebrate: () => void
+    private readonly celebrate: () => void,
+    /** Seats in play (?players): solo scales each wave's target (SOLO in waves.ts). */
+    private readonly players: 1 | 2
   ) {
-    const specs1 = asteroidsFor(WAVES[0]);
+    const specs1 = asteroidsFor(WAVES[0], this.players);
     // One wrapper per physical lane slot, alive for the whole run (later
     // waves field more lanes than wave 1); slots without a wave-1 spec get a
     // weak default and stay parked until a wave fields them.
@@ -155,7 +157,7 @@ export class WaveDirector {
   private startWave(index: number): void {
     this.waveIndex = index;
     const wave = WAVES[index];
-    const specs = asteroidsFor(wave);
+    const specs = asteroidsFor(wave, this.players);
     this.quotaRemaining = wave.quota;
     this.station.setShieldRegenMs(wave.shieldRegenMs);
     for (const hud of this.huds) hud.setWave(this.waveNumber);
