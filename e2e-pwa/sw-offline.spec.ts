@@ -26,6 +26,17 @@ async function redirectedInCache(page: Page): Promise<string[]> {
   });
 }
 
+/** How many cached entries share this URL's path, whatever their query string. */
+async function cachedVariants(page: Page, path: string): Promise<number> {
+  return page.evaluate(async (url) => {
+    let n = 0;
+    for (const name of await caches.keys()) {
+      n += (await (await caches.open(name)).matchAll(url, { ignoreSearch: true })).length;
+    }
+    return n;
+  }, path);
+}
+
 /** Wait until the game has booted and drawn its canvas. */
 async function expectGameBooted(page: Page): Promise<void> {
   await page.waitForFunction(
@@ -71,6 +82,17 @@ test('service worker survives redirects and boots the game offline', async ({ pa
   await test.step('/prototype/glow-lab.html redirects to /prototype/glow-lab', async () => {
     await page.goto('/prototype/glow-lab.html');
     await expect(page).toHaveURL('/prototype/glow-lab');
+    await expect(page).toHaveTitle(/Glow Lab/);
+  });
+
+  // Every query variant is the same static HTML, so the SW keeps one entry per path:
+  // a stale `/?boss` copy can never shadow the fresh `/` offline.
+  await test.step('/?boss then / leaves one cached entry for /', async () => {
+    await page.goto('/?boss');
+    await expectGameBooted(page);
+    await page.goto('/');
+    await expectGameBooted(page);
+    expect(await cachedVariants(page, '/')).toBe(1);
   });
 
   // The test's context is discarded afterwards, so it never has to go back online.
@@ -93,6 +115,16 @@ test('service worker survives redirects and boots the game offline', async ({ pa
   // online visits above too.
   await test.step('no cached response came through a redirect', async () => {
     expect(await redirectedInCache(page)).toEqual([]);
+  });
+
+  // A page never visited online has nothing cached. The browser must show its own
+  // offline error, not the game shell, whose relative ./assets/ URLs would break
+  // under /prototype/. The browser logs that failed load, so this step's console
+  // errors are expected and dropped. Last, because the error page has no caches API.
+  await test.step('offline: a never-visited /prototype/ page fails to load', async () => {
+    const before = errors.length;
+    await expect(page.goto('/prototype/boss-command-lab')).rejects.toThrow();
+    errors.length = before;
   });
 
   expect(errors).toEqual([]);

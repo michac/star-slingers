@@ -113,8 +113,10 @@ textures, tokens).
   `wrangler dev` (local, no Cloudflare login, and it redirects `/index.html` → `/` and `x.html` → `x`
   like the real host, which `vite preview` doesn't). Then, in **Chromium and WebKit** (the engine of
   every iPhone browser), it lets the service worker take control, walks the redirecting URLs and the
-  `/prototype/` shelf, and asserts that no cached response came through a redirect. Offline, it
-  reloads `/` and opens `/?controls=v2`, and the game must boot both times. Zero console errors.
+  `/prototype/` shelf, and asserts that `/?boss` and `/` share one cached entry and that no cached
+  response came through a redirect. Offline, it reloads `/` and opens `/?controls=v2`, and the game
+  must boot both times. A never-visited `/prototype/` page must fail to load rather than serve the
+  game shell. Zero console errors.
   Run it after touching `public/sw.js`, `wrangler.jsonc` or how the site is hosted. Its server port
   is 5182; set `PWA_PORT` when another tree may be running it. First run on a new machine needs
   `npx playwright install webkit`.
