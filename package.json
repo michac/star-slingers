@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e-pwa",
     "test": "playwright test",
     "deploy": "node deploy.mjs",
     "deploy:prototype": "node deploy-prototype.mjs",
-    "deploy:preview": "node deploy-preview.mjs"
+    "deploy:preview": "node deploy-preview.mjs",
+    "test:pwa": "npm run build && playwright test -c playwright.pwa.config.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0"

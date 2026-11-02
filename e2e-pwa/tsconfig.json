@@ -1,0 +1,8 @@
+{
+  // Type-checks the service-worker check (#10) and its Playwright config. A
+  // separate project from the root tsconfig because these run under Node
+  // (`process`), and TS 6 includes no @types by default.
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": [".", "../playwright.pwa.config.ts"]
+}
