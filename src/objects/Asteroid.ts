@@ -1,6 +1,7 @@
 /**
  * Asteroid — a drifting target: a bare physics Sprite (B37: size alone
- * tells standards from splitters, so there's no label). Pops on a hit, then asks the
+ * tells standards from splitters, so there's no label). Pops once its hp runs
+ * out (1 hp for every kind today, so any hit pops it), then asks the
  * WaveDirector for respawn permission (the wave's finite quota); denied
  * respawns park it inactive instead. The wrapper itself is NEVER destroyed
  * or recreated — the scene's rocket→asteroid overlap collider is built once
@@ -9,8 +10,14 @@
  */
 import Phaser from 'phaser';
 import { APPROACH_X, GAME_WIDTH, SCORE, SPLITTER_CHILDREN, STATION } from '../layout';
-import { ASTEROID_KIND, type AsteroidSpec } from '../waves';
-import { TEX } from './textures';
+import { COLORS } from '../tokens';
+import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
+import { ASTEROID_CRACK_STAGES, ensureAsteroidCracks, TEX } from './textures';
+
+/** A non-lethal hit flashes the rock white this long, so a shot that chips a
+ *  tough rock never reads as "my shot didn't work". Counted on update()'s delta
+ *  (not a tween/timer), so it stays in lockstep with the e2e stepped clock. */
+const HIT_FLASH_MS = 70;
 
 export class Asteroid {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -27,6 +34,10 @@ export class Asteroid {
   private aliveMs = 0;
   /** Child spawn grace: body stays off until aliveMs passes this. */
   private graceUntilMs = 0;
+  /** Current hp; reset to the spec's max on every (re)field. */
+  private _hp = 1;
+  /** Remaining white hit-flash time (non-lethal hits only). */
+  private flashMs = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -68,6 +79,11 @@ export class Asteroid {
     return this.active;
   }
 
+  /** Current hp (the e2e suite's asteroidHp() hook reads it). */
+  get hp(): number {
+    return this._hp;
+  }
+
   /** Splitter children move fast on spawn — the e2e suite's
    *  childrenAlive() hook counts them. */
   get isChild(): boolean {
@@ -82,7 +98,7 @@ export class Asteroid {
     this.spawnGapMax = spawnGapMax;
     this.child = false; // defensive: lane reconfigure clears any child identity
     this.aliveMs = 0;
-    this.sprite.setTexture(TEX.asteroid(spec.radius));
+    this.resetHp(); // also restores the undamaged texture
     (this.sprite.body as Phaser.Physics.Arcade.Body).setCircle(spec.radius);
     this.park();
   }
@@ -112,6 +128,7 @@ export class Asteroid {
     this.funnelling = false;
     this.aliveMs = 0;
     this.graceUntilMs = SPLITTER_CHILDREN.spawnGraceMs;
+    this.resetHp();
     this.sprite.setVisible(true).setScale(1).setAlpha(1).setPosition(x, y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y); // resets position AND zeroes velocity — set velocity AFTER
@@ -121,6 +138,10 @@ export class Asteroid {
 
   update(delta: number): void {
     if (!this.active || this.popping) return;
+    if (this.flashMs > 0) {
+      this.flashMs -= delta;
+      if (this.flashMs <= 0) this.sprite.clearTint();
+    }
     if (this.child) {
       this.aliveMs += delta;
       // Spawn grace: keep the body off briefly so an in-flight railgun (whose
@@ -153,18 +174,49 @@ export class Asteroid {
     this.pop();
   }
 
-  /** A rocket hit. Returns points on its immediate one-hit pop. Scoring is
+  /** A rocket hit dealing `damage`. Returns points when it kills the rock (hp
+   *  ≤ 0 → pop), else 0 and shows damage (cracks + a white flash). Scoring is
    *  driven purely from here — consume() (station-reached) calls pop() directly
    *  and never scores. */
-  takeHit(): number {
+  takeHit(damage: number): number {
     if (this.popping || !this.active) return 0;
     if (this.child && this.aliveMs < this.graceUntilMs) return 0; // spawn grace
+    this._hp -= damage;
+    if (this._hp > 0) {
+      this.showDamage();
+      return 0;
+    }
     this.pop();
     return this._spec.kind === 'splitter' ? SCORE.splitter : SCORE.standard;
   }
 
+  /** Full hp for the current spec, undamaged look. Multi-hp rocks make sure
+   *  their crack stages exist (generated once per radius, cached on the Game). */
+  private resetHp(): void {
+    const maxHp = maxHpOf(this._spec);
+    this._hp = maxHp;
+    this.flashMs = 0;
+    this.sprite.clearTint();
+    this.sprite.setTexture(TEX.asteroid(this._spec.radius));
+    if (maxHp > 1) ensureAsteroidCracks(this.scene, this._spec.radius);
+  }
+
+  /** Non-lethal hit feedback. Only reachable when max hp > 1, so today's
+   *  1-hp rocks look exactly as before. Cracks step up with hp lost; the hp-1
+   *  "about to break" state always shows the full crack set. */
+  private showDamage(): void {
+    const maxHp = maxHpOf(this._spec);
+    const lost = maxHp - this._hp;
+    const stage = Math.min(ASTEROID_CRACK_STAGES, Math.ceil((lost * ASTEROID_CRACK_STAGES) / (maxHp - 1)));
+    this.sprite.setTexture(TEX.asteroidCracked(this._spec.radius, stage));
+    this.sprite.setTintFill(COLORS.white);
+    this.flashMs = HIT_FLASH_MS;
+  }
+
   private pop(): void {
     this.popping = true;
+    this.flashMs = 0;
+    this.sprite.clearTint(); // a mid-flash kill pops in its real colors
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;
@@ -192,6 +244,7 @@ export class Asteroid {
 
   private respawn(): void {
     const { radius, y, speed } = this._spec;
+    this.resetHp(); // a cracked rock that reached the station comes back whole
     this.active = true;
     this.popping = false;
     this.funnelling = false; // back to lane phase

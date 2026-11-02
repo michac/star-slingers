@@ -32,6 +32,9 @@ export const COLORS = {
   hullWindow: 0xbffcff, // .hull-window
   rockFill: 0x2a0e3e, // .rock interior (wireframe rock was stroke-only)
   crater: 0xff7ab3, // .crater
+  // Damage cracks on a multi-hp rock (only drawn when max hp > 1): the bright
+  // ink white, so a chipped rock reads as "breaking" against its dark fill.
+  rockCrack: 0xfdf4ff, // == ink
   star: 0xbfefff, // .star (bright cyan-white, was lineDim)
 
   // The 3-ring shield maps onto the #neon-shield gradient stops (outer→inner).
@@ -72,6 +75,7 @@ export const STROKES = {
   trajectory: { width: 2, alpha: 0.85, dash: 2, gap: 7 }, // .trajectory
   rock: { width: 2.5 }, // .rock
   crater: { width: 1.5 }, // .crater
+  rockCrack: { width: 1.6 }, // damage cracks on a multi-hp rock
   // Solid (not dashed) shield rings: 3 nested dashed circles read as noise.
   shield: { width: 5, alpha: 0.9 },
   hull: { width: 2 },

@@ -5,27 +5,51 @@
  * budget/solver math that turns a target into a concrete asteroid field.
  *
  * The model (see spec.md §7 "Difficulty"): a wave is a TARGET — the net team
- * hits/s it should demand — and `solveWave` realizes it by advancing knobs in
- * priority order (count → speed → toughness) until the field's threat hits the
- * target. Geometry/paint live in layout.ts; this file only imports the few
- * constants the budget math needs.
+ * damage/s it should demand — and `solveWave` realizes it by advancing knobs in
+ * priority order (count → speed → toughness) until the field's threat meets the
+ * target. Every shot deals 1 damage today (`DAMAGE`), so damage/s == hits/s.
+ * Geometry/paint live in layout.ts; this file only imports the few constants
+ * the budget math needs.
  */
-import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, STATION } from './layout';
+import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, SPLITTER_CHILDREN, STATION } from './layout';
 
 export interface AsteroidSpec {
   kind: AsteroidKind;
   radius: number;
   y: number; // drift lane, kept clear of both sling zones
   speed: number; // px/s, right -> left
+  /** Max hp override (tests / future tuning); defaults to ASTEROID_KIND[kind].hp. */
+  hp?: number;
 }
 
-/** A splitter takes one rocket hit, then adds two standard children: three
- * required hits to clear it completely. */
+/** Both kinds pop on one point of damage today. A splitter then adds two
+ * standard children, so clearing it completely takes 3 damage (clearDamage). */
 export type AsteroidKind = 'standard' | 'splitter';
 export const ASTEROID_KIND = {
-  standard: { radius: 13, threatHits: 1 },
-  splitter: { radius: 17, threatHits: 3 },
-} as const satisfies Record<AsteroidKind, { radius: number; threatHits: number }>;
+  standard: { radius: 13, hp: 1 },
+  splitter: { radius: 17, hp: 1 },
+} as const satisfies Record<AsteroidKind, { radius: number; hp: number }>;
+
+/** Damage per rocket hit, by shot type — the dial for future shot types
+ *  (e.g. a railgun that hits harder). All 1 today, so every rock still pops on
+ *  any hit and the solver's damage/s equals the old hits/s exactly. */
+export const DAMAGE = {
+  normal: 1,
+  homing: 1,
+  railgun: 1,
+} as const;
+
+/** A rock's max hp: its spec override, else its kind's default. */
+export function maxHpOf(spec: AsteroidSpec): number {
+  return spec.hp ?? ASTEROID_KIND[spec.kind].hp;
+}
+
+/** Total damage to clear a rock completely — a splitter includes the hp of the
+ *  standard children it releases (1 + 2 × 1 = 3 today). */
+export function clearDamage(spec: AsteroidSpec): number {
+  const children = spec.kind === 'splitter' ? SPLITTER_CHILDREN.count * ASTEROID_KIND.standard.hp : 0;
+  return maxHpOf(spec) + children;
+}
 
 /** Physical lanes — position + base speed only. Toughness and size are NOT
  *  fixed here; the solver assigns them per wave. The floor (minLanes) uses
@@ -52,11 +76,11 @@ export const DIFFICULTY_MODEL = {
   spawnGapMax: 300,
 } as const;
 
-/** A wave is just its difficulty TARGET (required team hits/s — the budget
+/** A wave is just its difficulty TARGET (required team damage/s — the budget
  *  scalar, now the input) plus length (quota) and shield regen. The solver
  *  derives the asteroid composition. */
 export interface WaveConfig {
-  required: number; // target net hits/s players must land (see spec.md §7)
+  required: number; // target net damage/s players must land (see spec.md §7)
   quota: number; // total asteroids this wave fields, then respawns stop
   shieldRegenMs: number; // a ring regrows after this long unhit; 0 = off
 }
@@ -111,27 +135,28 @@ export const BOSS = {
 } as const;
 
 // ---- difficulty budget + solver (see spec.md "Difficulty") ----
-// threat = sum of hits*speed/travel; leak = what shield regen forgives;
-// required = threat - leak is THE scalar. The solver INVERTS it: given a
-// target required, pick knobs (in priority order) so threat hits the target.
+// threat = sum of clearDamage*speed/travel; leak = what shield regen forgives;
+// required = threat - leak is THE scalar (damage/s; == hits/s while DAMAGE is
+// all 1). The solver INVERTS it: given a target required, pick knobs (in
+// priority order) so threat meets the target.
 // An approximation — consistency matters more than precision.
 
 /** Average spawn -> shield-contact travel distance (lane radius cancels). */
 const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (STATION.cx + SHIELD_RINGS[0]);
 
 /**
- * Gross accurate hits/s a concrete field demands, sustained.
+ * Gross accurate damage/s a concrete field demands, sustained.
  *
- * A splitter includes the threat of its two standard children: three required
- * hits total. The calibrated targets (0.30/0.45/0.60/0.75) stay as-is for the
+ * A splitter includes the threat of its two standard children (clearDamage):
+ * three required damage total. The calibrated targets (0.30/0.45/0.60/0.75) stay as-is for the
  * first B37 phone playtest.
  */
 function threatOf(specs: AsteroidSpec[]): number {
-  return specs.reduce((sum, a) => sum + (ASTEROID_KIND[a.kind].threatHits * a.speed) / TRAVEL_DIST, 0);
+  return specs.reduce((sum, a) => sum + (clearDamage(a) * a.speed) / TRAVEL_DIST, 0);
 }
 
 /**
- * solveWave — realize a target `required` hits/s as a concrete field by
+ * solveWave — realize a target `required` damage/s as a concrete field by
  * advancing knobs in priority order until threat reaches `required + leak`:
  *   1. (count)     lanes minLanes -> maxLanes, weak + slow
  *   2. (speed)     speedScale minSpeedScale -> maxSpeedScale
@@ -172,22 +197,23 @@ export function asteroidsFor(wave: WaveConfig): AsteroidSpec[] {
   return solveWave(wave.required, leakAllowancePerSec(wave));
 }
 
-/** Accurate hits/s a wave actually demands (post-solve). */
-export function threatHitsPerSec(wave: WaveConfig): number {
+/** Accurate damage/s a wave actually demands (post-solve). */
+export function threatDamagePerSec(wave: WaveConfig): number {
   return threatOf(asteroidsFor(wave));
 }
 
-/** Hits/s the wave's shield regen forgives forever. */
+/** Damage/s (missed hits) the wave's shield regen forgives forever. */
 export function leakAllowancePerSec(wave: WaveConfig): number {
   return wave.shieldRegenMs > 0 ? 1000 / wave.shieldRegenMs : 0;
 }
 
-/** THE difficulty scalar: accurate team hits/s actually required (achieved). */
-export function requiredHitsPerSec(wave: WaveConfig): number {
-  return Math.max(0, threatHitsPerSec(wave) - leakAllowancePerSec(wave));
+/** THE difficulty scalar: accurate team damage/s actually required (achieved). */
+export function requiredDamagePerSec(wave: WaveConfig): number {
+  return Math.max(0, threatDamagePerSec(wave) - leakAllowancePerSec(wave));
 }
 
-/** Fraction of the two players' ammo ceiling that must land. */
+/** Fraction of the two players' damage ceiling (ammo rate × a normal shot's
+ *  damage) that must land. */
 export function breakEvenAccuracy(wave: WaveConfig): number {
-  return requiredHitsPerSec(wave) / (2 * (1000 / AMMO_REGEN_MS));
+  return requiredDamagePerSec(wave) / (2 * (1000 / AMMO_REGEN_MS) * DAMAGE.normal);
 }

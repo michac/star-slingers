@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredHitsPerSec, WAVES } from './waves';
+import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredDamagePerSec, WAVES } from './waves';
 import { COLORS } from './tokens';
 import { SandboxScene } from './scenes/SandboxScene';
 
@@ -14,7 +14,7 @@ if (import.meta.env.DEV) {
     const speedScale = (specs[0].speed / LANE_SLOTS[0].baseSpeed).toFixed(2);
     console.log(
       `wave ${i + 1}: target ${w.required.toFixed(2)} -> achieved ` +
-        `${requiredHitsPerSec(w).toFixed(2)} required hits/s ` +
+        `${requiredDamagePerSec(w).toFixed(2)} required damage/s ` +
         `[lanes ${specs.length}, speed x${speedScale}, splitters ${splitters}], ` +
         `break-even ${(breakEvenAccuracy(w) * 100).toFixed(0)}%, quota ${w.quota}`
     );
