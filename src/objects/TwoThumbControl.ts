@@ -8,6 +8,8 @@
  *  - HOME: while held, rings the rock the shot would lock; release fires a
  *    homing shot. Never charges.
  *  - One button at a time: while either is held, a press on the other is ignored.
+ *  - Haptics (#3): each shot fired buzzes by its kind, and FIRE ticks once the
+ *    moment its charge fills (HAPTICS dials, src/haptics.ts).
  *  - Aim pad, `arc` mode: thumb direction from the pad centre sets the aim
  *    (outside a small deadzone). `drag` mode: sideways motion anywhere in the aim
  *    zone turns the aim. Both clamp to CONTROLS_V2.aim; aim persists.
@@ -21,8 +23,9 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, SLING } from '../layout';
+import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, SLING } from '../layout';
 import type { AimMode } from '../controlsVariant';
+import { buzz, shotBuzz } from '../haptics';
 import { drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
 import type { SeatControl } from './SeatControl';
 
@@ -167,12 +170,16 @@ export class TwoThumbControl implements SeatControl {
     if (!this.config.canFire()) return;
     const dir = this.worldDir();
     const { anchor } = this.config;
+    shotBuzz(kind);
     this.config.onFire(anchor.x, anchor.y, dir.x * SLING.maxSpeed, dir.y * SLING.maxSpeed, kind);
   }
 
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
-    if (this.held === 'fire') this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
+    if (this.held === 'fire' && this.charge < 1) {
+      this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
+      if (this.charge >= 1) buzz(HAPTICS.armedMs); // the frame it arms: once per hold
+    }
     // Out of ammo dims the nocked rocket (cheap; ammo regens on its own clock).
     this.nockedRocket.setAlpha(this.config.canFire() ? 1 : 0.35);
     const active = this.held !== null || this.aimPointer !== null;
