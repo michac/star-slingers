@@ -227,6 +227,7 @@ export class SandboxScene extends Phaser.Scene {
         shieldLinks: () => this.bossEncounter.shieldLinkCount,
         bossCharge: () => this.bossEncounter.chargeFraction,
         webBlocks: (ax: number, ay: number, bx: number, by: number) => this.bossEncounter.debugWebBlocks(ax, ay, bx, by),
+        webLinks: () => this.bossEncounter.debugWebLinks(),
         stationShield: () => this.station.shieldHitsLeft,
       };
     }
