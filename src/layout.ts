@@ -361,6 +361,17 @@ export const CONTROLS_V2 = {
   hudLefty: { x: 116, y: 670 },
 } as const;
 
+/** Phone vibration (#3), in ms; starting values, to tune on the Pixel 6: a buzz
+ *  per shot fired (controls v2 FIRE/HOME and the sling alike) and, v2 only, a
+ *  tick the moment FIRE is fully charged with ammo to fire. Pulses of 15ms or less can be imperceptible on some
+ *  Android motors. See src/haptics.ts. */
+export const HAPTICS = {
+  shotMs: 20,
+  homingMs: 25,
+  railgunMs: 40,
+  armedMs: 20,
+} as const;
+
 /** Mock HUD group row offsets (local y): WAVE 0, SCORE 20, AMMO 40. */
 export const HUD_ROWS = {
   wave: 0,
