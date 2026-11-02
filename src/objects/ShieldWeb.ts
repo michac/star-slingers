@@ -37,13 +37,16 @@ export class ShieldWeb {
     }
   }
 
-  /** True when the rocket's swept center crosses a live link. The small sweep
-   * avoids a high-speed shot slipping between adjacent Arcade physics frames. */
+  /** True when the rocket's swept center (previous frame's center → now) comes
+   * within the rocket's half-size + the web's half-width of a live link, i.e.
+   * the drawn rocket touches the drawn stroke. The sweep keeps a high-speed shot
+   * from slipping between adjacent Arcade physics frames. */
   blocks(rocket: Phaser.Physics.Arcade.Sprite): boolean {
     const body = rocket.body as Phaser.Physics.Arcade.Body;
-    const prev = body.prev;
+    // body.prev is the body's previous TOP-LEFT; shift it to the previous center.
+    const px = body.prev.x + body.halfWidth, py = body.prev.y + body.halfHeight;
     const r = Math.max(rocket.displayWidth, rocket.displayHeight) / 2; // blocksSegment adds the web's half-width
-    return this.blocksSegment(prev.x, prev.y, rocket.x, rocket.y, r);
+    return this.blocksSegment(px, py, rocket.x, rocket.y, r);
   }
 
   blocksSegment(ax: number, ay: number, bx: number, by: number, radius = 0): boolean {
