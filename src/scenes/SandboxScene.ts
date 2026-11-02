@@ -116,9 +116,10 @@ export class SandboxScene extends Phaser.Scene {
     }));
     const huds = seats.map((seat) => seat.hud);
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
-    const banner = new WaveBanner(this);
-    this.failOverlay = new Overlay(this, FAIL_CONFIG);
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG);
+    // Solo draws no banner/end-card copy toward the empty top seat either.
+    const banner = new WaveBanner(this, players);
+    this.failOverlay = new Overlay(this, FAIL_CONFIG, players);
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players);
 
     // The boss (B5) creates its boss + escort sprites up front (parked); the
     // run hands off to it after wave 4 (replacing the old victory seam).

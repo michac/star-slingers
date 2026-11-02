@@ -708,6 +708,10 @@ test('?controls=sling boots the old controls and is remembered', async ({ page }
 const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
 const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
 const hudCount = (page: Page) => page.evaluate(`${SCENE}.scoreKeeper.huds.length`) as Promise<number>;
+/** Per-seat copies of the wave banner's numeral / an end card's text. */
+const bannerCopies = (page: Page) => page.evaluate(`${SCENE}.waveDirector.banner.numerals.length`) as Promise<number>;
+const overlayCopies = (page: Page, which: 'failOverlay' | 'victoryOverlay') =>
+  page.evaluate(`${SCENE}.${which}.container.list.filter((o) => o.type === 'Text').length`) as Promise<number>;
 /** P1's spot for a P2 point: the top seat is P2's layout rotated 180° about the centre. */
 const mirrored = (p: Pt): Pt => ({ x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y });
 
@@ -717,6 +721,11 @@ test('solo (?players=1) keeps only the bottom seat, ignores the top, and is reme
   expect(await seats(page)).toEqual(['p2']);
   expect(await v2Layout(page, 1)).toBeNull();
   expect(await hudCount(page)).toBe(1);
+  // Nothing is drawn toward the empty top seat: one wave-banner copy, and one
+  // text copy on each end-of-round card.
+  expect(await bannerCopies(page)).toBe(1);
+  expect(await overlayCopies(page, 'failOverlay')).toBe(1);
+  expect(await overlayCopies(page, 'victoryOverlay')).toBe(1);
 
   // Touches where P1's FIRE, HOME and aim pad would be do nothing (and throw
   // nothing: afterEach gates on a clean console).
@@ -752,6 +761,8 @@ test('solo (?players=1) keeps only the bottom seat, ignores the top, and is reme
   expect(await seats(page)).toEqual(['p1', 'p2']);
   expect(await v2Layout(page, 1)).not.toBeNull();
   expect(await hudCount(page)).toBe(2);
+  expect(await bannerCopies(page)).toBe(2);
+  expect(await overlayCopies(page, 'failOverlay')).toBe(2);
 });
 
 test('solo with ?controls=sling: one sling, one homing toggle, the top seat ignored', async ({ page }) => {
