@@ -3,7 +3,12 @@
 // navigations (fresh deploys online, cached shell offline); cache-first for
 // other same-origin assets (hashed JS self-busts — new build = new filename).
 // Subpath- and base-agnostic: all URLs relative, scope = this file's directory.
-const CACHE = 'star-slingers-v1';                 // bump on SW changes
+// Never cache a redirected response: WebKit refuses to load a page answered with
+// one, and the Cloudflare host redirects x.html → x (see wrangler.jsonc). So no
+// HTML in PRECACHE. `npm run test:pwa` (e2e-pwa/sw-offline.spec.ts) enforces it.
+// Bump only when cached entries must be dropped: a bump deletes the old cache,
+// offline shell included, until the next online visit refills it.
+const CACHE = 'star-slingers-v1';
 const PRECACHE = [
   './manifest.webmanifest',
   './fonts/Audiowide-Regular.woff2',
@@ -25,7 +30,9 @@ self.addEventListener('fetch', (e) => {
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req)
       .then((r) => { if (cacheable(r)) { const c = r.clone(); caches.open(CACHE).then((x) => x.put(req, c)); } return r; })
-      .catch(() => caches.match(req).then((h) => h || caches.match('./index.html'))));
+      // Offline: this page as cached (any query string — `?controls=v2` is the same
+      // page), else the game shell. Navigations are cached under their own URL.
+      .catch(() => caches.match(req, { ignoreSearch: true }).then((h) => h || caches.match('./'))));
     return;
   }
   e.respondWith(caches.match(req).then((h) => h ||
