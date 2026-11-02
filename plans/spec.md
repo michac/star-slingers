@@ -106,7 +106,10 @@ and iPhone (iOS Safari), since it being a webpage is the whole point.
   the deliberate relative `base: './'` ("works from any static folder"), and its
   precache-manifest machinery solves a multi-chunk problem this single bundle doesn't
   have. All PWA URLs are relative so they resolve under the `…/star-slingers/`
-  subpath; the SW registers PROD-only (dev + the headless test suite never get one).
+  subpath; the SW registers PROD-only (dev and `npm test` never get one). `npm run test:pwa`
+  checks the production SW in Chromium and WebKit against the Cloudflare host's redirects: it never
+  caches a redirected response (WebKit refuses one), and the game boots offline, including at a
+  query-string URL like `?controls=v2`.
 
 ## 9. Final boss (B5, reworked by B34 2026-08-05)
 

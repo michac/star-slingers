@@ -88,7 +88,7 @@ textures, tokens).
 ## Game commands (from the repo root)
 
 - `npm run dev` — dev server, LAN-exposed for phone testing (see `README.md` for firewall notes)
-- `npm run build` / `npm run typecheck`
+- `npm run build` / `npm run typecheck` (typecheck also covers `e2e-pwa/` via its own tsconfig)
 - `npm test` — `@playwright/test` suite (`e2e/sandbox.spec.ts`): auto-starts the dev server
   headless on :5181, drives coordinate taps + direct shots, and asserts hits / score / homing /
   pierce / split / the boss charge-expose-recharge cycle / the `?boss` shortcut, gating every case
@@ -108,6 +108,16 @@ textures, tokens).
   against a live render loop stalls ~0.8s on the in-flight software frame (this alone took the boss case
   8s→1.7s). Parallel workers do *not* help — the one software-GL context is the bottleneck — so the
   config stays `workers: 1`.
+- `npm run test:pwa` — the **service-worker check** (`e2e-pwa/sw-offline.spec.ts`, its own
+  `playwright.pwa.config.ts`, so `npm test` never runs it; ~15s). Builds `dist/`, serves it with
+  `wrangler dev` (local, no Cloudflare login, and it redirects `/index.html` → `/` and `x.html` → `x`
+  like the real host, which `vite preview` doesn't). Then, in **Chromium and WebKit** (the engine of
+  every iPhone browser), it lets the service worker take control, walks the redirecting URLs and the
+  `/prototype/` shelf, and asserts that no cached response came through a redirect. Offline, it
+  reloads `/` and opens `/?controls=v2`, and the game must boot both times. Zero console errors.
+  Run it after touching `public/sw.js`, `wrangler.jsonc` or how the site is hosted. Its server port
+  is 5182; set `PWA_PORT` when another tree may be running it. First run on a new machine needs
+  `npx playwright install webkit`.
 - `npm run deploy` — **commit first** (it refuses a dirty tree), then it pushes `main`, watches the
   `deploy-pages.yml` Action, and verifies the live URL. Needs `gh` authed and a GitHub remote with
   Pages enabled. Docs-only commits (`plans/**`, `*.md`) don't trigger a deploy.

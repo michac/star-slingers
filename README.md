@@ -45,3 +45,6 @@ off the right edge. Ammo regens ~1 per 1.5 s up to 5.
 - `npm test` — `@playwright/test` suite (auto-starts the dev server headless on :5181 and asserts
   hits / score / homing / pierce / split / boss-cycle + zero console errors). First run on a new
   machine: `npx playwright install chromium`.
+- `npm run test:pwa` — service-worker check: builds, serves `dist/` with `wrangler dev` on :5182, and
+  checks redirects, cached responses and offline boot in Chromium + WebKit. Not part of `npm test`.
+  First run on a new machine: `npx playwright install webkit`.
