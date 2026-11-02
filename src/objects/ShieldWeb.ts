@@ -38,9 +38,11 @@ export class ShieldWeb {
   }
 
   /** True when the rocket's center, swept over this frame's motion, comes
-   * within the rocket's half-size + the web's half-width of a live link, i.e.
-   * the drawn rocket touches the drawn stroke. The sweep keeps a fast shot from
-   * slipping through a link between frames. */
+   * within the rocket's half-extent across a live link + the web's half-width,
+   * i.e. the drawn rocket touches the drawn stroke. The half-extent follows the
+   * rocket's rotation (7 nose-on, 4 side-on for the 8x14 rocket), so a glancing
+   * shot isn't stopped early. The sweep keeps a fast shot from slipping through
+   * a link between frames. */
   blocks(rocket: Phaser.Physics.Arcade.Sprite): boolean {
     const body = rocket.body as Phaser.Physics.Arcade.Body;
     // Arcade moves the body during the physics step but only copies it onto the
@@ -49,16 +51,30 @@ export class ShieldWeb {
     // TOP-LEFT at frame start (prev only covers the last of several steps), so
     // shift it to the center; body.center is already post-step.
     const px = body.prevFrame.x + body.halfWidth, py = body.prevFrame.y + body.halfHeight;
-    const r = Math.max(rocket.displayWidth, rocket.displayHeight) / 2; // blocksSegment adds the web's half-width
-    return this.blocksSegment(px, py, body.center.x, body.center.y, r);
+    // The texture's width runs along local x = (cos θ, sin θ) and its length
+    // along local y = (-sin θ, cos θ). Its half-extent along a link normal n is
+    // the support of that rotated box: halfW·|n·x| + halfH·|n·y|.
+    const cos = Math.cos(rocket.rotation), sin = Math.sin(rocket.rotation);
+    const halfW = rocket.displayWidth / 2, halfH = rocket.displayHeight / 2;
+    return this.sweepHits(px, py, body.center.x, body.center.y, (link) => {
+      const len = Math.hypot(link.bx - link.ax, link.by - link.ay) || 1;
+      const nx = -(link.by - link.ay) / len, ny = (link.bx - link.ax) / len;
+      return halfW * Math.abs(nx * cos + ny * sin) + halfH * Math.abs(-nx * sin + ny * cos);
+    });
   }
 
   /** True when the segment a→b, thickened by `sweptRadius`, touches a live
-   * link's drawn stroke. Adds the web's half-width itself; callers pass only
-   * the swept object's own radius. */
+   * link's drawn stroke. Callers pass only the swept object's own radius. */
   blocksSegment(ax: number, ay: number, bx: number, by: number, sweptRadius = 0): boolean {
-    const r = sweptRadius + this.width / 2;
-    return this.links.some((link) => segmentsWithin(ax, ay, bx, by, link.ax, link.ay, link.bx, link.by, r));
+    return this.sweepHits(ax, ay, bx, by, () => sweptRadius);
+  }
+
+  /** The one place the web's half-width is added: a→b hits a link when it
+   * comes within `radiusFor(link)` + width/2 of it. */
+  private sweepHits(ax: number, ay: number, bx: number, by: number, radiusFor: (link: Link) => number): boolean {
+    return this.links.some((link) =>
+      segmentsWithin(ax, ay, bx, by, link.ax, link.ay, link.bx, link.by, radiusFor(link) + this.width / 2)
+    );
   }
 
   get count(): number {

@@ -414,21 +414,25 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   await gotoGame(page);
 
   // A link stops a rocket exactly when the drawn rocket touches the drawn
-  // stroke: centre distance <= reach = rocket half-size + web width / 2 (#8).
-  // Each group fields real rockets on BOTH sides of all four links and runs ONE
-  // real frame; the scene's own global web check (recycleWhere ->
-  // BossEncounter.blocksRocket -> ShieldWeb.blocks) must spend exactly the
-  // probes marked blocked:
-  //  - clear / touch: stationary, 0.5 outside / inside reach. Both sides of
-  //    every diagonal link means some probe sits where a mis-anchored sweep
-  //    would point into the link.
-  //  - cross: starts 5 outside reach and flies straight through the link in
-  //    one 16ms step (30 units), ending outside reach on the far side, so only
-  //    a sweep over this frame's motion can catch it.
-  //  - graze: flies 20 units parallel to the link, 0.5 outside reach; the
-  //    sweep must not widen the reach.
-  // One frame turns the web ~0.3 deg, moving a probe's distance to its link by
-  // <= ~0.11 (graze, 10 units off-midpoint): under the 0.5 margins.
+  // stroke (#8): centre distance <= reach = the rocket's half-extent across the
+  // link + web width / 2. The 8x14 rocket reaches 7 nose-on (long axis along
+  // the link normal) but only 4 side-on (long axis along the link). Each group
+  // fields real rockets on BOTH sides of all four links, rotated nose-on or
+  // side-on to that link, and runs ONE real frame; the scene's own global web
+  // check (recycleWhere -> BossEncounter.blocksRocket -> ShieldWeb.blocks) must
+  // spend exactly the probes marked blocked:
+  //  - clear / touch: stationary nose-on, 0.5 outside / inside reach. Both
+  //    sides of every diagonal link means some probe sits where a mis-anchored
+  //    sweep would point into the link.
+  //  - side-clear / side-touch: the same, side-on.
+  //  - cross: nose-on, starts 5 outside reach and flies straight through the
+  //    link in one 16ms step (30 units), ending outside reach on the far side,
+  //    so only a sweep over this frame's motion can catch it.
+  //  - graze: side-on, flies 20 units parallel to the link 0.5 outside reach;
+  //    the sweep must not widen the reach.
+  // Links are re-read before each group's frame; one frame turns the web ~0.3
+  // deg, moving a probe's distance to its link by <= ~0.11 (graze, 10 units
+  // off-midpoint): under the 0.5 margins.
   await startBoss(page);
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
@@ -437,17 +441,23 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   const probe = await page.evaluate(() => {
     const w = window as any;
     const s = w.__game.scene.keys['Sandbox'];
-    const { width, links } = s.__debug.webLinks();
     const activeBefore = s.rockets.group.countActive(true);
     const wrong: string[] = [];
-    // (normal offset from reach, along-link offset, normal speed px/s toward the link, along speed px/s)
+    let linkCount = 0;
+    // off: centre offset beyond reach; along: offset along the link; vn: speed
+    // toward the link, vt: speed along it (px/s).
     const groups = [
-      { label: 'clear', blocked: false, off: 0.5, along: 0, vn: 0, vt: 0 },
-      { label: 'touch', blocked: true, off: -0.5, along: 0, vn: 0, vt: 0 },
-      { label: 'cross', blocked: true, off: 5, along: 0, vn: 1875, vt: 0 },
-      { label: 'graze', blocked: false, off: 0.5, along: -10, vn: 0, vt: 1250 },
+      { label: 'clear', facing: 'nose', blocked: false, off: 0.5, along: 0, vn: 0, vt: 0 },
+      { label: 'touch', facing: 'nose', blocked: true, off: -0.5, along: 0, vn: 0, vt: 0 },
+      { label: 'side-clear', facing: 'side', blocked: false, off: 0.5, along: 0, vn: 0, vt: 0 },
+      { label: 'side-touch', facing: 'side', blocked: true, off: -0.5, along: 0, vn: 0, vt: 0 },
+      { label: 'cross', facing: 'nose', blocked: true, off: 5, along: 0, vn: 1875, vt: 0 },
+      { label: 'graze', facing: 'side', blocked: false, off: 0.5, along: -10, vn: 0, vt: 1250 },
     ];
     for (const g of groups) {
+      // Re-read every group: each group's frame turns the web a little more.
+      const { width, links } = s.__debug.webLinks();
+      linkCount = links.length;
       const probes: { name: string; r: any }[] = [];
       for (const [i, l] of links.entries()) {
         const len = Math.hypot(l.bx - l.ax, l.by - l.ay);
@@ -456,7 +466,12 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
         const mx = (l.ax + l.bx) / 2, my = (l.ay + l.by) / 2;
         for (const side of [1, -1]) {
           const r = s.rockets.fire('rocket-p1', mx, my, 0, 0);
-          const d = Math.max(r.displayWidth, r.displayHeight) / 2 + width / 2 + g.off;
+          // The texture's long axis is local +y, which a rotation θ points
+          // along (-sin θ, cos θ): aim it along the normal (nose) or link (side).
+          const [ax, ay] = g.facing === 'nose' ? [nx, ny] : [tx, ty];
+          r.setRotation(Math.atan2(-ax, ay));
+          const half = (g.facing === 'nose' ? r.displayHeight : r.displayWidth) / 2;
+          const d = half + width / 2 + g.off;
           r.body.reset(mx + side * nx * d + tx * g.along, my + side * ny * d + ty * g.along);
           r.body.setVelocity(-side * nx * g.vn + tx * g.vt, -side * ny * g.vn + ty * g.vt);
           probes.push({ name: `link ${i} side ${side > 0 ? '+' : '-'} ${g.label}`, r });
@@ -469,7 +484,7 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
         if (r.active) s.rockets.recycle(r);
       }
     }
-    return { links: links.length, wrong, activeBefore, activeAfter: s.rockets.group.countActive(true) };
+    return { links: linkCount, wrong, activeBefore, activeAfter: s.rockets.group.countActive(true) };
   });
   expect(probe.links).toBe(4);
   expect(probe.wrong).toEqual([]);
