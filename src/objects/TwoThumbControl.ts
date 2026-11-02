@@ -8,8 +8,9 @@
  *  - HOME: while held, rings the rock the shot would lock; release fires a
  *    homing shot. Never charges.
  *  - One button at a time: while either is held, a press on the other is ignored.
- *  - Haptics (#3): FIRE ticks once the moment its charge fills (HAPTICS dials,
- *    src/haptics.ts). The per-shot buzz is the scene's, in fireRocket.
+ *  - Haptics (#3): FIRE ticks once the moment it's fully charged with ammo to
+ *    fire (HAPTICS dials, src/haptics.ts). The per-shot buzz is the scene's,
+ *    in fireRocket.
  *  - Aim pad, `arc` mode: thumb direction from the pad centre sets the aim
  *    (outside a small deadzone). `drag` mode: sideways motion anywhere in the aim
  *    zone turns the aim. Both clamp to CONTROLS_V2.aim; aim persists.
@@ -79,6 +80,8 @@ export class TwoThumbControl implements SeatControl {
   private held: Button | null = null;
   /** FIRE charge, 0→1 over CHARGE.fullMs of held game time. */
   private charge = 0;
+  /** This FIRE hold has already given its armed tick (#3). */
+  private armedBuzzed = false;
   /** Free-running ms clock for the armed pulse. */
   private elapsed = 0;
   /** Set when the resting picture changed and needs one more redraw. */
@@ -134,6 +137,7 @@ export class TwoThumbControl implements SeatControl {
       this.buttonPointer = pointer.id;
       this.held = button;
       this.charge = 0;
+      this.armedBuzzed = false;
       this.dirty = true;
       return;
     }
@@ -175,12 +179,16 @@ export class TwoThumbControl implements SeatControl {
 
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
-    if (this.held === 'fire' && this.charge < 1) {
-      this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
-      if (this.charge >= 1) buzz(HAPTICS.armedMs); // the frame it arms: once per hold
+    if (this.held === 'fire') this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
+    const canFire = this.config.canFire();
+    // Armed tick: once per hold, the first frame it's both fully charged AND
+    // has ammo (no "ready" buzz for a release that would fire nothing).
+    if (this.held === 'fire' && this.charge >= 1 && canFire && !this.armedBuzzed) {
+      this.armedBuzzed = true;
+      buzz(HAPTICS.armedMs);
     }
     // Out of ammo dims the nocked rocket (cheap; ammo regens on its own clock).
-    this.nockedRocket.setAlpha(this.config.canFire() ? 1 : 0.35);
+    this.nockedRocket.setAlpha(canFire ? 1 : 0.35);
     const active = this.held !== null || this.aimPointer !== null;
     if (!active && !this.dirty) return;
     this.dirty = false;

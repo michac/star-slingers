@@ -654,17 +654,28 @@ test('v2: haptics — FIRE ticks once on arming, each shot fired buzzes by kind'
   expect(await vibes(page)).toEqual([HAPTICS.armedMs, HAPTICS.railgunMs, HAPTICS.shotMs, HAPTICS.homingMs]);
   expect(await liveShots(page)).toHaveLength(3);
 
-  // A release that fires nothing (no ammo) doesn't buzz.
-  await page.evaluate(`${SCENE}.controls[1].config.canFire = () => false`);
+  // No ammo: a tap fires nothing and doesn't buzz, and a full charge gives no
+  // "ready" tick for a release that would fire nothing...
+  await page.evaluate(`${SCENE}.controls[1].config.canFire = () => window.__ammo`);
+  await page.evaluate(() => ((window as any).__ammo = false));
   await t.down(1, L.fire.x, L.fire.y);
   await stepGame(page, 16, 3);
   await t.up(1);
-  expect(await vibes(page)).toHaveLength(4); // a shot that did fire would have buzzed
+  await t.down(1, L.fire.x, L.fire.y);
+  await stepGame(page, 16, 45);
+  expect(await vibes(page)).toHaveLength(4);
+  // ...until ammo regens mid-hold: then it ticks, once.
+  await page.evaluate(() => ((window as any).__ammo = true));
+  await stepGame(page, 16, 10);
+  expect(await vibes(page)).toEqual([HAPTICS.armedMs, HAPTICS.railgunMs, HAPTICS.shotMs, HAPTICS.homingMs, HAPTICS.armedMs]);
+  await t.up(1);
+  expect(await liveShots(page)).toHaveLength(4);
 });
 
 // 'missing': no vibrate API (iPhone). 'unactivated': before the first tap
-// (Chrome blocks + logs it). Either way the shot still fires, nothing buzzes,
-// and the afterEach console gate proves nothing threw or logged.
+// (Chrome blocks + logs it). Either way the shot still fires and the afterEach
+// console gate proves nothing threw or logged; 'unactivated' also records that
+// nothing buzzed ('missing' has no recorder to check).
 for (const mode of ['missing', 'unactivated'] as const) {
   test(`v2: haptics — ${mode} vibrate is a silent no-op`, async ({ page }) => {
     await stubVibrate(page, mode);
@@ -675,7 +686,7 @@ for (const mode of ['missing', 'unactivated'] as const) {
     await stepGame(page, 16, 45); // through the armed tick
     await t.up(1);
     expect(await liveShots(page)).toHaveLength(1);
-    expect(await vibes(page)).toEqual([]);
+    if (mode === 'unactivated') expect(await vibes(page)).toEqual([]);
   });
 }
 
