@@ -18,10 +18,12 @@
     // `/prototype/` shelf resolve to their index.html ("none" 404s both, and the
     // SPA fallback would serve the game for /prototype/). The default redirects
     // /index.html → / and x.html → x, which is safe ONLY because public/sw.js
-    // never precaches HTML and never caches a redirect (cacheable() requires a
-    // basic 200). A service worker that caches a redirected HTML response breaks
-    // navigation on WebKit/iOS ("served by service worker has redirections"),
-    // which bit the card-games prototype. Don't add .html to the precache list.
+    // never precaches HTML and never caches a redirect (navigation fetches don't
+    // follow redirects, so cacheable() sees an opaqueredirect and skips it;
+    // addAll(PRECACHE) does follow them). A service worker that caches a
+    // redirected HTML response breaks navigation on WebKit/iOS ("served by
+    // service worker has redirections"), which bit the card-games prototype.
+    // Don't add .html to the precache list.
     // `npm run test:pwa` (e2e-pwa/sw-offline.spec.ts) enforces this in Chromium
     // and WebKit, against this config served by `wrangler dev`.
   }
