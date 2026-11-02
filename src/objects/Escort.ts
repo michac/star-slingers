@@ -26,7 +26,7 @@ export class Escort {
     /** Fired the instant this escort is destroyed (gate + interrupt). */
     private readonly onDestroyed: () => void,
     /** Solo (?players=1): both hits may come from the one seat (see takeHit). */
-    private readonly solo = false
+    private readonly solo: boolean
   ) {
     this.sprite = scene.physics.add
       .sprite(BOSS_LAYOUT.park.x, BOSS_LAYOUT.park.y, TEX.escort)

@@ -40,16 +40,27 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   return null;
 }
 
-/** One seat's wiring (P1 top edge, P2 bottom). */
-interface Seat {
+/** One seat's fixed wiring (P1 top edge, P2 bottom); `hudAt` is the sling-mode HUD spot. */
+interface SeatDef {
   player: PlayerId;
   anchor: { x: number; y: number };
   color: number;
+  colorCss: string;
   edge: 'top' | 'bottom';
   tex: string;
-  hud: PlayerHud;
+  hudAt: { x: number; y: number; angle: number };
   registryKey: string;
 }
+
+/** A seat in play: its fixed wiring plus the HUD built for it. */
+interface Seat extends SeatDef {
+  hud: PlayerHud;
+}
+
+const SEAT_DEFS: readonly SeatDef[] = [
+  { player: 'p1', anchor: P1_ANCHOR, color: COLORS.p1, colorCss: CSS.p1, edge: 'top', tex: TEX.rocketP1, hudAt: HUD_P1, registryKey: 'homingP1' },
+  { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, colorCss: CSS.p2, edge: 'bottom', tex: TEX.rocketP2, hudAt: HUD_P2, registryKey: 'homingP2' },
+];
 
 /** DEV seat lookups take the player number: 1 = P1 (top), 2 = P2 (bottom). */
 const seatId = (player: number): PlayerId => (player === 1 ? 'p1' : 'p2');
@@ -61,9 +72,6 @@ export class SandboxScene extends Phaser.Scene {
   /** The live seats' controls (both seats, or just P2 in solo). */
   private controls: SeatControl[] = [];
   private homingToggles: HomingToggle[] = [];
-  /** The same controls/toggles keyed by seat, for the DEV seat lookups. */
-  private seatControls: Partial<Record<PlayerId, SeatControl>> = {};
-  private seatToggles: Partial<Record<PlayerId, HomingToggle>> = {};
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
   private explosions!: Explosions;
@@ -98,10 +106,14 @@ export class SandboxScene extends Phaser.Scene {
         ? { x: at.x, y: at.y, angle: 0 }
         : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
     };
-    // Solo (?players=1) hides the top seat: no P1 HUD (and, below, no P1 control).
-    const hud1 = players === 2 ? new PlayerHud(this, { ...(v2 ? hudV2('p1') : HUD_P1), colorCss: CSS.p1 }) : null;
-    const hud2 = new PlayerHud(this, { ...(v2 ? hudV2('p2') : HUD_P2), colorCss: CSS.p2 });
-    const huds = hud1 ? [hud1, hud2] : [hud2];
+    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Solo
+    // (?players=1) builds only P2 (its HUD here, its control below), so nothing
+    // claims touches in P1's old regions.
+    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => players === 2 || d.player === 'p2').map((d) => ({
+      ...d,
+      hud: new PlayerHud(this, { ...(v2 ? hudV2(d.player) : d.hudAt), colorCss: d.colorCss }),
+    }));
+    const huds = seats.map((seat) => seat.hud);
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
     const banner = new WaveBanner(this);
     this.failOverlay = new Overlay(this, FAIL_CONFIG);
@@ -126,18 +138,10 @@ export class SandboxScene extends Phaser.Scene {
       () => this.bossEncounter.start(),
       (x, y, r) => this.explosions.boom(x, y, r),
       () => this.explosions.starShower(), // B7: wave-clear celebration
-      playerCount(variant)
+      players
     );
     this.asteroids = this.waveDirector.asteroids;
 
-    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Solo builds
-    // only P2, so nothing claims touches in P1's old regions.
-    const p2Seat: Seat = { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, edge: 'bottom', tex: TEX.rocketP2, hud: hud2, registryKey: 'homingP2' };
-    const seats: readonly Seat[] = hud1
-      ? [{ player: 'p1', anchor: P1_ANCHOR, color: COLORS.p1, edge: 'top', tex: TEX.rocketP1, hud: hud1, registryKey: 'homingP1' }, p2Seat]
-      : [p2Seat];
-
-    this.homingToggles = [];
     if (v2) {
       // Controls v2 (#7): homing is the HOME button, so no toggles.
       this.controls = seats.map(
@@ -160,13 +164,6 @@ export class SandboxScene extends Phaser.Scene {
     } else {
       this.createSlingControls(seats);
     }
-    this.seatControls = {};
-    this.seatToggles = {};
-    seats.forEach(({ player }, i) => {
-      this.seatControls[player] = this.controls[i];
-      if (this.homingToggles[i]) this.seatToggles[player] = this.homingToggles[i];
-    });
-
     this.wireInput();
 
     // Built ONCE over the wrappers' sprites — the wrappers are mutated in
@@ -190,6 +187,10 @@ export class SandboxScene extends Phaser.Scene {
 
     // Deterministic handle for the headless e2e suite (e2e/sandbox.spec.ts).
     if (import.meta.env.DEV) {
+      // Seat lookups take the player number (1 = top, 2 = bottom). controls and
+      // homingToggles are index-aligned with seats; a seat absent in solo is -1,
+      // which reads as undefined.
+      const seatIndex = (player: number) => seats.findIndex((seat) => seat.player === seatId(player));
       (this as unknown as { __debug: object }).__debug = {
         clearWave: () => this.waveDirector.forceClear(),
         state: () => this.waveDirector.stateName,
@@ -200,18 +201,16 @@ export class SandboxScene extends Phaser.Scene {
         splitCount: () => this.waveDirector.splitCount,
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         // No-op under v2 (no toggles; homing is the HOME button).
-        // Seat lookups take the player number (1 = top, 2 = bottom); a seat absent
-        // in solo reads as undefined/null.
-        setHoming: (player: number, on: boolean) => this.seatToggles[seatId(player)]?.set(on),
+        setHoming: (player: number, on: boolean) => this.homingToggles[seatIndex(player)]?.set(on),
         controlsMode: () => variant.controls,
         aimMode: () => variant.aim,
         lefty: () => variant.lefty,
         players: () => variant.players,
         seats: () => seats.map((seat) => seat.player),
         // Controls v2: seat aim (seat-frame degrees) + world-space control layout.
-        aimDeg: (player: number) => (this.seatControls[seatId(player)] as TwoThumbControl | undefined)?.aimDegrees,
+        aimDeg: (player: number) => (this.controls[seatIndex(player)] as TwoThumbControl | undefined)?.aimDegrees,
         v2Layout: (player: number) => {
-          const control = this.seatControls[seatId(player)];
+          const control = this.controls[seatIndex(player)];
           return control instanceof TwoThumbControl ? control.worldLayout() : null;
         },
         startBoss: () => this.startBossNow(),

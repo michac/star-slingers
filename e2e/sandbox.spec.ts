@@ -39,6 +39,7 @@ import {
   ASTEROID_KIND,
   breakEvenAccuracy,
   clearDamage,
+  DAMAGE,
   requiredDamagePerSec,
   SOLO,
   solveWave,
@@ -254,8 +255,9 @@ test('solo scales wave targets; two-player targets are untouched', () => {
     expect(waveTarget(w, 1, 0.5)).toBeCloseTo(w.required * 0.5, 10);
     expect(waveTarget(w, 1)).toBeCloseTo(w.required * SOLO.requiredScale, 10);
     // Break-even is over the seats in play: one player's ammo ceiling in solo.
-    expect(breakEvenAccuracy(w, 1)).toBeCloseTo(requiredDamagePerSec(w, 1) / (1000 / AMMO_REGEN_MS), 10);
-    expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * (1000 / AMMO_REGEN_MS)), 10);
+    const seatCeiling = (1000 / AMMO_REGEN_MS) * DAMAGE.normal; // one seat's damage/s ceiling
+    expect(breakEvenAccuracy(w, 1)).toBeCloseTo(requiredDamagePerSec(w, 1) / seatCeiling, 10);
+    expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * seatCeiling), 10);
   }
 });
 
@@ -758,15 +760,18 @@ test('solo with ?controls=sling: one sling, one homing toggle, the top seat igno
   expect(await page.evaluate(`${SCENE}.homingToggles.length`)).toBe(1);
   expect(await hudCount(page)).toBe(1);
   const t = await touchscreen(page);
+  // P2's pull: grab just below the sling, drag down. P1's is the same pull mirrored.
+  const grab = { x: 180, y: 642 };
+  const pull = { x: 180, y: 700 };
   // A pull in P1's old sling zone fires nothing.
-  await t.down(1, 180, 98);
-  await t.move(1, 180, 40);
+  await t.down(1, mirrored(grab).x, mirrored(grab).y);
+  await t.move(1, mirrored(pull).x, mirrored(pull).y);
   await stepGame(page, 16, 1);
   await t.up(1);
   expect(await liveShots(page)).toHaveLength(0);
   // P2's pull-and-release fires up the field.
-  await t.down(1, 180, 642);
-  await t.move(1, 180, 700);
+  await t.down(1, grab.x, grab.y);
+  await t.move(1, pull.x, pull.y);
   await stepGame(page, 16, 1);
   await t.up(1);
   const shots = await liveShots(page);

@@ -212,12 +212,12 @@ export function solveWave(required: number, leak: number): AsteroidSpec[] {
 }
 
 /** The asteroid field a wave fields — solved from its (player-count) target. */
-export function asteroidsFor(wave: WaveConfig, players: 1 | 2 = 2): AsteroidSpec[] {
+export function asteroidsFor(wave: WaveConfig, players: 1 | 2): AsteroidSpec[] {
   return solveWave(waveTarget(wave, players), leakAllowancePerSec(wave));
 }
 
 /** Accurate damage/s a wave actually demands (post-solve). */
-export function threatDamagePerSec(wave: WaveConfig, players: 1 | 2 = 2): number {
+export function threatDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
   return threatOf(asteroidsFor(wave, players));
 }
 
@@ -227,12 +227,12 @@ export function leakAllowancePerSec(wave: WaveConfig): number {
 }
 
 /** THE difficulty scalar: accurate team damage/s actually required (achieved). */
-export function requiredDamagePerSec(wave: WaveConfig, players: 1 | 2 = 2): number {
+export function requiredDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
   return Math.max(0, threatDamagePerSec(wave, players) - leakAllowancePerSec(wave));
 }
 
 /** Fraction of the players' damage ceiling (seats × ammo rate × a normal
  *  shot's damage) that must land. */
-export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2 = 2): number {
+export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
   return requiredDamagePerSec(wave, players) / (players * (1000 / AMMO_REGEN_MS) * DAMAGE.normal);
 }
