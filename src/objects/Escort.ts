@@ -24,7 +24,9 @@ export class Escort {
   constructor(
     private readonly scene: Phaser.Scene,
     /** Fired the instant this escort is destroyed (gate + interrupt). */
-    private readonly onDestroyed: () => void
+    private readonly onDestroyed: () => void,
+    /** Solo (?players=1): both hits may come from the one seat (see takeHit). */
+    private readonly solo = false
   ) {
     this.sprite = scene.physics.add
       .sprite(BOSS_LAYOUT.park.x, BOSS_LAYOUT.park.y, TEX.escort)
@@ -73,10 +75,13 @@ export class Escort {
   }
 
   /** One unique hit from each player is required. Duplicate shots are consumed
-   * but leave the lock unchanged, with a small muted reject spark. */
+   * but leave the lock unchanged, with a small muted reject spark. Solo (a
+   * temporary prototype rule until #7's shot-type locks): it still takes two
+   * hits, but a repeat from the same seat fills the other lock. */
   takeHit(player: PlayerId): void {
     if (!this.active || this.popping) return;
-    const bit = player === 'p1' ? 1 : 2;
+    let bit = player === 'p1' ? 1 : 2;
+    if (this.solo && this.contributions & bit) bit ^= 3; // credit the absent seat's lock
     if (this.contributions & bit) {
       this.rejectSpark();
       return;
