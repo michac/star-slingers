@@ -35,7 +35,7 @@
  * evaluate, so a 200-frame window is one round-trip, not one per frame.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { ASTEROID_KIND, solveWave } from '../src/waves';
+import { ASTEROID_KIND, clearDamage, solveWave } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -140,19 +140,21 @@ async function fieldRock(
     kind = 'standard',
     radius = ASTEROID_KIND[kind].radius,
     slot = 0,
-  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number }
+    hp,
+  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number }
 ): Promise<void> {
   await page.evaluate(
-    ({ x, y, kind, radius, slot }) => {
+    ({ x, y, kind, radius, slot, hp }) => {
       const s = (window as any).__game.scene.keys['Sandbox'];
       const a = s.asteroids[slot]; // a lane wrapper (NOT a child)
-      a.reconfigure({ kind, radius, y, speed: 0 }, 0);
+      // hp omitted = the kind's default max hp (1 today).
+      a.reconfigure({ kind, radius, y, speed: 0, ...(hp === undefined ? {} : { hp }) }, 0);
       a.spawn(); // field it (off the right edge)...
       a.sprite.setPosition(x, y); // ...then place it in-field, clear of the station
       a.sprite.body.reset(x, y);
       a.sprite.body.setVelocity(0, 0);
     },
-    { x, y, kind, radius, slot }
+    { x, y, kind, radius, slot, hp }
   );
 }
 
@@ -231,7 +233,7 @@ test('wave solver uses only standards and three-hit splitters', () => {
   const specs = solveWave(0.75, 0);
   expect(specs.every((spec) => spec.kind === 'standard' || spec.kind === 'splitter')).toBe(true);
   expect(specs.every((spec) => spec.radius === ASTEROID_KIND[spec.kind].radius)).toBe(true);
-  const cost = specs.reduce((sum, spec) => sum + ASTEROID_KIND[spec.kind].threatHits, 0);
+  const cost = specs.reduce((sum, spec) => sum + clearDamage(spec), 0);
   expect(cost).toBeGreaterThan(specs.length); // a splitter contributes 3, not 2
 });
 
@@ -417,4 +419,33 @@ test('?boss shortcut boots into the fight', async ({ page }) => {
     { timeout: 10_000 }
   );
   expect(await bossPhase(page)).toBe('charging');
+});
+
+test('an hp-3 rock survives two hits and pops on the third', async ({ page }) => {
+  await gotoGame(page);
+
+  // Asteroid health: a rock fielded with a 3-hp override takes damage from each
+  // plain shot (DAMAGE.normal = 1) but only pops — and scores — on the hit that
+  // takes it to 0. Each shot is stepped to its hit before the next is fired, so
+  // the hit counter isolates them on the fixed-timestep clock.
+  await fieldRock(page, { x: 250, y: 300, hp: 3 });
+  const hitsBefore = await hits(page);
+  const hp = () => page.evaluate(`${SCENE}.__debug.asteroidHp(0)`) as Promise<number>;
+  const active = () => page.evaluate(`${SCENE}.asteroids[0].isActive && !${SCENE}.asteroids[0].isPopping`);
+  expect(await hp()).toBe(3);
+
+  for (const [n, hpLeft] of [[1, 2], [2, 1]] as const) {
+    await fire(page, 170, 300, 400, 0);
+    const hit = await stepUntil(page, `s.__debug.hits() >= ${hitsBefore + n}`, 120);
+    expect(hit.done).toBe(true);
+    expect(await hp()).toBe(hpLeft);
+    expect(await score(page)).toBe(0); // a non-lethal hit never scores
+    expect(await active()).toBe(true); // ...and the rock stays in play
+  }
+
+  await fire(page, 170, 300, 400, 0);
+  const popped = await stepUntil(page, `s.__debug.score() >= 10`, 120);
+  expect(popped.done).toBe(true);
+  expect(await hits(page)).toBe(hitsBefore + 3);
+  expect(await score(page)).toBe(10); // a standard's points, awarded once on the kill
 });

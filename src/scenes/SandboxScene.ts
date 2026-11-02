@@ -23,6 +23,7 @@ import { BossEncounter } from '../objects/BossEncounter';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import type { HomingTarget } from '../objects/HomingTarget';
+import { DAMAGE } from '../waves';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
  *  order for group-vs-array overlaps, so go by the rocket flag. */
@@ -152,6 +153,7 @@ export class SandboxScene extends Phaser.Scene {
         score: () => this.scoreKeeper.value,
         childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
         splitCount: () => this.waveDirector.splitCount,
+        asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         setHoming: (player: number, on: boolean) => this.homingToggles[player - 1]?.set(on),
         startBoss: () => this.startBossNow(),
         bossPhase: () => this.bossEncounter.phase,
@@ -305,7 +307,10 @@ export class SandboxScene extends Phaser.Scene {
     // the multi-frame overlap window so one pass never hits the same rock
     // twice; a popped rock disables its body and stops overlapping. The
     // rocket recycles normally on world-bounds.
-    if (rocket.getData('charged')) {
+    const charged = rocket.getData('charged') === true;
+    // Read the shot type BEFORE recycling (recycle clears the rocket's flags).
+    const damage = charged ? DAMAGE.railgun : rocket.getData('homing') ? DAMAGE.homing : DAMAGE.normal;
+    if (charged) {
       const hitSet = rocket.getData('hitSet') as Set<Asteroid>;
       if (hitSet.has(asteroid)) return; // already hit this rock on this pass
       hitSet.add(asteroid);
@@ -313,7 +318,7 @@ export class SandboxScene extends Phaser.Scene {
       this.rockets.recycle(rocket);
     }
 
-    const pts = asteroid.takeHit();
+    const pts = asteroid.takeHit(damage);
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
       // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
