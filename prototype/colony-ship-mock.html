@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colony ship layout mock (#19)</title>
+<!-- Self-contained copy of plans/mockups/layout-colony-ship.html for the
+     prototype shelf: mock.css + tokens-neon.css + mock.js inlined, font local.
+     One dir deeper than the game root, so fonts live at ../fonts. -->
+<link rel="icon" href="data:,">
+<link rel="preload" as="font" type="font/woff2" href="../fonts/Audiowide-Regular.woff2" crossorigin />
+<style>
+@font-face { font-family: "Audiowide"; src: url('../fonts/Audiowide-Regular.woff2') format('woff2'); font-display: swap; }
+/* ============================================================
+   mock.css — shared structural scaffolding for ALL mock variants.
+   Structure, motion, and annotation chrome ONLY.
+   All color / font / effect values come from tokens-<style>.css.
+   ============================================================ */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--page-bg);
+  color: var(--chrome-ink);
+  font-family: var(--font-body);
+  min-height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 24px 12px 36px;
+}
+
+/* ---- page chrome (around the phone, not part of the game) ---- */
+.title {
+  font-family: var(--font-display);
+  font-size: 22px; letter-spacing: 1px; text-align: center;
+  text-shadow: var(--title-glow, none);
+}
+.title small {
+  display: block; font-family: var(--font-body);
+  font-size: 11px; letter-spacing: 2px; margin-top: 4px;
+  color: var(--chrome-muted); text-transform: uppercase;
+}
+.caption { text-align: center; max-width: 460px; line-height: 1.55; font-size: 14px; color: var(--chrome-muted); }
+.caption b { color: var(--chrome-ink); font-weight: 600; }
+
+.controls { display: flex; gap: 10px; }
+.btn {
+  font-family: var(--font-body); font-weight: 600; font-size: 13px;
+  color: var(--chrome-ink);
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14);
+  padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  transition: all .15s ease;
+}
+.btn:hover { background: rgba(255,255,255,.14); border-color: var(--accent, currentColor); }
+
+/* ---- phone frame (the device — constant across styles) ---- */
+.phone {
+  position: relative; width: min(92vw, 360px); aspect-ratio: 360 / 740;
+  border-radius: 42px; padding: 10px;
+  background: linear-gradient(160deg, #1b1c2e, #070713);
+  box-shadow: 0 0 0 2px #2c2e44, 0 30px 80px rgba(0,0,0,.6),
+              inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.screen {
+  position: relative; width: 100%; height: 100%;
+  border-radius: 34px; overflow: hidden;
+  background: var(--scene-bg);
+}
+.screen svg { display: block; width: 100%; height: 100%; }
+
+/* ---- SVG text helpers (variants paint these via tokens) ---- */
+.display-text { font-family: var(--font-display); }
+.body-text    { font-family: var(--font-body); font-weight: 600; }
+
+/* ---- annotation labels (meta — deliberately style-neutral) ---- */
+.label-tag { font-family: sans-serif; font-weight: 600; font-size: 9.5px; fill: #0a0a1c; }
+.label-bg  { fill: #eafaff; opacity: .92; }
+.leader    { stroke: #eafaff; stroke-width: 1; opacity: .5; stroke-dasharray: 2 2; }
+.labels-off .annot { display: none; }
+
+/* ---- shared motion (gameplay illustration, same in every style) ---- */
+@keyframes jukeY      { 0% { transform: translateY(-9px); } 50% { transform: translateY(11px); } 100% { transform: translateY(-9px); } }
+@keyframes driftX     { from { transform: translateX(7px); } to { transform: translateX(-9px); } }
+@keyframes twinkle    { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes laserL     { 0% { transform: translateX(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateX(-120px); opacity: 0; } }
+@keyframes shieldpulse{ 0%, 100% { opacity: .55; } 50% { opacity: .9; } }
+
+.jukeY   { animation: jukeY 3.0s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.jukeY2  { animation: jukeY 2.3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.driftX  { animation: driftX 3.6s ease-in-out infinite alternate; transform-box: fill-box; }
+.driftX2 { animation: driftX 4.8s ease-in-out infinite alternate; transform-box: fill-box; }
+.star    { animation: twinkle 2.6s ease-in-out infinite; }
+.bolt    { animation: laserL 1.6s ease-in infinite; transform-box: fill-box; }
+.bolt2   { animation: laserL 1.9s ease-in infinite .5s; transform-box: fill-box; }
+.shield-glow { animation: shieldpulse 2.8s ease-in-out infinite; }
+
+/* staggered star twinkle (replaces per-element inline delays) */
+.stars .star:nth-child(2) { animation-delay: .6s; }
+.stars .star:nth-child(3) { animation-delay: 1.1s; }
+.stars .star:nth-child(4) { animation-delay: .3s; }
+.stars .star:nth-child(5) { animation-delay: 1.4s; }
+.stars .star:nth-child(6) { animation-delay: .9s; }
+.stars .star:nth-child(7) { animation-delay: 1.7s; }
+.stars .star:nth-child(8) { animation-delay: .2s; }
+
+/* ============================================================
+   tokens-neon.css — Neon Arcade / Synthwave skin (v3 theming API).
+   Deep purple-black space, hot glowing strokes:
+   cyan P1, amber-orange P2, magenta enemies, fat feGaussianBlur glow.
+   Pizza-Hut-cabinet-in-1985 energy. Geometry lives in the HTML;
+   all paint lives here. No inline styles.
+   ============================================================ */
+
+:root {
+  /* fonts */
+  --font-display: 'Audiowide', 'Courier New', monospace;
+  --font-body: 'Audiowide', system-ui, sans-serif;
+
+  /* page chrome */
+  --page-bg: #070417;
+  --chrome-ink: #f2e9ff;
+  --chrome-muted: #9d7fd6;
+  --accent: #ff5ec7;
+  --title-glow: 0 0 6px #38f6ff, 0 0 18px rgba(56,246,255,.6),
+                0 0 34px rgba(255,94,199,.45);
+
+  /* scene */
+  --scene-bg: #0a0626;
+  --line: #ff5ec7;          /* hot magenta wireframe stroke */
+  --line-dim: #6a3fb0;
+  --p1: #38f6ff;            /* TOP player — hot cyan */
+  --p2: #ffb13b;            /* BOTTOM player — amber-orange */
+  --danger: #ff2e88;        /* magenta enemies */
+  --ink: #fdf4ff;
+}
+
+/* ---- page chrome backdrop: synthwave nebula + horizon glow ---- */
+body {
+  background:
+    radial-gradient(900px 620px at 18% -12%, #43156e 0%, transparent 58%),
+    radial-gradient(760px 760px at 100% 112%, #0e2a6b 0%, transparent 56%),
+    radial-gradient(600px 400px at 50% 120%, #ff2e88 0%, transparent 55%),
+    var(--page-bg);
+}
+.screen {
+  background:
+    radial-gradient(120% 80% at 50% 116%, rgba(255,46,136,.22) 0%, transparent 60%),
+    linear-gradient(180deg, #150a3a 0%, #0a0626 52%, #07061e 100%);
+}
+.btn:hover { background: rgba(56,246,255,.16); border-color: var(--p1); }
+
+/* ---- backdrop inside scene ---- */
+.bg-wash { fill: url(#neon-neb); }
+.stars .star { fill: #bfefff; filter: url(#neon-glow-sm); }
+
+/* ---- station (half-disc ring station) + shield (left wall) ---- */
+.hull          { fill: url(#neon-hull); stroke: #38f6ff; stroke-width: 2;
+                 filter: url(#neon-glow-sm); }
+.hull-detail   { fill: none; stroke: #38f6ff; stroke-width: 1.5; }
+.hull-window   { fill: #bffcff; filter: url(#neon-glow-sm); }
+.shield        { fill: none; stroke: url(#neon-shield); stroke-width: 5;
+                 stroke-linecap: round; opacity: .9; }
+.shield-glow   { filter: url(#neon-glow); }
+.shield-divider{ stroke: #0a0626; stroke-width: 7; }
+
+/* ---- enemies ---- */
+.rock          { fill: #2a0e3e; stroke: var(--danger); stroke-width: 2.5;
+                 filter: url(#neon-glow-sm); }
+.crater        { fill: none; stroke: #ff7ab3; stroke-width: 1.5; }
+.hit-count     { fill: var(--ink); font-size: 14px; }
+.ship-body     { fill: #2a0a22; stroke: var(--danger); stroke-width: 1.8;
+                 filter: url(#neon-glow-sm); }
+.ship-cockpit  { fill: #ffd0e6; }
+.ship-cockpit-core { fill: #fff; }
+.laser         { fill: #ff2e88; filter: url(#neon-glow-sm); }
+
+/* ---- sling controls (anchor dot + pull-range arc, not a literal slingshot) ---- */
+.sling-anchor-p1 { fill: var(--p1); stroke: #bffcff; stroke-width: 1.5;
+                   filter: url(#neon-glow-sm); }
+.sling-anchor-p2 { fill: var(--p2); stroke: #ffe6bf; stroke-width: 1.5;
+                   filter: url(#neon-glow-sm); }
+.sling-range-p1  { fill: none; stroke: var(--p1); stroke-width: 2.5;
+                   stroke-dasharray: 3 7; stroke-linecap: round; opacity: .8;
+                   filter: url(#neon-glow-sm); }
+.sling-range-p2  { fill: none; stroke: var(--p2); stroke-width: 2.5;
+                   stroke-dasharray: 3 7; stroke-linecap: round; opacity: .8;
+                   filter: url(#neon-glow-sm); }
+.sling-pull      { stroke: var(--p1); stroke-width: 2.8; stroke-linecap: round;
+                   opacity: .95; filter: url(#neon-glow-sm); }
+.sling-touch     { fill: var(--p1); fill-opacity: .28; stroke: var(--p1);
+                   stroke-width: 1.8; filter: url(#neon-glow-sm); }
+.rocket          { fill: url(#neon-rocket); filter: url(#neon-glow-sm); }
+.trajectory      { fill: none; stroke: var(--p1); stroke-width: 2;
+                   stroke-dasharray: 2 7; stroke-linecap: round; opacity: .85;
+                   filter: url(#neon-glow-sm); }
+
+/* ---- per-player HUDs (P1's group is rotated 180° in the markup) ---- */
+.hud-label { fill: var(--chrome-muted); font-size: 11px; letter-spacing: 1px; }
+.hud-value { fill: var(--ink); font-size: 16px; filter: url(#neon-glow-sm); }
+.hud-score { fill: var(--accent); font-size: 16px; filter: url(#neon-glow); }
+.ammo-p1   { fill: var(--p1); font-size: 16px; filter: url(#neon-glow-sm); }
+.ammo-p2   { fill: var(--p2); font-size: 16px; filter: url(#neon-glow-sm); }
+
+/* ============================================================
+   v6 colony-ship layout (#19, layout-colony-ship.html).
+   Same palette as src/tokens.ts: hull = hullFill + p1 stroke,
+   shield layers = shieldOuter/Mid/Inner, star = star.
+   ============================================================ */
+.sf-star        { fill: #bfefff; }
+.sf-near .sf-star { filter: url(#neon-glow-sm); }
+
+.v6-hull        { fill: url(#v6-hull-grad); stroke: #38f6ff; stroke-width: 2; stroke-linejoin: round;
+                  filter: url(#neon-glow-sm); }
+.v6-prow        { fill: #24609f; }
+.v6-deck        { fill: none; stroke: #38f6ff; stroke-width: 1.4; opacity: .65; }
+.v6-window      { fill: #bffcff; filter: url(#neon-glow-sm); }
+.v6-window.dim  { opacity: .55; }
+.v6-bridge      { fill: #bffcff; filter: url(#neon-glow-sm); }
+.v6-chevron     { fill: none; stroke: #38f6ff; stroke-width: 2; stroke-linecap: round;
+                  stroke-linejoin: round; opacity: .8; }
+.v6-engine      { fill: #9d6bff; opacity: .55; filter: url(#neon-glow); }
+
+.v6-shield      { fill: none; stroke-width: 5; opacity: .9; filter: url(#neon-glow-sm); }
+.v6-shield-o    { stroke: #38f6ff; }
+.v6-shield-m    { stroke: #9d6bff; }
+.v6-shield-i    { stroke: #ff5ec7; }
+
+.v6-lane        { fill: none; stroke: #ff5ec7; stroke-width: 1; stroke-dasharray: 3 5; opacity: .45; }
+.v6-lane-hit    { fill: #ff5ec7; opacity: .7; }
+
+/* seats: --seat is the player colour */
+.seat-p1        { --seat: #38f6ff; }
+.seat-p2        { --seat: #ffb13b; }
+.v6-btn         { fill: var(--seat); fill-opacity: .12; stroke: var(--seat); stroke-width: 2.5;
+                  stroke-opacity: .9; }
+.v6-glyph       { fill: var(--seat); }
+.v6-flame       { fill: #9d6bff; opacity: .9; }
+.v6-cross       { fill: none; stroke: var(--seat); stroke-width: 2.5; }
+.v6-pad         { fill: var(--seat); fill-opacity: .08; stroke: var(--seat); stroke-width: 1.5;
+                  stroke-opacity: .35; }
+.v6-range       { fill: none; stroke: var(--seat); stroke-width: 2; stroke-dasharray: 3 7;
+                  stroke-linecap: round; opacity: .8; }
+.v6-hint        { fill: var(--seat); opacity: .45; }
+.v6-knobline    { stroke: var(--seat); stroke-width: 2; opacity: .45; }
+.v6-knob        { fill: var(--seat); opacity: .6; }
+.v6-launcher    { fill: var(--seat); opacity: .6; }
+.v6-rocket      { fill: var(--seat); filter: url(#neon-glow-sm); }
+.v6-traj        { stroke: var(--seat); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round;
+                  opacity: .5; }
+.v6-ammo        { fill: var(--seat); font-size: 16px; }
+
+/* overlays */
+.v6-fan-p1      { fill: #38f6ff; opacity: .10; }
+.v6-fan-p2      { fill: #ffb13b; opacity: .10; }
+.v6-boss        { fill: #2a0a22; stroke: #ff2e88; stroke-width: 2; }
+.v6-escort      { fill: #2a0a22; stroke: #ff2e88; stroke-width: 1.5; }
+.v6-boss-sweep  { fill: none; stroke: #ff2e88; stroke-width: 1; stroke-dasharray: 4 4; opacity: .6; }
+.btn.on         { background: rgba(56,246,255,.22); border-color: #38f6ff; }
+
+</style>
+</head>
+<body>
+  <div class="title">STAR SLINGERS<small>Colony ship · scrolling starfield · v6 candidate (#19)</small></div>
+
+  <div class="phone">
+    <div class="screen">
+      <!--
+        COLONY-SHIP LAYOUT (v6 candidate, #19) — viewBox 360x740, same logical
+        field as the game. The v5 station (a sliver at -10,370) becomes a colony
+        ship that flies left -> right: its rear is off the left edge, its pointed
+        bow faces the incoming enemies, and it spans most of the left wall
+        between the two control bands. The 3 shield layers are concentric
+        ELLIPSES centred on the ship (off-screen left), so they hug the bow;
+        mechanics are unchanged (1 enemy contact breaks the outermost layer).
+        The starfield streams right -> left in 3 parallax layers.
+
+        Geometry is generated by the script at the bottom from SHIPS[variant]:
+        the hull is an ellipse body about the shield centre (so it meets the
+        wall wide) plus a prow wedge on the bow, all inside the inner shield
+        layer: plain shapes Phaser Graphics can draw in src/objects/textures.ts.
+        Controls are today's two-thumb layout (CONTROLS_V2 in src/layout.ts),
+        drawn for P2 and rotated 180 degrees about the field centre for P1.
+        All paint lives in tokens-neon.css (".v6" section).
+      -->
+      <svg id="scene" viewBox="0 0 360 740" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <radialGradient id="neon-neb" cx="42%" cy="48%" r="85%">
+            <stop offset="0%" stop-color="#3a1370" stop-opacity=".55"/>
+            <stop offset="60%" stop-color="#1a0b46" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="#0a0626" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="v6-hull-grad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#0b1130"/>
+            <stop offset="100%" stop-color="#1f4f8f"/>
+          </linearGradient>
+          <filter id="neon-glow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="neon-glow-sm" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <rect class="bg-wash" width="360" height="740"/>
+        <!-- SLOT: starfield (3 parallax layers, filled + animated by script) -->
+        <g id="starfield"></g>
+        <!-- SLOT: lanes + funnel (annotation layer, shown with labels) -->
+        <g id="lanes" class="annot"></g>
+        <!-- SLOT: ship + shield layers -->
+        <g id="ship"></g>
+        <g id="shield"></g>
+        <!-- SLOT: enemies -->
+        <g id="enemies"></g>
+        <!-- SLOT: overlays (aim coverage, boss footprint) -->
+        <g id="coverage"></g>
+        <g id="boss"></g>
+        <!-- SLOT: both seats' controls + HUDs -->
+        <g id="seat-p2" class="seat seat-p2"></g>
+        <g id="seat-p1" class="seat seat-p1" transform="rotate(180 180 370)"></g>
+        <!-- SLOT: annotations -->
+        <g id="annot" class="annot"></g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="controls" style="flex-wrap:wrap;justify-content:center;max-width:460px">
+    <button class="btn" data-ship="compact">Ship: Bow</button>
+    <button class="btn" data-ship="big">Ship: Ark</button>
+    <button class="btn" data-ship="station">Today: station</button>
+  </div>
+  <div class="controls" style="flex-wrap:wrap;justify-content:center;max-width:460px">
+    <button class="btn" id="hit">Hit shield</button>
+    <button class="btn" id="speed">Stars: cruise</button>
+    <button class="btn" id="cover">Show aim reach</button>
+    <button class="btn" id="bossbtn">Show boss</button>
+    <button class="btn" id="toggle">Hide labels</button>
+  </div>
+  <p class="caption" id="readout"></p>
+  <p class="caption">Layout mock, not playable. <b>Bow</b> and <b>Ark</b> are the two ship sizes to pick between; <b>Today</b> is the current station, for comparison. <b>Hit shield</b> breaks the outermost layer, as an enemy contact does. <b>Show aim reach</b> draws each seat's aim range (15° to 165°). <b>Show boss</b> draws the command-ship boss and its escort circle where they park today. Rockets fly over the ship; only enemies hit it.</p>
+
+  <script>
+// mock.js — the ONLY script shared by mock variants. Toggles annotation labels.
+const scene = document.getElementById('scene');
+const toggle = document.getElementById('toggle');
+toggle.addEventListener('click', () => {
+  scene.classList.toggle('labels-off');
+  toggle.textContent = scene.classList.contains('labels-off') ? 'Show labels' : 'Hide labels';
+});
+</script>
+  <script>
+  // ---------- geometry (logical 360x740, same as src/layout.ts) ----------
+  const W = 360, H = 740, CY = 370;
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // shield: centre (cx, CY); outer semi-axes (a, b); layers step in by `gap`.
+  // body: an ellipse (A, B) about the same centre, so it meets the wall wide;
+  // prow: a wedge on the bow, from x=baseX (half-height `half`) to x=tip.
+  const SHIPS = {
+    compact: { name: 'Bow', cx: -40, a: 100, b: 248, gap: 7, body: { A: 74, B: 222 }, prow: { baseX: 22, half: 34, tip: 42 } },
+    big:     { name: 'Ark', cx: -70, a: 170, b: 300, gap: 8, body: { A: 140, B: 268 }, prow: { baseX: 56, half: 42, tip: 80 } },
+    station: { name: 'Today', cx: -10, a: 46, b: 46, gap: 7, body: null },
+  };
+  const LANES = [215, 300, 390, 480];   // LANE_SLOTS y
+  const APPROACH_X = 150;
+  const SEATS = {
+    fire: { x: 52, y: 682, r: 38 }, home: { x: 120, y: 652, r: 25 },
+    pad: { x: 300, y: 678, r: 46 }, launcher: { x: 180, y: 640 }, hud: { x: 150, y: 670 },
+  };
+  const BOSS = { x: 180, y: CY, r: 32, ring: 92, escortR: 17 };
+
+  let variant = 'compact', hitsLeft = 3, starSpeed = 1, showCover = false, showBoss = false;
+
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const clear = (id) => { const g = document.getElementById(id); g.replaceChildren(); return g; };
+
+  // ---------- starfield: 3 layers, each two tiles wide, wrap at W ----------
+  // Deterministic pseudo-random so every reload looks the same.
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const LAYERS = [
+    { n: 46, r: [0.5, 0.9], op: 0.35, speed: 8,  cls: 'sf-far' },
+    { n: 22, r: [0.9, 1.3], op: 0.6,  speed: 22, cls: 'sf-mid' },
+    { n: 9,  r: [1.3, 1.8], op: 0.95, speed: 55, cls: 'sf-near', streak: 5 },
+  ];
+  const sf = document.getElementById('starfield');
+  const layerGroups = LAYERS.map((L) => {
+    const g = el('g', { class: L.cls }, sf);
+    const pts = Array.from({ length: L.n }, () => ({ x: rnd() * W, y: rnd() * H, r: L.r[0] + rnd() * (L.r[1] - L.r[0]) }));
+    for (const dx of [0, W]) {
+      for (const p of pts) {
+        if (L.streak) el('rect', { x: p.x + dx, y: p.y - p.r * 0.5, width: L.streak * p.r, height: p.r, rx: p.r * 0.5, class: 'sf-star', opacity: L.op }, g);
+        else el('circle', { cx: p.x + dx, cy: p.y, r: p.r, class: 'sf-star', opacity: L.op }, g);
+      }
+    }
+    return { g, L, off: 0 };
+  });
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    for (const lg of layerGroups) {
+      lg.off = (lg.off + lg.L.speed * starSpeed * dt) % W;
+      lg.g.setAttribute('transform', `translate(${-lg.off.toFixed(2)},0)`);
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ---------- ship ----------
+  /** Points on the body ellipse scaled by `f`, top to bottom, on-screen half only. */
+  function bodyArc(s, f, n = 48) {
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const th = -Math.PI / 2 + (Math.PI * i) / n;
+      pts.push([s.cx + s.body.A * f * Math.cos(th), CY + s.body.B * f * Math.sin(th)]);
+    }
+    return pts;
+  }
+  const poly = (pts) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  /** Where the ship's hull meets the left wall (x=0), for the readout. */
+  function wallSpan(s) {
+    if (!s.body) return [CY - 24, CY + 24];
+    const h = s.body.B * Math.sqrt(1 - (s.cx / s.body.A) ** 2);
+    return [CY - h, CY + h];
+  }
+  function drawShip() {
+    const s = SHIPS[variant];
+    const g = clear('ship');
+    if (!s.body) {
+      el('circle', { cx: -10, cy: CY, r: 24, class: 'v6-hull' }, g);
+      el('circle', { cx: 5, cy: 361, r: 2.5, class: 'v6-window' }, g);
+      el('circle', { cx: 3, cy: 383, r: 2, class: 'v6-window' }, g);
+      return;
+    }
+    const { A, B } = s.body, P = s.prow;
+    // engine wash off the left edge (the ship is flying right)
+    for (const f of [-0.6, 0, 0.6]) {
+      el('ellipse', { cx: -2, cy: CY + f * B, rx: 9, ry: B * 0.1, class: 'v6-engine' }, g);
+    }
+    el('ellipse', { cx: s.cx, cy: CY, rx: A, ry: B, class: 'v6-hull' }, g);
+    // deck bands: the body outline at smaller scales
+    el('polyline', { points: poly(bodyArc(s, 0.82)), class: 'v6-deck' }, g);
+    el('polyline', { points: poly(bodyArc(s, 0.62)), class: 'v6-deck' }, g);
+    // window rows along the deck bands (only the on-screen ones)
+    bodyArc(s, 0.91, 44).forEach(([x, y], i) => { if (x > 4 && i % 2 === 0 && Math.abs(y - CY) > P.half + 6) el('rect', { x: x - 5, y: y - 1.6, width: 5, height: 3.2, rx: 1.2, class: 'v6-window' }, g); });
+    bodyArc(s, 0.72, 34).forEach(([x, y], i) => { if (x > 4 && i % 2 === 1 && Math.abs(y - CY) > P.half) el('rect', { x: x - 4, y: y - 1.4, width: 4, height: 2.8, rx: 1, class: 'v6-window dim' }, g); });
+    // prow wedge (open path: no seam stroked on its base) + bridge
+    el('path', { d: `M${P.baseX},${CY - P.half} L${P.tip},${CY} L${P.baseX},${CY + P.half}`, class: 'v6-hull v6-prow' }, g);
+    el('line', { x1: 0, y1: CY, x2: P.tip - 6, y2: CY, class: 'v6-deck' }, g);
+    // running lights: chevrons pointing right, toward the enemies
+    for (const dx of [-14, -2]) {
+      el('path', { d: `M${P.baseX + dx - 6},${CY - 10} L${P.baseX + dx},${CY} L${P.baseX + dx - 6},${CY + 10}`, class: 'v6-chevron' }, g);
+    }
+    el('circle', { cx: P.baseX + 8, cy: CY, r: 4.5, class: 'v6-bridge' }, g);
+  }
+  function drawShield() {
+    const s = SHIPS[variant];
+    const g = clear('shield');
+    const cls = ['v6-shield-o', 'v6-shield-m', 'v6-shield-i'];
+    for (let i = 3 - hitsLeft; i < 3; i++) {
+      el('ellipse', { cx: s.cx, cy: CY, rx: s.a - i * s.gap, ry: s.b - i * s.gap, class: 'v6-shield ' + cls[i] }, g);
+    }
+  }
+  /** Outermost live layer's front x at the centre line (where rocks stop). */
+  const shieldFront = (s) => s.cx + s.a - (3 - Math.max(hitsLeft, 1)) * s.gap;
+
+  // ---------- lanes + funnel ----------
+  function drawLanes() {
+    const s = SHIPS[variant];
+    const g = clear('lanes');
+    for (const y of LANES) {
+      // straight drift to APPROACH_X, then a line toward the ship centre,
+      // stopped where it meets the outermost live shield layer.
+      const a = s.a - (3 - Math.max(hitsLeft, 1)) * s.gap, b = s.b - (3 - Math.max(hitsLeft, 1)) * s.gap;
+      const dx = s.cx - APPROACH_X, dy = CY - y;
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 30; i++) {
+        const m = (lo + hi) / 2, x = APPROACH_X + dx * m, yy = y + dy * m;
+        if (((x - s.cx) / a) ** 2 + ((yy - CY) / b) ** 2 > 1) lo = m; else hi = m;
+      }
+      const hx = APPROACH_X + dx * lo, hy = y + dy * lo;
+      el('path', { d: `M${W},${y} L${APPROACH_X},${y} L${hx.toFixed(1)},${hy.toFixed(1)}`, class: 'v6-lane' }, g);
+      el('circle', { cx: hx, cy: hy, r: 3, class: 'v6-lane-hit' }, g);
+    }
+  }
+
+  // ---------- enemies (a few rocks mid-lane, one funnelling in) ----------
+  function rock(g, x, y, r) {
+    const n = el('g', { transform: `translate(${x},${y})` }, g);
+    el('circle', { r, class: 'rock' }, n);
+    el('circle', { cx: -r * 0.3, cy: -r * 0.25, r: r * 0.25, class: 'crater' }, n);
+    el('circle', { cx: r * 0.35, cy: r * 0.2, r: r * 0.18, class: 'crater' }, n);
+  }
+  function drawEnemies() {
+    const g = clear('enemies');
+    rock(g, 300, 215, 13); rock(g, 250, 300, 17); rock(g, 320, 390, 13); rock(g, 205, 480, 13);
+    const s = SHIPS[variant];
+    // one rock on final approach, just outside the shield on the 300 lane
+    const fx = shieldFront(s) + 34;
+    rock(g, Math.max(fx, 60), 322, 13);
+  }
+
+  // ---------- seats ----------
+  function seat(id, color, aimDeg) {
+    const g = clear(id);
+    const { fire, home, pad, launcher, hud } = SEATS;
+    // launcher + trajectory (aimDeg in the seat frame: 0 = player's right, 90 = across)
+    const d = aimDeg * Math.PI / 180, dir = [Math.cos(d), -Math.sin(d)];
+    el('line', { x1: launcher.x + dir[0] * 14, y1: launcher.y + dir[1] * 14, x2: launcher.x + dir[0] * 294, y2: launcher.y + dir[1] * 294, class: 'v6-traj' }, g);
+    el('circle', { cx: launcher.x, cy: launcher.y, r: 6, class: 'v6-launcher' }, g);
+    el('path', { d: 'M0,-9 L4,2 L0,5 L-4,2 Z', class: 'v6-rocket', transform: `translate(${launcher.x},${launcher.y}) rotate(${90 - aimDeg})` }, g);
+    // FIRE + rocket glyph
+    el('circle', { cx: fire.x, cy: fire.y, r: fire.r, class: 'v6-btn' }, g);
+    const w = fire.r * 0.2, cx = fire.x, cy = fire.y, r = fire.r;
+    el('path', { d: `M${cx},${cy - r * 0.62} L${cx - w},${cy - r * 0.2} V${cy + r * 0.3} L${cx - w * 2.1},${cy + r * 0.38} L${cx - w},${cy + r * 0.02} Z M${cx},${cy - r * 0.62} L${cx + w},${cy - r * 0.2} V${cy + r * 0.3} L${cx + w * 2.1},${cy + r * 0.38} L${cx + w},${cy + r * 0.02} Z M${cx - w},${cy - r * 0.2} H${cx + w} V${cy + r * 0.3} H${cx - w} Z`, class: 'v6-glyph' }, g);
+    el('path', { d: `M${cx - w * 0.75},${cy + r * 0.3 + 2} L${cx + w * 0.75},${cy + r * 0.3 + 2} L${cx},${cy + r * 0.66} Z`, class: 'v6-flame' }, g);
+    // HOME + crosshair
+    el('circle', { cx: home.x, cy: home.y, r: home.r, class: 'v6-btn' }, g);
+    const ring = home.r * 0.42, inner = ring * 0.55, outer = home.r * 0.72;
+    el('circle', { cx: home.x, cy: home.y, r: ring, class: 'v6-cross' }, g);
+    el('path', { d: `M${home.x},${home.y - outer} V${home.y - inner} M${home.x},${home.y + inner} V${home.y + outer} M${home.x - outer},${home.y} H${home.x - inner} M${home.x + inner},${home.y} H${home.x + outer}`, class: 'v6-cross' }, g);
+    el('circle', { cx: home.x, cy: home.y, r: 2.5, class: 'v6-glyph' }, g);
+    // aim pad
+    el('circle', { cx: pad.x, cy: pad.y, r: pad.r, class: 'v6-pad' }, g);
+    const R = pad.r + 5, a0 = -165 * Math.PI / 180, a1 = -15 * Math.PI / 180;
+    el('path', { d: `M${pad.x + R * Math.cos(a0)},${pad.y + R * Math.sin(a0)} A${R} ${R} 0 0 1 ${pad.x + R * Math.cos(a1)},${pad.y + R * Math.sin(a1)}`, class: 'v6-range' }, g);
+    const s = pad.r * 0.62, h = pad.r * 0.16;
+    el('path', { d: `M${pad.x - s},${pad.y} l${h * 1.4},${-h} v${2 * h} Z M${pad.x + s},${pad.y} l${-h * 1.4},${-h} v${2 * h} Z`, class: 'v6-hint' }, g);
+    const kx = pad.x + dir[0] * pad.r * 0.62, ky = pad.y + dir[1] * pad.r * 0.62;
+    el('line', { x1: pad.x, y1: pad.y, x2: kx, y2: ky, class: 'v6-knobline' }, g);
+    el('circle', { cx: kx, cy: ky, r: 9, class: 'v6-knob' }, g);
+    // HUD
+    const t = (x, y, txt, cls) => { const n = el('text', { x, y, class: cls }, g); n.textContent = txt; };
+    t(hud.x, hud.y + 0, 'WAVE', 'hud-label body-text'); t(hud.x + 46, hud.y + 1, '3', 'hud-value display-text');
+    t(hud.x, hud.y + 20, 'SCORE', 'hud-label body-text'); t(hud.x + 46, hud.y + 21, '1240', 'hud-score display-text');
+    t(hud.x, hud.y + 40, 'AMMO', 'hud-label body-text'); t(hud.x + 46, hud.y + 41, '5', 'v6-ammo display-text');
+  }
+
+  // ---------- overlays ----------
+  function drawCoverage() {
+    const g = clear('coverage');
+    if (!showCover) return;
+    // each seat's fan between the 15° and 165° clamps, out to the screen edge
+    const fan = (lx, ly, sign, cls) => {
+      const pts = [[lx, ly]];
+      for (let deg = 15; deg <= 165; deg += 5) {
+        const d = deg * Math.PI / 180, dx = Math.cos(d) * sign, dy = -Math.sin(d) * sign;
+        let t = 2000;
+        if (dx > 0) t = Math.min(t, (W - lx) / dx); if (dx < 0) t = Math.min(t, -lx / dx);
+        if (dy > 0) t = Math.min(t, (H - ly) / dy); if (dy < 0) t = Math.min(t, -ly / dy);
+        pts.push([lx + dx * t, ly + dy * t]);
+      }
+      el('polygon', { points: poly(pts), class: cls }, g);
+    };
+    fan(180, 640, 1, 'v6-fan-p2');
+    fan(180, 100, -1, 'v6-fan-p1');
+  }
+  function drawBoss() {
+    const g = clear('boss');
+    if (!showBoss) return;
+    el('circle', { cx: BOSS.x, cy: BOSS.y, r: BOSS.ring + BOSS.escortR, class: 'v6-boss-sweep' }, g);
+    el('circle', { cx: BOSS.x, cy: BOSS.y, r: BOSS.r, class: 'v6-boss' }, g);
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + i * Math.PI / 2;
+      el('circle', { cx: BOSS.x + Math.cos(a) * BOSS.ring, cy: BOSS.y + Math.sin(a) * BOSS.ring, r: BOSS.escortR, class: 'v6-escort' }, g);
+    }
+  }
+
+  // ---------- annotations ----------
+  function label(g, x, y, text, lx, ly) {
+    if (lx !== undefined) el('line', { x1: lx, y1: ly, x2: x + 4, y2: y - 3, class: 'leader' }, g);
+    const w = text.length * 5.2 + 14;
+    const n = el('g', { transform: `translate(${x},${y})` }, g);
+    el('rect', { x: 0, y: -11, width: w, height: 16, rx: 8, class: 'label-bg' }, n);
+    const tx = el('text', { x: 7, y: 1, class: 'label-tag' }, n); tx.textContent = text;
+  }
+  function drawAnnot() {
+    const s = SHIPS[variant];
+    const g = clear('annot');
+    const front = s.cx + s.a;
+    if (s.body) {
+      label(g, 40, 160, 'colony ship · flying right, rear off-screen', 20, 230);
+      label(g, front + 12, 352, `3 shield layers · front x=${front}`, front - 2, 362);
+    } else {
+      label(g, 52, 324, 'station · mostly off-screen', 14, 360);
+    }
+    label(g, 190, 540, 'enemies funnel to the ship', 160, 500);
+    label(g, 200, 252, 'stars stream right → left');
+  }
+
+  function readout() {
+    const s = SHIPS[variant];
+    const front = s.cx + s.a, [top, bot] = wallSpan(s);
+    const open = W - front;
+    document.getElementById('readout').innerHTML =
+      `<b>${s.name}</b>: shield front at x=${front}, so the open field is <b>${open}px of 360</b> ` +
+      `(today ${W - 36}px). Hull meets the left wall from y=${Math.round(top)} to ${Math.round(bot)} ` +
+      `(${Math.round(((bot - top) / H) * 100)}% of the edge; controls own y<200 and y>540).`;
+  }
+
+  function render() {
+    drawShip(); drawShield(); drawLanes(); drawEnemies(); drawCoverage(); drawBoss();
+    seat('seat-p2', 'p2', 90);
+    seat('seat-p1', 'p1', 40);
+    drawAnnot(); readout();
+    document.querySelectorAll('[data-ship]').forEach((b) => b.classList.toggle('on', b.dataset.ship === variant));
+  }
+
+  document.querySelectorAll('[data-ship]').forEach((b) => b.addEventListener('click', () => { variant = b.dataset.ship; hitsLeft = 3; render(); }));
+  document.getElementById('hit').addEventListener('click', () => { hitsLeft = hitsLeft === 0 ? 3 : hitsLeft - 1; render(); document.getElementById('hit').textContent = hitsLeft === 0 ? 'Restore shield' : `Hit shield (${hitsLeft} left)`; });
+  const SPEEDS = [[1, 'cruise'], [2.5, 'fast'], [0, 'off']];
+  let si = 0;
+  document.getElementById('speed').addEventListener('click', (e) => { si = (si + 1) % SPEEDS.length; starSpeed = SPEEDS[si][0]; e.target.textContent = `Stars: ${SPEEDS[si][1]}`; });
+  document.getElementById('cover').addEventListener('click', (e) => { showCover = !showCover; e.target.classList.toggle('on', showCover); render(); });
+  document.getElementById('bossbtn').addEventListener('click', (e) => { showBoss = !showBoss; e.target.classList.toggle('on', showBoss); render(); });
+  render();
+  </script>
+</body>
+</html>
