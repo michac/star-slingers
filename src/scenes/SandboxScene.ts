@@ -1,27 +1,29 @@
 /**
- * SandboxScene — game orchestrator. Wires together stars, the station +
- * shield, a TwoThumbControl per joined seat (multitouch; the seats and their
+ * SandboxScene — game orchestrator. Wires together the scrolling starfield,
+ * the enemy lane, the colony fleet (#19), a TwoThumbControl per joined seat (multitouch; the seats and their
  * Easy/Normal come from the join screen via lineup.ts, and ?lefty in
  * controlsVariant.ts mirrors a seat), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
  * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
  * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
  * rounds and SPECIAL missiles (fireShot, pickMissileTarget) and what each does
- * on a hit (handleHit, handleBossHit). Everything else lives in objects/.
+ * on a hit (handleHit, handleBossHit), and what an enemy reaching the fleet
+ * does (checkFleetContacts). Everything else lives in objects/.
  */
 import Phaser from 'phaser';
-import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, SLING, STATION } from '../layout';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, SLING, sublaneOf } from '../layout';
 import { controlsVariant, isLefty } from '../controlsVariant';
 import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
 import { generateTextures } from '../objects/textures';
-import { drawStarfield } from '../objects/draw';
+import { drawLane } from '../objects/draw';
+import { Starfield } from '../objects/Starfield';
 import { TwoThumbControl, type ShotKind } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
 import { Asteroid } from '../objects/Asteroid';
 import { PlayerHud } from '../objects/PlayerHud';
 import { ScoreKeeper } from '../objects/Score';
-import { Station } from '../objects/Station';
+import { Fleet } from '../objects/Fleet';
 import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
 import { NO_INTERLUDES, WaveDirector } from '../objects/WaveDirector';
@@ -64,7 +66,8 @@ export class SandboxScene extends Phaser.Scene {
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
   private explosions!: Explosions;
-  private station!: Station;
+  private starfield!: Starfield;
+  private fleet!: Fleet;
   private scoreKeeper!: ScoreKeeper;
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
@@ -84,8 +87,11 @@ export class SandboxScene extends Phaser.Scene {
    *  from the query. */
   create(data: { lineup: Lineup; startWave?: number }): void {
     generateTextures(this);
-    drawStarfield(this);
-    this.station = new Station(this); // under the asteroids/rockets
+    // Backdrop first (construction order = depth): stars, the lane band, then
+    // the fleet, all under the asteroids and rockets (rockets fly over ships).
+    this.starfield = new Starfield(this);
+    drawLane(this);
+    this.fleet = new Fleet(this, (x, y, r) => this.explosions.boom(x, y, r));
 
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
@@ -133,7 +139,7 @@ export class SandboxScene extends Phaser.Scene {
     // (parked); the run hands it the field for wave 6.
     this.bossEncounter = new BossEncounter(
       this,
-      this.station,
+      this.fleet,
       this.failOverlay,
       () => this.waveDirector.onEncounterDefeated(),
       players
@@ -142,7 +148,7 @@ export class SandboxScene extends Phaser.Scene {
     // The director creates the asteroid wrappers and starts the first wave live.
     this.waveDirector = new WaveDirector(
       this,
-      this.station,
+      this.fleet,
       huds,
       banner,
       {
@@ -257,12 +263,15 @@ export class SandboxScene extends Phaser.Scene {
         bossCharge: () => this.bossEncounter.chargeFraction,
         webBlocks: (ax: number, ay: number, bx: number, by: number) => this.bossEncounter.debugWebBlocks(ax, ay, bx, by),
         webLinks: () => this.bossEncounter.debugWebLinks(),
-        stationShield: () => this.station.shieldHitsLeft,
+        // The fleet, top to bottom: 'shielded' | 'exposed' | 'lost' per ship (#19).
+        fleet: () => this.fleet.states(),
+        starOffsets: () => this.starfield.offsets,
       };
     }
   }
 
   update(_time: number, delta: number): void {
+    this.starfield.update(delta); // space keeps streaming past, even behind a card
     // Freeze game logic behind either end-card; tweens still finish.
     if (this.failOverlay.visible || this.victoryOverlay.visible) return;
     for (const control of this.controls) control.update(delta);
@@ -271,25 +280,30 @@ export class SandboxScene extends Phaser.Scene {
     // then advance + redraw every shot's exhaust trail.
     this.rockets.steer(delta, this.pickMissileTarget);
     this.rockets.update(delta);
-    this.station.update(delta); // shield regen clock
+    this.fleet.update(delta); // bubble pulse + each ship's shield regen
     this.waveDirector.update(delta); // wave-clear check
     this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent.
     this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
-    this.checkStationContacts();
+    this.checkFleetContacts();
   }
 
-  /** Anything that gets within the shield's reach is consumed and costs a
-   *  ring; once the shield is gone, reaching the hull ends the round. */
-  private checkStationContacts(): void {
+  /** A rock threatens the ship of the sublane its centre is in (by sublane,
+   *  not by shape, so a rock skimming a sublane's edge still hits its ship).
+   *  Its leading edge reaching that ship's bubble front (or the bare hull's
+   *  nose) is consumed: it pops the shield, or loses the ship if the shield is
+   *  down. A lost ship's sublane is skipped, so its rocks fly past and leave
+   *  harmlessly off the left edge. The last ship lost ends the round. */
+  private checkFleetContacts(): void {
     for (const asteroid of this.asteroids) {
       if (!asteroid.isActive || asteroid.isPopping) continue;
       const s = asteroid.sprite;
-      const reach = this.station.contactRadius + asteroid.spec.radius; // edge touch
-      if (Phaser.Math.Distance.Between(s.x, s.y, STATION.cx, STATION.cy) > reach) continue;
-      const result = this.station.onEnemyReached();
+      const ship = sublaneOf(s.y);
+      if (!this.fleet.isLive(ship)) continue;
+      if (s.x - asteroid.radius > this.fleet.contactX(ship)) continue;
+      const result = this.fleet.onEnemyReached(ship);
       asteroid.consume();
-      if (result === 'destroyed') {
+      if (result === 'fleetLost') {
         this.physics.pause(); // freeze the field behind the overlay
         this.failOverlay.show();
         return;
@@ -397,7 +411,7 @@ export class SandboxScene extends Phaser.Scene {
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
       // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
-      // station consume() never scores, so it never splits). Read position
+      // fleet consume() never scores, so it never splits). Read position
       // now — the pop tween only scales/fades the sprite, never moves it.
       this.waveDirector.spawnChildren(asteroid);
     }

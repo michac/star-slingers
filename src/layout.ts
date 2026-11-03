@@ -71,68 +71,104 @@ export const SPECIAL = {
   regenMs: 3000, // one missile back every this many ms
 } as const;
 
-/** Star backdrop, exact positions from the mock's <g class="stars">. */
-export const STARS = [
-  { x: 220, y: 120, r: 1.4 },
-  { x: 300, y: 110, r: 1 },
-  { x: 330, y: 360, r: 1.6 },
-  { x: 250, y: 640, r: 1 },
-  { x: 200, y: 560, r: 1.2 },
-  { x: 320, y: 540, r: 1 },
-  { x: 160, y: 380, r: 1.1 },
-  { x: 290, y: 270, r: 1.3 },
-] as const;
-
 /**
- * Station geometry, ported from the v5 mock: hull mostly off-screen left,
- * only a sliver + the shield rings poke into the field.
+ * Starfield (#19): three parallax layers streaming right to left behind
+ * everything, ported from the v6 mock. Each layer is one tiling texture
+ * (`TEX.starLayer`) scrolled by Starfield.ts. `speed` is px/s at
+ * `speedScale` 1; #29 (act transitions) changes the scale at run time via
+ * Starfield.setSpeedScale. Counts are per 360px of width (the tile is wider,
+ * so it scales them up).
  */
-export const STATION = {
-  cx: -10, // mock: hull cx=-10
-  cy: 370,
-  hullR: 24, // mock: hull r=24
-  windows: [
-    { x: 5, y: 361, r: 2.5 },
-    { x: 3, y: 383, r: 2 },
+export const STARFIELD = {
+  speedScale: 1,
+  /** Tile size: power-of-two, so Phaser wraps it without resampling. 512 is
+   *  wider than the field, so a layer never shows its own repeat. */
+  tile: { width: 512, height: 1024 },
+  seed: '19-starfield',
+  layers: [
+    { count: 46, rMin: 0.5, rMax: 0.9, alpha: 0.35, speed: 8, streak: 0 },
+    { count: 22, rMin: 0.9, rMax: 1.3, alpha: 0.6, speed: 22, streak: 0 },
+    // The near layer draws as short streaks (length = streak × r) for speed.
+    { count: 9, rMin: 1.3, rMax: 1.8, alpha: 0.95, speed: 55, streak: 5 },
   ],
-  shieldHp: 3,
 } as const;
 
 /**
- * Shield = 3 concentric rings, outermost first; each ring is 1 HP and the
- * outermost remaining one shatters on contact. (Decided 2026-06-06 —
- * supersedes the mock's 3-segments-along-the-arc: segments imply a
- * positional weak spot the player can't control.)
+ * The enemy lane (#19): the band between the two seats' control areas. Every
+ * enemy lives inside it. It splits into `sublanes` equal sublanes, top to
+ * bottom, one per fleet ship; a rock's sublane is the one its centre is in.
  */
-export const SHIELD_RINGS = [46, 39, 32] as const;
+export const LANE = { top: 200, bottom: 540, sublanes: 4 } as const;
+export const SUBLANE_H = (LANE.bottom - LANE.top) / LANE.sublanes; // 85
 
-/** Where the funnel turn happens: asteroids re-aim at the station once
- *  their x crosses this. (Kept <= 150 historically so the old smoke.mjs
- *  head-on hit test caught its target in lane phase.) */
-export const APPROACH_X = 150;
+/** Centre y of sublane `i` (0 = top). */
+export function sublaneCenterY(i: number): number {
+  return LANE.top + SUBLANE_H * (i + 0.5);
+}
 
-/** Worried-shake tween on the station when a ring shatters. */
+/** The sublane a y falls in, clamped to the band (a y above the lane counts
+ *  as the top sublane, below it as the bottom one). */
+export function sublaneOf(y: number): number {
+  const i = Math.floor((y - LANE.top) / SUBLANE_H);
+  return Math.max(0, Math.min(LANE.sublanes - 1, i));
+}
+
+/**
+ * The colony fleet (#19): one ship per sublane at the left edge, nose right,
+ * ported from the v6 mock (plans/mockups/layout-colony-ship.html). Points are
+ * in a ship's local frame: x from the left wall, y from its sublane centre.
+ * Each ship has one shield bubble (an ellipse round the hull); enemies stop at
+ * the bubble's front while it's up, or at the hull's nose once it's popped.
+ */
+export const FLEET = {
+  hull: [
+    [4, -13],
+    [20, -16],
+    [27, -9],
+    [40, 0],
+    [27, 9],
+    [20, 16],
+    [4, 13],
+  ],
+  /** Engine flame behind the hull (drawn under it). */
+  flame: [
+    [4, -7],
+    [-6, 0],
+    [4, 7],
+  ],
+  deck: { x1: 6, x2: 34 }, // centre line along the hull
+  /** Two rows of windows: their left x, the top/bottom rows' y, square size. */
+  windows: { xs: [9, 13, 17, 21], yTop: -10.5, yBottom: 8.1, size: 2.4 },
+  pod: { x: 14, r: 5 }, // habitat pod
+  bridge: { x: 30, r: 2.6 },
+  noseX: 40, // hull front: the contact line once the shield is popped
+  shield: { cx: 22, rx: 31, ry: 36 }, // bubble front x = 53; ry < SUBLANE_H / 2
+  /** Where the boss and escorts face: the fleet's middle. */
+  facePoint: { x: 22, y: (LANE.top + LANE.bottom) / 2 },
+} as const;
+
+/** Worried-shake tween on a fleet ship when its shield pops. */
 export const SHAKE = { amplitude: 3, durationMs: 60, repeats: 2 } as const;
 
-/** Shatter tween for the lost ring (used by the shield REGROW cue; the
- *  destroy cue is now the SHIELD_FX flare-then-fade below). */
+/** The shield REGROW cue: a copy of the bubble settles in from this scale
+ *  (the pop cue is the SHIELD_FX flare-then-fade below). */
 export const SHATTER = { scaleTo: 1.25, durationMs: 200 } as const;
 
 /**
- * Shield FX (B22 glow + B23 pulse), ported 1:1 from the locked prototype
- * `prototype/reference/shield-pulse.ts`. Rings breathe on a sine (COLOR
- * brightness, never alpha — opaque thick strokes avoid the radial "grid"
- * spokes a semi-transparent ring shows at its tessellation joins) and FLOW
- * outer→inner via a per-ring phase offset, under an ambient glow that hugs +
- * recolors to the outermost remaining ring. A destroyed ring flares its glow
- * then expands + fades. Perf: no DPI, glow `quality` stays 0.3. (Ring width +
- * colors reuse STROKES.shield.width + the per-ring SHIELD_RINGS mapping.)
+ * Shield FX (B22 glow + B23 pulse), from the locked prototype
+ * `prototype/reference/shield-pulse.ts`, carried onto the fleet's bubbles.
+ * Bubbles breathe on a sine (COLOR brightness, never alpha — an opaque thick
+ * stroke avoids the radial "grid" spokes a semi-transparent one shows at its
+ * tessellation joins) and FLOW down the fleet via a per-ship phase offset,
+ * under one shared ambient glow. A popped bubble flares its glow then expands
+ * + fades. Perf: no DPI, glow `quality` stays 0.3, and one glow FX for the
+ * whole fleet. (Width + colour: STROKES.bubble, COLORS.shieldOuter.)
  */
 export const SHIELD_FX = {
   periodMs: 3200, // ms per breath — slow
   pulseLo: 0.6, // trough brightness (crest is 1.0): a half-dim, still clearly lit
   glowQuality: 0.3, // glow bloom sample size — keep low; higher lags the Pixel 6
-  // Destroyed ring: flare the glow bright (yoyo), then expand + fade away.
+  // Popped bubble: flare the glow bright (yoyo), then expand + fade away.
   flare: { strength: 11, flareMs: 150, fadeMs: 540, scaleTo: 1.45 },
 } as const;
 
@@ -262,7 +298,7 @@ export const VICTORY_ICON = {
  * while battling. 4 escorts slowly orbit it at a radius kept OUTSIDE the boss
  * so the whole boss stays visible. Balance dials (HP, charge rate) live in
  * waves.ts; this block is positions/sizes only. (`park.x` is tunable
- * left-of-center; the orbit must clear the station shield at x≤46.)
+ * left-of-center; the orbit must clear the fleet's bubbles at x≤53.)
  */
 export const BOSS_LAYOUT = {
   park: { x: 180, y: 370 }, // center; both seats reach it
@@ -295,7 +331,7 @@ export const BOSS_LAYOUT = {
  *  imports it for the break-even math.) */
 export const AMMO_REGEN_MS = 1000;
 
-// Wave targets, the difficulty model, lanes, and the budget/solver math live
+// Wave targets, the difficulty model, rock streams, and the budget/solver math live
 // in waves.ts — that's the one file to tune the run. See docs/design.md §7.
 
 /**
@@ -394,23 +430,25 @@ export const SCORE = {
 
 /**
  * Splitter children (B37) — one rocket breaks a large splitter into two
- * standard-size children. They funnel toward the station like mini-asteroids (the
- * existing funnel + station-contact + left-exit logic all engage), threaten a
- * shield ring (a self-balancing "winning tax"), and score their own standard
- * pop (10 pts each). Only rocket-kills split; a rock that reaches the station never does.
+ * standard-size children. They scatter briefly, then drift straight left like
+ * small rocks (the fleet-contact and left-exit logic both apply), threaten
+ * their sublane's ship (a self-balancing "winning tax"), and score their own
+ * standard pop (10 pts each). The scatter stays inside the enemy lane. Only
+ * rocket-kills split; a rock that reaches the fleet never does.
  *
  * Children live as pre-allocated wrappers appended to the asteroid pool (so
  * the rocket→asteroid collider, built once, covers them); they differ from
- * lane rocks only in being one-shot (no respawn) and fielded at a position
+ * wave rocks only in being one-shot (no respawn) and fielded at a position
  * with a scatter velocity rather than off the right edge.
  */
 export const SPLITTER_CHILDREN = {
   poolSize: 6, // pre-allocated child wrappers (graceful degrade if exhausted)
   count: 2, // children per splitter
   launchSpeed: 90, // initial scatter burst (px/s)
-  childSpeed: 45, // post-funnel cruise toward the station (~ a slow lane rock)
+  childSpeed: 45, // straight-left cruise after the scatter (~ a slow wave rock)
+  scatterMs: 400, // the scatter burst lasts this long, then the child turns straight left
   scatterConeDeg: 70, // total spread of the 2 children...
-  scatterCenterDeg: 180, // ...centered LEFTWARD (toward the station, -x)
+  scatterCenterDeg: 180, // ...centered LEFTWARD (toward the fleet, -x)
   spawnGraceMs: 100, // body disabled on spawn (railgun/fresh-pop guard)
   lifetimeMs: 6000, // hard cap — guarantees the wave can always clear
 } as const;

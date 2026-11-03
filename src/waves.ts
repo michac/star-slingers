@@ -1,7 +1,7 @@
 /**
  * waves.ts — the difficulty dials. This is the one file to tune the run:
  * the run (`RUN`: 10 waves in 4 acts, each wave's kind and targets), the knob ranges the solver moves through
- * (`DIFFICULTY_MODEL`), the physical lanes (`LANE_SLOTS`), and the
+ * (`DIFFICULTY_MODEL`), the rock streams (`ROCK_STREAMS`), and the
  * budget/solver math that turns a target into a concrete asteroid field.
  *
  * The model (see docs/design.md §7 "Difficulty"): a wave is a TARGET — the net team
@@ -11,13 +11,12 @@
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, SPECIAL, SPLITTER_CHILDREN, STATION } from './layout';
+import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN } from './layout';
 
 export interface AsteroidSpec {
   kind: AsteroidKind;
   radius: number;
-  y: number; // drift lane, kept clear of both seats' control bands
-  speed: number; // px/s, right -> left
+  speed: number; // px/s, right -> left (each (re)spawn draws its y: WaveDirector's sublane bag)
   /** Max hp override (tests / future tuning); defaults to ASTEROID_KIND[kind].hp. */
   hp?: number;
 }
@@ -53,14 +52,16 @@ export function clearDamage(spec: AsteroidSpec): number {
   return maxHpOf(spec) + children;
 }
 
-/** Physical lanes — position + base speed only. Toughness and size are NOT
- *  fixed here; the solver assigns them per wave. The floor (minLanes) uses
- *  the first lanes, so order them well-spread and clear of the control bands. */
-export const LANE_SLOTS: { y: number; baseSpeed: number }[] = [
-  { y: 300, baseSpeed: 40 },
-  { y: 215, baseSpeed: 50 },
-  { y: 390, baseSpeed: 55 },
-  { y: 480, baseSpeed: 65 },
+/** Rock streams — one asteroid wrapper each, fielding rock after rock at its
+ *  base speed. Only the speed is fixed here: the solver assigns toughness and
+ *  size per wave, and every (re)spawn draws its y from the WaveDirector's
+ *  sublane bag, so no stream owns a sublane. The floor (minStreams) uses the
+ *  first streams. */
+export const ROCK_STREAMS: { baseSpeed: number }[] = [
+  { baseSpeed: 40 },
+  { baseSpeed: 50 },
+  { baseSpeed: 55 },
+  { baseSpeed: 65 },
 ];
 
 /**
@@ -70,8 +71,8 @@ export const LANE_SLOTS: { y: number; baseSpeed: number }[] = [
  * downtime texture, not a primary difficulty lever.
  */
 export const DIFFICULTY_MODEL = {
-  minLanes: 3, // the always-on "minimum asteroid rate" floor
-  maxLanes: 4,
+  minStreams: 3, // the always-on "minimum asteroid rate" floor
+  maxStreams: 4,
   minSpeedScale: 0.5,
   maxSpeedScale: 0.85,
   speedStep: 0.02,
@@ -84,7 +85,7 @@ export const DIFFICULTY_MODEL = {
 export interface WaveConfig {
   required: number; // target net damage/s players must land (see docs/design.md §7)
   quota: number; // total asteroids this wave fields, then respawns stop
-  shieldRegenMs: number; // a ring regrows after this long unhit; 0 = off
+  shieldRegenMs: number; // a fleet ship's shield regrows after this long unhit; 0 = off
 }
 
 /** The run's four acts: 1 asteroids, 2 ships, 3 space monsters, 4 the finale. */
@@ -122,7 +123,7 @@ export interface RunWave {
  * revisable in playtest. Tune by the dev boot log (target vs achieved + tier).
  *
  * The finale is a long, dense, forgiving wave to blast with every upgrade:
- * its target solves to all four lanes as splitters at max speed, with a big
+ * its target solves to all four streams as splitters at max speed, with a big
  * quota and a quick shield regen.
  */
 export const RUN: readonly RunWave[] = [
@@ -181,9 +182,9 @@ export function waveTarget(wave: WaveConfig, players: 1 | 2, soloScale: number =
   return players === 1 ? wave.required * soloScale : wave.required;
 }
 
-/** Breather between waves: celebration beat + shield restore + banner. */
+/** Breather between waves: celebration beat + fleet restore + banner. */
 export const BREATHER = {
-  ringRestoreStaggerMs: 300, // rings regrow one-by-one at this spacing
+  shipRestoreStaggerMs: 300, // restored ships + shields reappear one by one at this spacing
   bannerMs: 2200, // how long the next-wave banner holds
 } as const;
 
@@ -194,12 +195,14 @@ export const BREATHER = {
  *   CHARGING: four escorts rotate a physical shield web around the boss.
  *     ├ a downed escort (one hit from EACH seat) opens two links for
  *     │ escortRegenMs and resets + pauses the charge
- *     └ charge fills only with all nodes live → boss FIRES (−1 shield ring)
- *   win: boss HP 0 (railguns through web gaps) · lose: shield gone when it fires
+ *     └ charge fills only with all nodes live → boss FIRES its beam at the
+ *       top-most live fleet ship (a placeholder rule; #27 decides the final one)
+ *   win: boss HP 0 (railguns through web gaps) · lose: the beam takes the last ship
  *
  * Urgency = the charge bar racing you; co-op = needing both players to down an
  * escort and open a gap, then land railguns on the boss through it. A completed
- * charge shatters a ring (reuses the wave shield + regen).
+ * charge hits a ship like a rock would: it pops the shield, or loses the ship
+ * if the shield is already down (reuses the fleet's shields + regen).
  */
 export const BOSS = {
   hp: 10, // charged railgun hits to destroy through shield-web gaps
@@ -216,8 +219,9 @@ export const BOSS = {
 // priority order) so threat meets the target.
 // An approximation — consistency matters more than precision.
 
-/** Average spawn -> shield-contact travel distance (lane radius cancels). */
-const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (STATION.cx + SHIELD_RINGS[0]);
+/** Average spawn -> shield-contact travel distance: from the mean spawn x to a
+ *  fleet ship's bubble front (the rock's radius cancels). */
+const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (FLEET.shield.cx + FLEET.shield.rx);
 
 /**
  * Gross accurate damage/s a concrete field demands, sustained.
@@ -233,7 +237,7 @@ function threatOf(specs: AsteroidSpec[]): number {
 /**
  * solveWave — realize a target `required` damage/s as a concrete field by
  * advancing knobs in priority order until threat reaches `required + leak`:
- *   1. (count)     lanes minLanes -> maxLanes, weak + slow
+ *   1. (count)     streams minStreams -> maxStreams, weak + slow
  *   2. (speed)     speedScale minSpeedScale -> maxSpeedScale
  *   3. (splitters) replace standard rocks with splitters (slot order)
  * Greedy/discrete: stops at the first step that meets the target, or when
@@ -242,26 +246,25 @@ function threatOf(specs: AsteroidSpec[]): number {
 export function solveWave(required: number, leak: number): AsteroidSpec[] {
   const M = DIFFICULTY_MODEL;
   const target = required + leak;
-  let lanes: number = M.minLanes;
+  let streams: number = M.minStreams;
   let speedScale: number = M.minSpeedScale;
-  const kinds: AsteroidKind[] = LANE_SLOTS.map(() => 'standard');
+  const kinds: AsteroidKind[] = ROCK_STREAMS.map(() => 'standard');
 
   const build = (): AsteroidSpec[] =>
-    LANE_SLOTS.slice(0, lanes).map((slot, i) => ({
+    ROCK_STREAMS.slice(0, streams).map((stream, i) => ({
       kind: kinds[i],
       radius: ASTEROID_KIND[kinds[i]].radius,
-      y: slot.y,
-      speed: slot.baseSpeed * speedScale,
+      speed: stream.baseSpeed * speedScale,
     }));
 
   const met = () => threatOf(build()) >= target;
   // Priority waterfall: exhaust each tier before moving to the next.
-  while (!met() && lanes < M.maxLanes) lanes++;
+  while (!met() && streams < M.maxStreams) streams++;
   while (!met() && speedScale < M.maxSpeedScale) {
     speedScale = Math.min(M.maxSpeedScale, speedScale + M.speedStep);
   }
   // Last lever: replace standards with splitters, in slot order.
-  for (let i = 0; i < lanes && !met(); i++) {
+  for (let i = 0; i < streams && !met(); i++) {
     kinds[i] = 'splitter';
   }
   return build();

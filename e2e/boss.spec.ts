@@ -2,7 +2,7 @@
  * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge, ?boss.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, healthBars, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, healthBars, fleetStates, type Page } from './helpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -59,16 +59,36 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   expect(await escortsAlive(page)).toBe(3);
 
   // The downed node regenerates after 6s with both locks reset, restoring all
-  // four links; charge then resumes and can still fire at the station.
+  // four links; charge then resumes and can still fire at the fleet.
   const regenerated = await stepUntil(page, 's.__debug.escortsAlive() === 4', 100);
   expect(regenerated.done).toBe(true);
   expect(await escortsAlive(page)).toBe(4);
   // Only the regenerated node resets; surviving escorts retain any real hits.
   expect((await escortLocks(page))[2]).toBe(0);
   expect(await shieldLinks(page)).toBe(4);
-  const shieldBefore = await page.evaluate(`${SCENE}.__debug.stationShield()`);
-  const fired = await stepUntil(page, `s.__debug.stationShield() < ${shieldBefore}`, 350);
+  const fired = await stepUntil(page, `s.__debug.fleet()[0] !== 'shielded'`, 350);
   expect(fired.done).toBe(true);
+});
+
+test('the boss beam hits the top-most live ship, and the beam that takes the last ship fails the run', async ({ page }) => {
+  await gotoGame(page);
+  await enterBoss(page);
+  // A completed charge fires the beam (the charge timer itself is the case above).
+  const beam = () => page.evaluate(`${SCENE}.bossEncounter.bossFires()`);
+  await beam();
+  expect(await fleetStates(page)).toEqual(['exposed', 'shielded', 'shielded', 'shielded']);
+  await beam();
+  expect(await fleetStates(page)).toEqual(['lost', 'shielded', 'shielded', 'shielded']);
+  await beam(); // the top ship is gone: the next one down takes it
+  expect(await fleetStates(page)).toEqual(['lost', 'exposed', 'shielded', 'shielded']);
+
+  await page.evaluate(`(() => { const f = ${SCENE}.fleet; for (const i of [1, 2]) while (f.isLive(i)) f.onEnemyReached(i); })()`);
+  await beam();
+  expect(await bossPhase(page)).toBe('charging');
+  await beam();
+  expect(await fleetStates(page)).toEqual(['lost', 'lost', 'lost', 'lost']);
+  expect(await bossPhase(page)).toBe('lost');
+  expect(await page.evaluate(`${SCENE}.failOverlay.visible`)).toBe(true);
 });
 
 test('the boss takes 1 HP from a charged round only: plain rounds and missiles do nothing', async ({ page }) => {

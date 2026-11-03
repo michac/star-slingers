@@ -1,18 +1,23 @@
 /**
- * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl),
- * plus the static starfield both scenes draw behind everything.
+ * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl)
+ * and the fleet textures, plus the enemy lane's static band.
  * Phaser Graphics has no native dash, so dashes are walked by hand; solid arcs
  * are one stroked path.
  */
 import Phaser from 'phaser';
-import { COLORS } from '../tokens';
-import { STARS } from '../layout';
+import { COLORS, STROKES } from '../tokens';
+import { GAME_WIDTH, LANE } from '../layout';
 
-/** The fixed starfield (STARS), one Graphics, drawn under everything else. */
-export function drawStarfield(scene: Phaser.Scene): void {
+/** The enemy lane (#19): a faint violet band with brighter top and bottom
+ *  edges, so the players can see where enemies live. One static Graphics,
+ *  drawn over the starfield and under everything else. */
+export function drawLane(scene: Phaser.Scene): void {
   const g = scene.add.graphics();
-  g.fillStyle(COLORS.star, 1);
-  for (const star of STARS) g.fillCircle(star.x, star.y, star.r);
+  g.fillStyle(COLORS.shieldMid, STROKES.laneFill.alpha);
+  g.fillRect(0, LANE.top, GAME_WIDTH, LANE.bottom - LANE.top);
+  g.lineStyle(STROKES.laneEdge.width, COLORS.shieldMid, STROKES.laneEdge.alpha);
+  g.lineBetween(0, LANE.top, GAME_WIDTH, LANE.top);
+  g.lineBetween(0, LANE.bottom, GAME_WIDTH, LANE.bottom);
 }
 
 /** Solid arc (B35) as ONE stroked path — redrawn every frame while charging, so
