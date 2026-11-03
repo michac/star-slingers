@@ -1,4 +1,4 @@
-// Guard (#18): Node's global types must not reach browser code. Never imported, so never bundled;
-// if Node types leak into tsconfig.json, the directive below goes unused and typecheck fails (TS2578).
-// @ts-expect-error -- `process` is Node-only and must not resolve here
+// Guard (#18), never imported, so never bundled. If Node types leak into tsconfig.json, `process`
+// resolves, the directive below goes unused, and typecheck fails (TS2578).
+// @ts-expect-error -- `process` must not resolve in browser code
 export type NodeGlobalsLeak = typeof process;

@@ -1,9 +1,6 @@
 {
-  // Node-side code: the e2e suite, the Playwright config and the Vite config.
-  // They run under Node (process.env, node:fs), so this config names Node's
-  // types explicitly (TS 6 loads no @types by default). They sit outside
-  // tsconfig.json's include, which keeps Node globals out of game code;
-  // `npm run typecheck` (which `npm run build` runs first) checks both configs.
+  // Node-side code: the e2e suite and the Playwright and Vite configs.
+  // TS 6 loads no @types by default, so Node's are named here.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["node"]

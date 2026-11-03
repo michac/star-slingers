@@ -103,13 +103,11 @@ textures, tokens).
 ## Game commands (from the repo root)
 
 - `npm run dev` — dev server, LAN-exposed for phone testing (see `README.md` for firewall notes)
-- `npm run build` / `npm run typecheck` — `typecheck` runs two configs. `tsconfig.json` is browser
-  code only (`src/`, `prototype/`), with no Node types, so `process` or `Buffer` in game code fails.
-  `tsconfig.node.json` (the root config plus an explicit `types: ["node"]`) checks the Node-side files:
-  `e2e/`, `playwright.config.ts` and `vite.config.ts`. `src/no-node-globals.ts` is never imported, but
-  it isn't dead code: it holds a `@ts-expect-error` on `process` that fails `typecheck` if Node types
-  leak into the root config again. `build` runs `typecheck` first, so CI and both deploy pre-flights
-  check all of it.
+- `npm run build` / `npm run typecheck` — `typecheck` runs `tsconfig.json` (browser code: `src/`,
+  `prototype/`, no Node types) and `tsconfig.node.json` (root config + `types: ["node"]`: `e2e/`,
+  `playwright.config.ts`, `vite.config.ts`). `src/no-node-globals.ts` is never imported; it is the
+  guard that fails `typecheck` if Node types reach the root config. `build` runs `typecheck` first,
+  so CI and both deploy pre-flights check all of it.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
   score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the `src/waves.ts` solver and solo
   target scaling), `boss.spec.ts` (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
