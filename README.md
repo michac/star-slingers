@@ -2,7 +2,7 @@
 
 A two-player co-op space defense for one phone laid flat between the players.
 Each seat has two-thumb controls: drag on the right to aim, hold FIRE (charge
-for a railgun) or HOME (a homing shot) on the left. The design lives in
+for a charged railgun round) or SPECIAL (a homing missile) on the left. The design lives in
 `docs/design.md`; all colors/fonts live in `src/tokens.ts`.
 
 Layout and palette are ported 1:1 from
@@ -17,8 +17,8 @@ npm run dev        # serves on http://localhost:5173 (and your LAN IP)
 ```
 
 Desktop check (mouse = one pointer, so no aiming while a button is held):
-drag sideways on a seat's right side to aim, then click FIRE or HOME to shoot.
-Ammo regens 1 per second up to 5.
+drag sideways on a seat's right side to aim, then click FIRE or SPECIAL to shoot.
+FIRE ammo regens 1 per second up to 5; SPECIAL's own pool regens 1 per 3 seconds up to 2.
 
 ## Phone testing (Pixel 6)
 
@@ -34,7 +34,7 @@ Ammo regens 1 per second up to 5.
 ## Live links
 
 - [Play Star Slingers](https://michac.github.io/star-slingers/)
-- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss): the command ship, wave 6. Useful for phone testing the fight; the normal link still starts a full run. `?wave=N` jumps to any wave (1–10).
+- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss): the command ship, wave 6, right after the join screen. Useful for phone testing the fight; the normal link still starts a full run. `?wave=N` jumps to any wave (1–10).
 
 ## Scripts
 
@@ -43,5 +43,5 @@ Ammo regens 1 per second up to 5.
 - `npm run typecheck` — `tsc --noEmit` only, over `tsconfig.json` (the game) and `tsconfig.node.json`
   (Node-side: `e2e/` + the Playwright and Vite configs)
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/` with a shared `e2e/helpers.ts`
-  (auto-starts the dev server headless on :5181 and asserts combat / waves / boss / solo / controls /
+  (auto-starts the dev server headless on :5181 and asserts combat / waves / boss / join / solo / controls /
   haptics + zero console errors). First run on a new machine: `npx playwright install chromium`.

@@ -96,7 +96,7 @@ export class WaveDirector {
     private readonly boom: (x: number, y: number, radius: number) => void,
     /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
     private readonly celebrate: () => void,
-    /** Seats in play (?players): solo scales each wave's target (SOLO in waves.ts). */
+    /** Live seats (the join screen's lineup): solo scales each wave's target (SOLO in waves.ts). */
     private readonly players: 1 | 2
   ) {
     // One wrapper per physical lane slot, alive for the whole run, built
@@ -120,7 +120,7 @@ export class WaveDirector {
     // Append dedicated child wrappers to the SAME array, parked. They
     // join here (before SandboxScene builds the rocket→asteroid collider once
     // over this.asteroids), so they get the collider + update loop + station
-    // contact + homing + field-empty checks for free. They differ from lane
+    // contact + missile + field-empty checks for free. They differ from lane
     // rocks in exactly two ways: onWantRespawn returns false (one-shot — they
     // park rather than respawn off the right edge), and they're fielded via
     // spawnChild() at a scatter position. Their indices are ≥ lane count, so

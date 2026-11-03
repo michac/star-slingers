@@ -2,23 +2,24 @@
  * TwoThumbControl — one seat's controls (#7): one thumb drags to aim, the
  * other holds a fire button.
  *
- *  - FIRE: press starts the draw (the nocked rocket pulls back along the aim
- *    and a charge ring fills round the button); release fires at the fixed
- *    SLING.maxSpeed. Held ≥ CHARGE.fullMs, release fires the railgun.
- *  - HOME: while held, rings the rock the shot would lock; release fires a
- *    homing shot. Never charges.
+ *  - FIRE (the railgun): press starts the draw (the nocked rocket pulls back
+ *    along the aim and a charge ring fills round the button); release fires at
+ *    the fixed SLING.maxSpeed. Held ≥ CHARGE.fullMs, release fires a charged round.
+ *  - SPECIAL (#22): while held, rings the enemy the seat's current special would
+ *    take; release fires it (a homing missile today). Never charges. Its icon is
+ *    drawn from SPECIALS by the `special` field, and dims while its pool is empty.
  *  - One button at a time: while either is held, a press on the other is ignored.
  *  - Haptics (#3): FIRE ticks once the moment it's fully charged with ammo to
  *    fire (HAPTICS dials, src/haptics.ts). The per-shot buzz is the scene's,
- *    in fireRocket.
+ *    in fireShot.
  *  - Aim: sideways motion anywhere in the aim zone (CONTROLS_V2.drag) turns the
  *    aim, clamped to CONTROLS_V2.aim; it persists between shots. The aim pad is
  *    the zone's visual: a knob along the current aim inside the range arc.
  *
  * Everything the seat draws (buttons, pad, launcher, trajectory) lives in ONE
  * container in the bottom seat's frame (layout CONTROLS_V2's coordinates), which
- * the top seat rotates 180° about the field centre. Only the homing lock ring is
- * drawn in world space (it sits on a rock). Pointers are claimed by id: the
+ * the top seat rotates 180° about the field centre. Only the special's target
+ * ring is drawn in world space (it sits on a rock). Pointers are claimed by id: the
  * scene fans every event out to every seat, and each button / the aim zone
  * claims at most one pointer on down by hit-testing its region.
  */
@@ -27,15 +28,16 @@ import { COLORS, STROKES } from '../tokens';
 import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, SLING } from '../layout';
 import { buzz } from '../haptics';
 import { drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
+import { DEFAULT_SPECIAL, SPECIALS, type SpecialKind } from './specials';
 
 type Point = { x: number; y: number };
-type Button = 'fire' | 'home';
+export type Button = 'fire' | 'special';
 
 export interface ShotKind {
-  /** Railgun (B13): FIRE held to a full charge. */
+  /** The button released: FIRE, or SPECIAL (the seat's current special). */
+  button: Button;
+  /** A charged FIRE round: FIRE held to a full charge. */
   charged: boolean;
-  /** Homing (B14): fired from HOME (locks at fire, else flies straight). */
-  homing: boolean;
 }
 
 export interface TwoThumbControlConfig {
@@ -47,26 +49,33 @@ export interface TwoThumbControlConfig {
   /** Mirror the seat: aim zone on the player's left, buttons on their right. */
   lefty: boolean;
   rocketTexture: string;
-  canFire: () => boolean;
-  onFire: (x: number, y: number, vx: number, vy: number, kind: ShotKind) => void;
-  /** The rock a shot along (origin, dir) would lock onto, or null. */
-  homingTargetAt: (ox: number, oy: number, dirx: number, diry: number) => { x: number; y: number; r: number } | null;
+  /** Does this button's ammo pool have a shot left? */
+  canFire: (button: Button) => boolean;
+  /** Launch direction (unit vector, world) from the anchor; the scene picks the speed. */
+  onFire: (x: number, y: number, dirx: number, diry: number, kind: ShotKind) => void;
+  /** The enemy the special along (origin, dir) would take, or null. */
+  specialTargetAt: (ox: number, oy: number, dirx: number, diry: number) => { x: number; y: number; r: number } | null;
 }
 
 const DEG = Math.PI / 180;
 
 export class TwoThumbControl {
   private readonly staticGfx: Phaser.GameObjects.Graphics;
+  /** The SPECIAL button's icon, on its own so it can dim and be swapped. */
+  private readonly specialIconGfx: Phaser.GameObjects.Graphics;
   private readonly dynamicGfx: Phaser.GameObjects.Graphics;
-  /** World-space: the homing lock ring on the targeted rock. */
+  /** World-space: the target ring on the enemy the special would take. */
   private readonly lockGfx: Phaser.GameObjects.Graphics;
   private readonly nockedRocket: Phaser.GameObjects.Image;
 
   // Seat-frame geometry (lefty already applied).
   private readonly launcher: Point;
   private readonly fire: { x: number; y: number; r: number };
-  private readonly home: { x: number; y: number; r: number };
+  private readonly specialBtn: { x: number; y: number; r: number };
   private readonly pad: Point;
+
+  /** The seat's current special: what SPECIAL fires and which icon it shows. */
+  private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
 
   /** Seat-frame aim, degrees (0 = player's right, 90 = across the field). */
   private aimDeg: number = CONTROLS_V2.aim.startDeg;
@@ -85,10 +94,10 @@ export class TwoThumbControl {
   private dirty = true;
 
   constructor(scene: Phaser.Scene, private readonly config: TwoThumbControlConfig) {
-    const { fire, home, pad } = CONTROLS_V2;
+    const { fire, special, pad } = CONTROLS_V2;
     const mirror = <T extends Point>(p: T): T => (config.lefty ? { ...p, x: GAME_WIDTH - p.x } : { ...p });
     this.fire = mirror(fire);
-    this.home = mirror(home);
+    this.specialBtn = mirror(special);
     this.pad = mirror(pad);
     this.launcher = this.toSeat(config.anchor);
 
@@ -100,11 +109,13 @@ export class TwoThumbControl {
       .container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [inner])
       .setAngle(config.edge === 'top' ? 180 : 0);
     this.staticGfx = scene.add.graphics();
+    this.specialIconGfx = scene.add.graphics();
     this.dynamicGfx = scene.add.graphics();
     this.nockedRocket = scene.add.image(this.launcher.x, this.launcher.y, config.rocketTexture);
-    inner.add([this.staticGfx, this.dynamicGfx, this.nockedRocket]);
+    inner.add([this.staticGfx, this.specialIconGfx, this.dynamicGfx, this.nockedRocket]);
     this.lockGfx = scene.add.graphics();
     this.drawStatic();
+    this.setSpecial(this.currentSpecial);
   }
 
   // ---- read-outs (DEV hooks / tests) ----
@@ -113,12 +124,25 @@ export class TwoThumbControl {
     return this.aimDeg;
   }
 
+  get special(): SpecialKind {
+    return this.currentSpecial;
+  }
+
+  /** Change what SPECIAL fires (#26 upgrades): redraws the button's icon. */
+  setSpecial(kind: SpecialKind): void {
+    this.currentSpecial = kind;
+    const g = this.specialIconGfx;
+    g.clear();
+    const b = this.specialBtn;
+    SPECIALS[kind].drawIcon(g, b.x, b.y, b.r, this.config.color);
+  }
+
   /** World-space centres + radii of this seat's controls. */
-  worldLayout(): { anchor: Point; fire: Point & { r: number }; home: Point & { r: number }; pad: Point & { r: number } } {
+  worldLayout(): { anchor: Point; fire: Point & { r: number }; special: Point & { r: number }; pad: Point & { r: number } } {
     return {
       anchor: { ...this.config.anchor },
       fire: { ...this.toSeat(this.fire), r: this.fire.r },
-      home: { ...this.toSeat(this.home), r: this.home.r },
+      special: { ...this.toSeat(this.specialBtn), r: this.specialBtn.r },
       pad: { ...this.toSeat(this.pad), r: CONTROLS_V2.pad.r },
     };
   }
@@ -157,30 +181,34 @@ export class TwoThumbControl {
       this.dirty = true;
     }
     if (pointer.id !== this.buttonPointer) return;
-    const kind: ShotKind = { charged: this.held === 'fire' && this.charge >= 1, homing: this.held === 'home' };
+    const button = this.held;
+    const charged = button === 'fire' && this.charge >= 1;
     this.buttonPointer = null;
     this.held = null;
     this.charge = 0;
     this.dirty = true;
     this.lockGfx.clear();
-    if (!this.config.canFire()) return;
+    if (!button || !this.config.canFire(button)) return;
     const dir = this.worldDir();
     const { anchor } = this.config;
-    this.config.onFire(anchor.x, anchor.y, dir.x * SLING.maxSpeed, dir.y * SLING.maxSpeed, kind);
+    this.config.onFire(anchor.x, anchor.y, dir.x, dir.y, { button, charged });
   }
 
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
     if (this.held === 'fire') this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
-    const canFire = this.config.canFire();
+    const canFire = this.config.canFire('fire');
+    // An empty special pool dims the SPECIAL icon (it regens on its own clock).
+    this.specialIconGfx.setAlpha(this.config.canFire('special') ? 1 : 0.35);
     // Armed tick: once per hold, the first frame it's both fully charged AND
     // has ammo (no "ready" buzz for a release that would fire nothing).
     if (this.held === 'fire' && this.charge >= 1 && canFire && !this.armedBuzzed) {
       this.armedBuzzed = true;
       buzz(HAPTICS.armedMs);
     }
-    // Out of ammo dims the nocked rocket (cheap; ammo regens on its own clock).
-    this.nockedRocket.setAlpha(canFire ? 1 : 0.35);
+    // An empty pool dims the nocked rocket: the held button's pool, else
+    // FIRE's (cheap; each pool regens on its own clock).
+    this.nockedRocket.setAlpha(this.config.canFire(this.held ?? 'fire') ? 1 : 0.35);
     const active = this.held !== null || this.aimPointer !== null;
     if (!active && !this.dirty) return;
     this.dirty = false;
@@ -218,9 +246,9 @@ export class TwoThumbControl {
       return d <= b.r + pad ? d / b.r : Infinity;
     };
     const f = score(this.fire);
-    const h = score(this.home);
-    if (f === Infinity && h === Infinity) return null;
-    return f <= h ? 'fire' : 'home';
+    const s = score(this.specialBtn);
+    if (f === Infinity && s === Infinity) return null;
+    return f <= s ? 'fire' : 'special';
   }
 
   /** The aim zone: the player's side of their band away from the buttons. */
@@ -241,8 +269,7 @@ export class TwoThumbControl {
 
     this.drawButtonBase(g, this.fire);
     this.drawRocketGlyph(g, this.fire.x, this.fire.y, this.fire.r);
-    this.drawButtonBase(g, this.home);
-    this.drawCrosshairGlyph(g, this.home.x, this.home.y, this.home.r);
+    this.drawButtonBase(g, this.specialBtn); // its icon is specialIconGfx (setSpecial)
 
     // Aim pad: dim disc + rim, the aimable range as a dashed arc just outside,
     // a centre dot, and a ◀ ▶ hint (sideways turns the aim).
@@ -288,22 +315,6 @@ export class TwoThumbControl {
     g.fillTriangle(cx - w * 0.75, tail + 2, cx + w * 0.75, tail + 2, cx, cy + r * 0.66);
   }
 
-  /** HOME glyph: a crosshair (ring + four ticks + centre dot). */
-  private drawCrosshairGlyph(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number): void {
-    const { color } = this.config;
-    const ring = r * 0.42;
-    g.lineStyle(2.5, color, 1);
-    g.strokeCircle(cx, cy, ring);
-    const inner = ring * 0.55;
-    const outer = r * 0.72;
-    g.lineBetween(cx, cy - outer, cx, cy - inner);
-    g.lineBetween(cx, cy + inner, cx, cy + outer);
-    g.lineBetween(cx - outer, cy, cx - inner, cy);
-    g.lineBetween(cx + inner, cy, cx + outer, cy);
-    g.fillStyle(color, 1);
-    g.fillCircle(cx, cy, 2.5);
-  }
-
   /** Trajectory, pad knob, pressed highlight + charge ring, nocked rocket. */
   private drawDynamic(): void {
     const { color } = this.config;
@@ -331,7 +342,7 @@ export class TwoThumbControl {
 
     // Pressed button: brighter fill; FIRE also grows a charge ring.
     if (this.held) {
-      const b = this.held === 'fire' ? this.fire : this.home;
+      const b = this.held === 'fire' ? this.fire : this.specialBtn;
       g.fillStyle(color, 0.3);
       g.fillCircle(b.x, b.y, b.r);
     }
@@ -341,8 +352,8 @@ export class TwoThumbControl {
     const pull =
       this.held === 'fire'
         ? CONTROLS_V2.pullBack * (CONTROLS_V2.pullBackMinFrac + (1 - CONTROLS_V2.pullBackMinFrac) * this.charge)
-        : this.held === 'home'
-          ? CONTROLS_V2.homePullBack
+        : this.held === 'special'
+          ? CONTROLS_V2.specialPullBack
           : 0;
     this.nockedRocket
       .setPosition(lx - dir.x * pull, ly - dir.y * pull)
@@ -368,14 +379,14 @@ export class TwoThumbControl {
     drawSolidArc(g, this.fire.x, this.fire.y, r, start, start + this.charge * Math.PI * 2);
   }
 
-  /** While HOME is held: ring the rock the shot would lock. World space. */
+  /** While SPECIAL is held with ammo: ring the enemy it would take. World space. */
   private drawLock(): void {
     const g = this.lockGfx;
     g.clear();
-    if (this.held !== 'home') return;
+    if (this.held !== 'special' || !this.config.canFire('special')) return; // nothing would fire
     const { anchor, color } = this.config;
     const d = this.worldDir();
-    const lock = this.config.homingTargetAt(anchor.x, anchor.y, d.x, d.y);
+    const lock = this.config.specialTargetAt(anchor.x, anchor.y, d.x, d.y);
     if (lock) drawLockRing(g, lock, color);
   }
 }

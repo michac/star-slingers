@@ -1,9 +1,9 @@
 /**
- * combat.spec.ts — rocket vs asteroid: boot, hits, score, homing, railgun pierce, splitters, hp.
+ * combat.spec.ts — rocket vs asteroid: boot, hits, score, FIRE damage + charged pass-through, the SPECIAL missile, splitters, hp.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fieldRock, fire, healthBars, type Page } from './helpers';
-import { GAME_WIDTH, HEALTH_BAR } from '../src/layout';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fieldRock, fire, healthBars, touchscreen, v2Layout, liveShots, type Page } from './helpers';
+import { GAME_WIDTH, HEALTH_BAR, MISSILE } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -52,68 +52,119 @@ test('one splitter hit scores and creates children', async ({ page }) => {
   expect(await childrenAlive(page)).toBe(2);
 });
 
-test('off-axis homing shot curves in', async ({ page }) => {
+// ---- shot rules (#22): FIRE rounds (plain / charged) and the SPECIAL missile ----
+
+/** Take every rock off the field at once (no score), so a case owns the field. */
+const clearField = (page: Page) =>
+  page.evaluate(`for (const a of ${SCENE}.asteroids) if (a.isActive) a.vanish()`);
+/** A lane rock's state: hp left, and alive = fielded and not popping (the pop
+ *  tween is wall-clock, so under stepping a killed rock stays isPopping). */
+const rock = (page: Page, slot: number) =>
+  page.evaluate(
+    `(() => { const a = ${SCENE}.asteroids[${slot}]; return { hp: a.hp, alive: a.isActive && !a.isPopping }; })()`
+  ) as Promise<{ hp: number; alive: boolean }>;
+const liveRockets = (page: Page) => page.evaluate(`${SCENE}.rockets.group.countActive(true)`) as Promise<number>;
+/** Fire a P1 FIRE round straight right along y=300, through the pool's shot options. */
+const fireRound = (page: Page, charged: boolean) => fire(page, 170, 300, 400, 0, `{ charged: ${charged} }`);
+
+test('an uncharged FIRE round does 1 damage and stops at the first rock', async ({ page }) => {
   await gotoGame(page);
-
-  // Deterministic homing check on the fixed-timestep clock (no wall-clock race).
-  // Field a STATIONARY 1-hit rock in-field, clear of the station, via the public
-  // reconfigure()/spawn() path (as the split case does) — removes the old
-  // drift-window scan AND the moving-target race. Fire an OFF-AXIS rocket whose
-  // straight path clears the rock by > its radius (a non-homing shot misses
-  // below), tagged homing + locked on the rock as a HOME release would. Step
-  // frames until the hit counter ticks: if it ticks within the step budget, the
-  // shot curved in.
-  const homingBefore = await hits(page);
-  await fieldRock(page, { x: 250, y: 300 });
-  await page.evaluate(() => {
-    const s = (window as any).__game.scene.keys['Sandbox'];
-    const a = s.asteroids[0];
-    // Off-axis: dy = +30 (> the 17px radius) so a straight shot misses below; a
-    // small explicit armAt starts the turn-rate ramp early on the short runway.
-    const r = s.rockets.fire('rocket-p1', 40, 330, 150, 0);
-    r.setData('homing', true);
-    r.setData('target', a);
-    r.setData('speed', 150);
-    r.setData('dist', 0);
-    r.setData('armAt', 30);
-  });
-
-  const ticked = await stepUntil(page, `s.__debug.hits() > ${homingBefore}`, 300);
-  await shot(page, 'smoke-homing.png');
-  expect(ticked.done).toBe(true); // the shot connects near step ~80; ample headroom
-  expect(await hits(page)).toBeGreaterThan(homingBefore);
+  await clearField(page);
+  // Two rocks on the round's line: a 2-hp one in front, a 1-hp one behind.
+  await fieldRock(page, { x: 230, y: 300, hp: 2, slot: 0 });
+  await fieldRock(page, { x: 300, y: 300, slot: 1 });
+  await fireRound(page, false);
+  await stepGame(page, 16, 40); // a round that carried on would reach x=300 by ~step 20
+  expect(await rock(page, 0)).toEqual({ hp: 1, alive: true });
+  expect(await rock(page, 1)).toEqual({ hp: 1, alive: true });
+  expect(await liveRockets(page)).toBe(0);
 });
 
-test('charged shot rails through', async ({ page }) => {
+test('a charged FIRE round that kills carries on to the next rock', async ({ page }) => {
   await gotoGame(page);
+  await clearField(page);
+  await fieldRock(page, { x: 230, y: 300, slot: 0 });
+  await fieldRock(page, { x: 300, y: 300, slot: 1 });
+  await fireRound(page, true);
+  const both = await stepUntil(page, 's.asteroids[0].isPopping && s.asteroids[1].isPopping', 60);
+  expect(both.done).toBe(true);
+  expect(await score(page)).toBe(20);
+});
 
-  // A charged shot is a RAILGUN: it pierces every asteroid in its path instead
-  // of recycling on first contact. Field a rock directly, fire a charged rocket
-  // head-on, then step until the rocket records a chip in its per-pass hitSet and
-  // assert the SAME sprite is STILL active at that moment — proving it railed
-  // through rather than recycled. (A normal shot would have been killAndHide'd by
-  // handleHit on that first hit.) Fire + step + read all live in ONE evaluate, so
-  // `active` is sampled in the same tick as the chip and there's no round-trip
-  // race against world-bounds. Stepping one frame at a time catches the chip frame
-  // before the rocket rails on to the world edge and recycles (which clears the
-  // hitSet).
-  await fieldRock(page, { x: 250, y: 300 });
-  const pierce = (await page.evaluate(() => {
-    const w = window as any;
-    const s = w.__game.scene.keys['Sandbox'];
-    const r = s.rockets.fire('rocket-p1', 170, 300, 400, 0);
-    r.setData('charged', true);
-    for (let n = 0; n < 60; n++) {
-      const hs = r.getData('hitSet');
-      if (hs && hs.size > 0) return { hit: true, active: r.active };
-      w.__step();
-    }
-    const hs = r.getData('hitSet');
-    return { hit: !!(hs && hs.size > 0), active: r.active };
-  })) as { hit: boolean; active: boolean };
-  await shot(page, 'smoke-pierce.png');
-  expect(pierce.hit).toBe(true);
-  expect(pierce.active).toBe(true);
+test('a charged FIRE round does 2 damage and stops in a rock it does not kill', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  await fieldRock(page, { x: 230, y: 300, hp: 3, slot: 0 });
+  await fieldRock(page, { x: 300, y: 300, slot: 1 });
+  await fireRound(page, true);
+  await stepGame(page, 16, 40);
+  expect(await rock(page, 0)).toEqual({ hp: 1, alive: true });
+  expect(await rock(page, 1)).toEqual({ hp: 1, alive: true });
+  expect(await liveRockets(page)).toBe(0);
+});
+
+test('a SPECIAL missile connects with a moving rock from a rough aim', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  // A rock drifting left at wave speed (lanes cruise at ~40-70 px/s).
+  const rx = 320, ry = 300;
+  await fieldRock(page, { x: rx, y: ry, speed: 65 });
+  // The bottom seat aims 35° off its launcher→rock line (to the rock's left).
+  const L = await v2Layout(page, 2);
+  const onLineDeg = (Math.atan2(L.anchor.y - ry, rx - L.anchor.x) * 180) / Math.PI;
+  const aimDeg = onLineDeg + 35;
+  await page.evaluate(`${SCENE}.controls[1].aimDeg = ${aimDeg}`);
+  // That aim misses outright on a straight line, and would not have locked
+  // under the old HOME rule (cone 25°, ray within 50px of the rock's centre).
+  const a = (aimDeg * Math.PI) / 180;
+  const perp = Math.abs((rx - L.anchor.x) * -Math.sin(a) - (ry - L.anchor.y) * Math.cos(a));
+  expect(perp).toBeGreaterThan(50);
+  expect(35).toBeLessThan(MISSILE.coneHalfAngleDeg);
+
+  const hitsBefore = await hits(page);
+  const t = await touchscreen(page);
+  await t.down(1, L.special.x, L.special.y);
+  await t.up(1);
+  const [missile] = await liveShots(page);
+  expect(missile.missile).toBe(true);
+  expect(missile.targetIsRock0).toBe(true);
+  const hit = await stepUntil(page, `s.__debug.hits() > ${hitsBefore}`, Math.ceil(MISSILE.lifetimeMs / 16));
+  expect(hit.done).toBe(true);
+  expect((await rock(page, 0)).alive).toBe(false);
+});
+
+test('a SPECIAL missile never takes a lane rock still off the right edge', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  // A fielded lane rock waiting just past the right edge, straight down the aim.
+  const L = await v2Layout(page, 2);
+  const rx = GAME_WIDTH + 20, ry = 450;
+  await fieldRock(page, { x: rx, y: ry });
+  await page.evaluate(`${SCENE}.controls[1].aimDeg = ${(Math.atan2(L.anchor.y - ry, rx - L.anchor.x) * 180) / Math.PI}`);
+  const t = await touchscreen(page);
+  await t.down(1, L.special.x, L.special.y);
+  await t.up(1);
+  const [missile] = await liveShots(page);
+  expect(missile.missile).toBe(true);
+  expect(missile.targetIsRock0).toBe(false);
+});
+
+test('a SPECIAL missile whose target dies takes the next enemy along its heading', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  const L = await v2Layout(page, 2);
+  // A sits on the boot aim (straight up), B off to the right: a missile that
+  // flew straight on after losing A would pass B by 60px (> its 13px radius).
+  await fieldRock(page, { x: L.anchor.x, y: 350, slot: 0 });
+  await fieldRock(page, { x: L.anchor.x + 60, y: 280, slot: 1 });
+  const t = await touchscreen(page);
+  await t.down(1, L.special.x, L.special.y);
+  await t.up(1);
+  expect((await liveShots(page))[0].targetIsRock0).toBe(true);
+  await stepGame(page, 16, 12); // armed and turning, still well short of A
+  await page.evaluate(`${SCENE}.asteroids[0].vanish()`); // A dies by other means
+  const hitB = await stepUntil(page, 's.asteroids[1].isPopping', Math.ceil(MISSILE.lifetimeMs / 16));
+  expect(hitB.done).toBe(true);
 });
 
 test('a splitter immediately splits into two standard children', async ({ page }) => {
@@ -164,7 +215,7 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
   await gotoGame(page);
 
   // Asteroid health: a rock fielded with a 3-hp override takes damage from each
-  // plain shot (DAMAGE.normal = 1) but only pops — and scores — on the hit that
+  // plain round (DAMAGE.fire = 1) but only pops — and scores — on the hit that
   // takes it to 0. Each shot is stepped to its hit before the next is fired, so
   // the hit counter isolates them on the fixed-timestep clock. Its health bar
   // (#23) is absent at full hp, shows the remaining fraction off the rock's
@@ -218,7 +269,7 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
 test('a health bar near the right edge flips to the rock\'s left side', async ({ page }) => {
   await gotoGame(page);
 
-  // A rock chipped just after it enters (e.g. by a homing shot) sits so close to
+  // A rock chipped just after it enters (e.g. by a missile) sits so close to
   // the right edge that a right-side bar would be off-screen (#23), so the bar
   // takes the rock's left side instead and stays on the field.
   await fieldRock(page, { x: GAME_WIDTH - 10, y: 300, hp: 3 });

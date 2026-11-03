@@ -1,18 +1,21 @@
 /**
  * SandboxScene — game orchestrator. Wires together stars, the station +
- * shield, two seats of TwoThumbControls (multitouch; seat options from
- * controlsVariant.ts: ?lefty mirrors a seat, ?players=1 builds only the bottom
- * seat, P2), the rocket pool, the WaveDirector
+ * shield, a TwoThumbControl per joined seat (multitouch; the seats and their
+ * Easy/Normal come from the join screen via lineup.ts, and ?lefty in
+ * controlsVariant.ts mirrors a seat), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
  * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
- * and the fail/victory overlays. All logic lives in objects/.
+ * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
+ * rounds and SPECIAL missiles (fireShot, pickMissileTarget) and what each does
+ * on a hit (handleHit, handleBossHit). Everything else lives in objects/.
  */
 import Phaser from 'phaser';
-import { COLORS, CSS } from '../tokens';
-import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, P1_ANCHOR, P2_ANCHOR, STARS, STATION } from '../layout';
-import { controlsVariant, isLefty, playerCount } from '../controlsVariant';
-import { generateTextures, TEX } from '../objects/textures';
-import { TwoThumbControl } from '../objects/TwoThumbControl';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, SLING, STATION } from '../layout';
+import { controlsVariant, isLefty } from '../controlsVariant';
+import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
+import { generateTextures } from '../objects/textures';
+import { drawStarfield } from '../objects/draw';
+import { TwoThumbControl, type ShotKind } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
 import { Asteroid } from '../objects/Asteroid';
@@ -27,6 +30,7 @@ import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import { HealthBars } from '../objects/HealthBars';
 import type { HomingTarget } from '../objects/HomingTarget';
+import type { SpecialKind } from '../objects/specials';
 import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
 import { shotBuzz } from '../haptics';
 
@@ -40,36 +44,23 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   return null;
 }
 
-/** One seat's fixed wiring (P1 top edge, P2 bottom). */
-interface SeatDef {
-  player: PlayerId;
-  anchor: { x: number; y: number };
-  color: number;
-  colorCss: string;
-  edge: 'top' | 'bottom';
-  tex: string;
-}
-
 /** A seat in play: its fixed wiring plus the HUD built for it. */
 interface Seat extends SeatDef {
   hud: PlayerHud;
 }
 
-const SEAT_DEFS: readonly SeatDef[] = [
-  { player: 'p1', anchor: P1_ANCHOR, color: COLORS.p1, colorCss: CSS.p1, edge: 'top', tex: TEX.rocketP1 },
-  { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, colorCss: CSS.p2, edge: 'bottom', tex: TEX.rocketP2 },
-];
-
 /** DEV seat lookups take the player number: 1 = P1 (top), 2 = P2 (bottom);
  *  any other number is no seat. */
 const seatId = (player: number): PlayerId | undefined => (player === 1 ? 'p1' : player === 2 ? 'p2' : undefined);
 
-/** Homing lock cone (B14), as tan(half-angle) for the perpendicular test. */
-const HOMING_MAX_TAN = Math.tan(Phaser.Math.DegToRad(HOMING.coneHalfAngleDeg));
+/** The missile's targeting cone (#22), as tan(half-angle) for the perpendicular test. */
+const MISSILE_CONE_TAN = Math.tan(Phaser.Math.DegToRad(MISSILE.coneHalfAngleDeg));
 
 export class SandboxScene extends Phaser.Scene {
-  /** The live seats' controls (both seats, or just P2 in solo). */
+  /** The live seats' controls (both seats, or the one joined seat in solo). */
   private controls: TwoThumbControl[] = [];
+  /** HUDs, index-aligned with `controls` (each seat's two ammo pools live here). */
+  private huds: PlayerHud[] = [];
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
   private explosions!: Explosions;
@@ -87,18 +78,22 @@ export class SandboxScene extends Phaser.Scene {
     super('Sandbox');
   }
 
-  /** `data.startWave`: a Try again retry's wave (the fail card passes it);
-   *  absent on a fresh load or a win's restart, which start from the query. */
-  create(data: { startWave?: number } = {}): void {
+  /** `data.lineup`: the join screen's seats + difficulties (#20); Try again
+   *  passes it back unchanged. `data.startWave`: a Try again retry's wave (the
+   *  fail card passes it); absent on a run from the join screen, which starts
+   *  from the query. */
+  create(data: { lineup: Lineup; startWave?: number }): void {
     generateTextures(this);
-    this.drawStars();
+    drawStarfield(this);
     this.station = new Station(this); // under the asteroids/rockets
 
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
     const variant = controlsVariant();
-    const players = playerCount(variant);
-    // Each HUD sits in the centre column under its launcher, between HOME and
+    const run = data.lineup;
+    const live = liveSeats(run);
+    const players = live.length === 1 ? 1 : 2;
+    // Each HUD sits in the centre column under its launcher, between SPECIAL and
     // the aim pad (P1's rotated 180° about the field centre).
     const hudAt = (player: 'p1' | 'p2') => {
       const at = isLefty(variant.lefty, player) ? CONTROLS_V2.hudLefty : CONTROLS_V2.hud;
@@ -106,17 +101,19 @@ export class SandboxScene extends Phaser.Scene {
         ? { x: at.x, y: at.y, angle: 0 }
         : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
     };
-    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Solo
-    // (?players=1) builds only P2 (its HUD here, its control below), so nothing
-    // claims touches in P1's old regions.
-    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => players === 2 || d.player === 'p2').map((d) => ({
-      ...d,
-      hud: new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss }),
-    }));
+    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Only joined
+    // seats are built (their HUD here, their control below), so in solo nothing
+    // claims touches in the empty seat's region. An Easy seat never runs dry.
+    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => live.includes(d.player)).map((d) => {
+      const hud = new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss, color: d.color });
+      hud.setUnlimitedAmmo(run[d.player] === 'easy');
+      return { ...d, hud };
+    });
     const huds = seats.map((seat) => seat.hud);
+    this.huds = huds;
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
-    // Solo draws no banner/end-card copy toward the empty top seat either.
-    const banner = new WaveBanner(this, players);
+    // Solo draws no banner/end-card copy toward the empty seat either.
+    const banner = new WaveBanner(this, live);
     // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
     // Try again retries it, so a tester can re-run one wave. Survives the
     // restart (the query string sticks). Harmless in normal play — nobody
@@ -124,15 +121,13 @@ export class SandboxScene extends Phaser.Scene {
     const queryWave = startWaveFromQuery(window.location.search);
     // Try again restarts at the lost act's first wave (AC5), but never before
     // a shortcut's wave, so a shortcut's wave retries itself until the players
-    // pass it.
-    this.failOverlay = new Overlay(this, FAIL_CONFIG, players, () => ({
-      startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)),
-    }));
-    // A win's tap starts a fresh run. It passes an explicit empty object:
-    // restart(undefined) would keep the previous restart's data (Phaser's
-    // Systems.start only replaces settings.data when given some), so a win after
-    // a Try again would restart at the retry wave.
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players, () => ({}));
+    // pass it. It keeps the lineup (#20).
+    this.failOverlay = new Overlay(this, FAIL_CONFIG, live, () =>
+      this.scene.restart({ lineup: run, startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)) })
+    );
+    // A win ends the run and goes back to the join screen for a fresh lineup
+    // (#20), which starts the next run with new data.
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, live, () => this.scene.start('Join'));
 
     // The command-ship boss (B5) creates its boss + escort sprites up front
     // (parked); the run hands it the field for wave 6.
@@ -179,12 +174,12 @@ export class SandboxScene extends Phaser.Scene {
           edge,
           lefty: isLefty(variant.lefty, player),
           rocketTexture: tex,
-          canFire: () => hud.canFire(),
-          onFire: (x, y, vx, vy, { charged, homing }) => {
-            hud.spend();
-            this.fireRocket(tex, player, x, y, vx, vy, homing, charged);
+          canFire: (button) => hud.canFire(button),
+          onFire: (x, y, dirx, diry, kind) => {
+            hud.spend(kind.button);
+            this.fireShot(tex, player, x, y, dirx, diry, kind);
           },
-          homingTargetAt: (ox, oy, dx, dy) => this.homingMarker(ox, oy, dx, dy),
+          specialTargetAt: (ox, oy, dx, dy) => this.missileMarker(ox, oy, dx, dy),
         })
     );
     this.wireInput();
@@ -214,6 +209,7 @@ export class SandboxScene extends Phaser.Scene {
       // index-aligned with seats; a seat absent in solo (or a number that names
       // no seat) is -1, which reads as undefined.
       const seatIndex = (player: number) => seats.findIndex((seat) => seat.player === seatId(player));
+      const hud = (player: number) => this.huds[seatIndex(player)];
       (this as unknown as { __debug: object }).__debug = {
         clearWave: () => this.waveDirector.forceClear(),
         state: () => this.waveDirector.stateName,
@@ -230,10 +226,24 @@ export class SandboxScene extends Phaser.Scene {
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         healthBars: () => this.healthBars.lastDrawn,
         lefty: () => variant.lefty,
-        players: () => variant.players,
         seats: () => seats.map((seat) => seat.player),
+        // The lineup's pick for a seat: 'easy' | 'normal', or null if it didn't join.
+        difficulty: (player: number) => {
+          const id = seatId(player);
+          return id ? run[id] : undefined;
+        },
         // Seat aim (seat-frame degrees) + world-space control layout.
         aimDeg: (player: number) => this.controls[seatIndex(player)]?.aimDegrees,
+        // Ammo pools (#22): FIRE's and SPECIAL's counts, the seat's current
+        // special (control + HUD), and the per-seat unlimited switch (#20).
+        ammo: (player: number) => hud(player)?.ammoCount,
+        specialAmmo: (player: number) => hud(player)?.specialCount,
+        special: (player: number) => {
+          const i = seatIndex(player);
+          return i < 0 ? undefined : { control: this.controls[i].special, hud: this.huds[i].special };
+        },
+        setSpecial: (player: number, kind: SpecialKind) => this.setSpecial(seatIndex(player), kind),
+        setUnlimitedAmmo: (player: number, on: boolean) => hud(player)?.setUnlimitedAmmo(on),
         v2Layout: (player: number) => this.controls[seatIndex(player)]?.worldLayout() ?? null,
         startBoss: () => this.waveDirector.jumpTo(COMMAND_SHIP_WAVE),
         bossPhase: () => this.bossEncounter.phase,
@@ -257,9 +267,9 @@ export class SandboxScene extends Phaser.Scene {
     if (this.failOverlay.visible || this.victoryOverlay.visible) return;
     for (const control of this.controls) control.update(delta);
     for (const asteroid of this.asteroids) asteroid.update(delta);
-    // Steer in-flight homing shots toward their locked targets (B14), then
-    // advance + redraw their exhaust trails (the shot-trail polish item).
-    this.rockets.steer(delta);
+    // Steer in-flight missiles (#22; they re-acquire through the same picker),
+    // then advance + redraw every shot's exhaust trail.
+    this.rockets.steer(delta, this.pickMissileTarget);
     this.rockets.update(delta);
     this.station.update(delta); // shield regen clock
     this.waveDirector.update(delta); // wave-clear check
@@ -287,65 +297,70 @@ export class SandboxScene extends Phaser.Scene {
     }
   }
 
-  /** Fire a rocket. It homes ONLY if it was fired from HOME AND it locks a
-   *  target at fire (the highlighted rock); otherwise it's an ordinary straight
-   *  shot. A locked shot is meant to connect (see HOMING.turnRateDeg). */
-  private fireRocket(
-    tex: string,
-    player: PlayerId,
-    x: number,
-    y: number,
-    vx: number,
-    vy: number,
-    homing: boolean,
-    charged: boolean
-  ): void {
-    // A charged shot is a railgun (B13): it pierces asteroids (see handleHit)
-    // and wears the bright trail tier. Only FIRE charges and HOME never does,
-    // so a shot is never both. No lock → a straight shot.
-    const target = homing ? this.pickHomingTarget(x, y, vx, vy) : null;
+  /** Fire one seat's shot along the unit direction (dirx, diry). FIRE sends a
+   *  round at SLING.maxSpeed, charged if FIRE was held to a full charge (the
+   *  bright trail tier; its hit rule is in handleHit). SPECIAL sends the seat's
+   *  current special (the homing missile) at MISSILE.speed, taking the enemy
+   *  pickMissileTarget finds along the aim; with none it flies straight and
+   *  keeps looking (Rocket.steer). Only FIRE charges, so a shot is never both. */
+  private fireShot(tex: string, player: PlayerId, x: number, y: number, dirx: number, diry: number, kind: ShotKind): void {
+    const charged = kind.charged;
+    const special = kind.button === 'special';
+    const speed = special ? MISSILE.speed : SLING.maxSpeed;
+    const opts = special ? { missile: true, target: this.pickMissileTarget(x, y, dirx, diry) } : { charged };
     // Every seat's shot lands here, so this one buzz (#3) covers them all.
-    if (this.rockets.fire(tex, x, y, vx, vy, player, { charged, target })) shotBuzz({ charged, homing });
+    if (this.rockets.fire(tex, x, y, dirx * speed, diry * speed, player, opts)) shotBuzz({ charged, special });
   }
 
-  /** The asteroid closest to the launch ray (origin + direction), within a
-   *  forward cone and range — the homing lock (B14). Used at fire and, via
-   *  homingMarker, for the aim preview. Returns null when nothing qualifies. */
-  private pickHomingTarget(ox: number, oy: number, dirx: number, diry: number): HomingTarget | null {
+  /** Change a seat's current special (#26 upgrades): the SPECIAL button and
+   *  the HUD's special row change together. `seat` indexes controls/huds. */
+  private setSpecial(seat: number, kind: SpecialKind): void {
+    this.controls[seat]?.setSpecial(kind);
+    this.huds[seat]?.setSpecial(kind);
+  }
+
+  /** The missile's target (#22): the live enemy nearest the line from
+   *  (ox, oy) along (dirx, diry), inside MISSILE's wide forward cone and range.
+   *  Used at launch, for the aim preview while SPECIAL is held (missileMarker),
+   *  and by an in-flight missile re-acquiring along its heading. Null when
+   *  nothing qualifies. An arrow property so Rocket.steer can call it unbound. */
+  private readonly pickMissileTarget = (ox: number, oy: number, dirx: number, diry: number): HomingTarget | null => {
     const len = Math.hypot(dirx, diry);
     if (len === 0) return null;
     const ux = dirx / len;
     const uy = diry / len;
     let best: HomingTarget | null = null;
     let bestPerp = Infinity;
-    // Asteroids during the field waves, plus the escorts during the boss, so
-    // homing keeps working all the way through (B14 × B5). Two plain loops —
-    // this runs every frame while a seat holds HOME, so no merged array.
+    // Asteroids during the field waves, plus the escorts during the boss.
+    // Two plain loops — this runs every frame while a seat holds SPECIAL and
+    // for every target-less missile, so no merged array.
     const consider = (cand: HomingTarget) => {
       if (!cand.isActive || cand.isPopping) return;
       const s = cand.sprite;
+      // A lane rock is fielded (active) just off the right edge before it
+      // drifts in: never take one the players can't see yet.
+      if (s.x - cand.radius >= GAME_WIDTH) return;
       const dx = s.x - ox;
       const dy = s.y - oy;
-      const proj = dx * ux + dy * uy; // distance along the ray (forward only)
-      if (proj <= 0 || proj > HOMING.maxRange) return;
-      const perp = Math.abs(dx * uy - dy * ux); // perpendicular distance to the ray
-      if (perp > HOMING.maxPerp) return; // must pass close to the target's center
-      if (perp > proj * HOMING_MAX_TAN) return; // and within the cone
+      const proj = dx * ux + dy * uy; // distance along the line (forward only)
+      if (proj <= 0 || proj > MISSILE.maxRange) return;
+      const perp = Math.abs(dx * uy - dy * ux); // perpendicular distance to the line
+      if (perp > proj * MISSILE_CONE_TAN) return; // inside the cone
       if (perp < bestPerp) {
         bestPerp = perp;
         best = cand;
       }
     };
     for (const cand of this.asteroids) consider(cand);
-    for (const cand of this.bossEncounter.homingTargets()) consider(cand);
+    for (const cand of this.bossEncounter.missileTargets()) consider(cand);
     return best;
-  }
+  };
 
-  /** Aim-preview marker for the locked target (position + ring radius), or null. */
-  private homingMarker(ox: number, oy: number, dirx: number, diry: number): { x: number; y: number; r: number } | null {
-    const target = this.pickHomingTarget(ox, oy, dirx, diry);
+  /** Aim-preview ring for the enemy a missile would take (position + ring radius), or null. */
+  private missileMarker(ox: number, oy: number, dirx: number, diry: number): { x: number; y: number; r: number } | null {
+    const target = this.pickMissileTarget(ox, oy, dirx, diry);
     if (!target) return null;
-    return { x: target.sprite.x, y: target.sprite.y, r: target.radius + HOMING.ringPad };
+    return { x: target.sprite.x, y: target.sprite.y, r: target.radius + MISSILE.ringPad };
   }
 
   /** Scene-level pointer events fanned out to every live seat's controls; each
@@ -372,23 +387,13 @@ export class SandboxScene extends Phaser.Scene {
     if (!pair || !asteroid) return;
     const { rocket } = pair;
 
-    // Charged = railgun (B13): pierce every asteroid in the path, hitting each
-    // ONCE and railing on instead of recycling. The per-rocket hitSet guards
-    // the multi-frame overlap window so one pass never hits the same rock
-    // twice; a popped rock disables its body and stops overlapping. The
-    // rocket recycles normally on world-bounds.
+    // Shot rules (#22): a plain FIRE round or a missile deals its damage; a
+    // charged round deals double. Read the shot type BEFORE spendShot (recycle
+    // clears the rocket's flags).
     const charged = rocket.getData('charged') === true;
-    // Read the shot type BEFORE recycling (recycle clears the rocket's flags).
-    const damage = charged ? DAMAGE.railgun : rocket.getData('homing') ? DAMAGE.homing : DAMAGE.normal;
-    if (charged) {
-      const hitSet = rocket.getData('hitSet') as Set<Asteroid>;
-      if (hitSet.has(asteroid)) return; // already hit this rock on this pass
-      hitSet.add(asteroid);
-    } else {
-      this.rockets.recycle(rocket);
-    }
-
+    const damage = charged ? DAMAGE.charged : rocket.getData('missile') ? DAMAGE.missile : DAMAGE.fire;
     const pts = asteroid.takeHit(damage);
+    this.spendShot(rocket, charged, pts > 0);
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
       // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
@@ -400,8 +405,11 @@ export class SandboxScene extends Phaser.Scene {
   };
 
   /** Rocket vs boss/escort (B5). The wrapper's takeHit() decides what a hit
-   *  means: escorts take the firing seat's identity (B33); the boss takes only
-   *  a fully charged railgun that got through a web gap (B34). */
+   *  means: escorts take the firing seat's identity from any shot (B33); the
+   *  boss takes 1 HP from a charged round that got through a web gap (B34) and
+   *  nothing from a plain round or a missile (#22). A charged round that downs
+   *  an escort (its second lock) carries on along its line, so it can go on
+   *  through the gap it just opened into the boss; every other hit spends it. */
   private readonly handleBossHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
     const pair = splitPair(a, b);
     const ref = pair?.other.getData('ref') as Boss | Escort | undefined;
@@ -409,10 +417,21 @@ export class SandboxScene extends Phaser.Scene {
     const { rocket } = pair;
     const charged = rocket.getData('charged') === true;
     const player = rocket.getData('player') as PlayerId;
-    this.rockets.recycle(rocket);
-    if (ref instanceof Boss) ref.takeHit(charged);
-    else ref.takeHit(player);
+    if (ref instanceof Boss) {
+      this.rockets.recycle(rocket);
+      ref.takeHit(charged);
+      return;
+    }
+    this.spendShot(rocket, charged, ref.takeHit(player));
   };
+
+  /** The charged round's pass-through rule (#22), for rocks and escorts alike:
+   *  it carries on along its line only past a target this hit killed; every
+   *  other hit spends the shot. A killed target turns its body off in the same
+   *  call, so the round carrying on can't overlap it again. */
+  private spendShot(rocket: Phaser.Physics.Arcade.Sprite, charged: boolean, killed: boolean): void {
+    if (!(charged && killed)) this.rockets.recycle(rocket);
+  }
 
   /** The web is checked before the boss/escort overlap callback, so its line
    * collision consumes a rocket rather than letting Arcade's sprite overlap
@@ -424,12 +443,4 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets.recycle(pair.rocket);
     return false;
   };
-
-  private drawStars(): void {
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.star, 1);
-    for (const star of STARS) {
-      g.fillCircle(star.x, star.y, star.r);
-    }
-  }
 }

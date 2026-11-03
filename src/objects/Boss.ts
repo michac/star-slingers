@@ -1,13 +1,13 @@
 /**
  * Boss (B5) — the command ship, wave 6's boss. Slides in from the right, parks at center, and
  * holds stationary. The BossEncounter drives the fight: the escorts' shield
- * web (B34) is the boss's only protection — any railgun that physically reaches
- * it through a gap chips HP — and when the charge fills the encounter calls
+ * web (B34) is the boss's only protection — any charged FIRE round that
+ * physically reaches it through a gap chips 1 HP — and when the charge fills the encounter calls
  * `fireBeam()` (it shatters a shield ring).
  *
  * HP and the charge countdown are read off the two off-boss gauges (BossBars,
- * owned by the encounter), so the center stays uncluttered. Not a homing
- * target: the boss is railgun-only.
+ * owned by the encounter), so the center stays uncluttered. Not a missile
+ * target: plain FIRE rounds and SPECIAL missiles do nothing to it (#22).
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
@@ -83,7 +83,7 @@ export class Boss {
 
   takeHit(charged: boolean): void {
     // B34: the web, not a boss ring/state gate, protects the command ship.
-    // A railgun that reaches it through a missing link can always chip HP.
+    // A charged round that reaches it through a missing link always chips 1 HP.
     if (!charged || !this.isEntered) return;
     this.hp -= 1;
     if (this.hp > 0) return;

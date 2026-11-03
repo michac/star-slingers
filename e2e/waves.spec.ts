@@ -3,13 +3,15 @@
  * play order, the ?wave shortcut, Try again's retry wave, the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, fieldRock, stepGame, stepUntil, type Page } from './helpers';
+import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, type Page } from './helpers';
+import { AMMO_REGEN_MS, SPECIAL } from '../src/layout';
 import {
   actStartWave,
   ASTEROID_KIND,
   breakEvenAccuracy,
   clearDamage,
   COMMAND_SHIP_WAVE,
+  DAMAGE,
   requiredDamagePerSec,
   RUN,
   SOLO,
@@ -49,7 +51,7 @@ test('the run is one table of 10 waves in 4 acts', () => {
 test('the start wave comes from ?wave, else ?boss, else wave 1', () => {
   expect(startWaveFromQuery('')).toBe(1);
   expect(startWaveFromQuery('?wave=9')).toBe(9);
-  expect(startWaveFromQuery('?wave=10&players=1')).toBe(10);
+  expect(startWaveFromQuery('?wave=10&lefty=p1')).toBe(10);
   expect(startWaveFromQuery('?boss')).toBe(6);
   expect(startWaveFromQuery('?wave=9&boss')).toBe(9);
   for (const bad of ['?wave=0', '?wave=11', '?wave=abc', '?wave=2.5', '?wave=']) {
@@ -134,12 +136,16 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   await tryAgain(page);
   expect(await runState(page)).toMatchObject({ wave: 4, act: 2, state: 'live', failVisible: false });
 
-  // A win after that retry starts a fresh run at wave 1, not at the retry wave
-  // (Phaser keeps the last restart's data unless given new data).
+  // A win after that retry goes back to the join screen (#20), and the next run
+  // starts fresh at wave 1, not at the retry wave (Phaser keeps the last
+  // restart's data unless given new data).
   await debug(page, 'jumpToWave(10)');
   await debug(page, 'clearWave()');
   expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
   await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
+  await stepGame(page, 16, 2);
+  expect(await sceneActive(page, 'Join')).toBe(true);
+  await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
   await stepGame(page, 16, 2);
   expect(await runState(page)).toMatchObject({ wave: 1, act: 1, state: 'live' });
 });
@@ -178,4 +184,14 @@ test('solo scales wave targets; two-player targets are untouched', () => {
     expect(requiredDamagePerSec(w, 1)).toBeGreaterThan(0);
     expect(perRequired(1) / perRequired(2)).toBeCloseTo(2, 10);
   }
+});
+
+test('break-even accuracy is over both ammo pools (#22)', () => {
+  // A seat's ceiling = FIRE rounds (1/s × 1 damage) + SPECIAL missiles
+  // (1 per 3s × 1 damage) = 4/3 damage/s. Pinned as numbers, so a wrong pool,
+  // rate or damage key in the formula fails here.
+  expect([AMMO_REGEN_MS, SPECIAL.regenMs, DAMAGE.fire, DAMAGE.missile]).toEqual([1000, 3000, 1, 1]);
+  const w = RUN.flatMap((r) => (r.field ? [r.field] : []))[0];
+  expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * (4 / 3)), 10);
+  expect(breakEvenAccuracy(w, 1)).toBeCloseTo(requiredDamagePerSec(w, 1) / (4 / 3), 10);
 });
