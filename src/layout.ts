@@ -218,6 +218,17 @@ export const BANNER = {
   fadeMs: 250,
 } as const;
 
+/** Enemy health bar (#23): a vertical pill just off a damaged enemy's right
+ *  side, its fill centred so both seats read it the same. Sized from the
+ *  enemy's radius (13 → ~18px tall), never shorter than minHeight. */
+export const HEALTH_BAR = {
+  gap: 4, // from the enemy's rim to the bar
+  width: 4,
+  heightPerRadius: 1.4,
+  minHeight: 16,
+  depth: 1, // a readout: over the depth-0 field (rocks, rockets, trails, shield), under escorts, banners and overlays
+} as const;
+
 /** Explicit render depths for late-created UI (creation order isn't enough:
  *  the WaveDirector creates asteroids AFTER the overlays exist). */
 export const DEPTHS = { banner: 900, overlay: 1000 } as const;
