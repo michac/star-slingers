@@ -151,3 +151,14 @@ body {
 .v6-escort      { fill: #2a0a22; stroke: #ff2e88; stroke-width: 1.5; }
 .v6-boss-sweep  { fill: none; stroke: #ff2e88; stroke-width: 1; stroke-dasharray: 4 4; opacity: .6; }
 .btn.on         { background: rgba(56,246,255,.22); border-color: #38f6ff; }
+/* v6 fleet + lane */
+.v6-lane-band   { fill: #9d6bff; opacity: .05; }
+.v6-lane-edge   { stroke: #9d6bff; stroke-width: 1.5; opacity: .45; filter: url(#neon-glow-sm); }
+.v6-sublane     { stroke: #9d6bff; stroke-width: 1; stroke-dasharray: 2 6; opacity: .35; }
+.v6-lane.pass   { stroke: #9d7fd6; opacity: .35; }
+.v6-pod         { fill: #123056; stroke: #38f6ff; stroke-width: 1.2; }
+.v6-engine-flame{ fill: #9d6bff; opacity: .8; filter: url(#neon-glow-sm); }
+.v6-bubble      { stroke-width: 3.5; }
+.v6-lost        { fill: none; stroke: #9d7fd6; stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .5; }
+.v6-fleet-ship  { cursor: pointer; }
+.v6-beam        { stroke: #ff2e88; stroke-width: 3; stroke-dasharray: 8 5; opacity: .85; filter: url(#neon-glow-sm); }
