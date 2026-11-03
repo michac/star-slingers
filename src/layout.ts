@@ -442,7 +442,8 @@ export const AMMO = {
  *  anywhere in a seat's half (y ≥ `halfY`) joins it; the seat then shows its
  *  ring between two pick buttons, Easy (∞) on the player's left and Normal
  *  (5 ammo pips) on their right. Tapping the ring again leaves. Once every
- *  joined seat has picked, a `countdownMs` numeral countdown starts the run. */
+ *  joined seat has picked, a `countdownMs` numeral countdown starts the run;
+ *  a join or a leave restarts it. */
 export const JOIN = {
   halfY: GAME_HEIGHT / 2,
   ring: { x: 180, y: 640, r: 40 },
@@ -450,6 +451,9 @@ export const JOIN = {
   normal: { x: 278, y: 640, r: 40 },
   /** Touch slop outside a button's drawn radius. */
   hitPad: 8,
+  /** A ring tap this soon after joining doesn't leave (a double-tap, or two
+   *  fingers landing together, would otherwise join and leave at once). */
+  leaveGraceMs: 500,
   /** The unjoined ring breathes (scale) on this period, by this much. */
   pulseMs: 1400,
   pulseScale: 0.12,

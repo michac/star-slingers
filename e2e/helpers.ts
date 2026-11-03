@@ -1,10 +1,11 @@
 /**
  * helpers.ts — the shared harness for the e2e specs (one spec per area:
- * combat, waves, boss, solo, controls-v2, haptics). Boots the game in a
+ * combat, waves, boss, join, solo, controls-v2, haptics). Boots the game in a
  * Pixel-6-sized touch viewport, drives it with real CDP touches + direct
  * `scene.rockets.fire(...)` shots, and reads live state through the
- * `window.__game` hook (src/main.ts) and the scene's DEV `__debug` surface
- * (src/scenes/SandboxScene.ts).
+ * `window.__game` hook (src/main.ts) and the scenes' DEV `__debug` surfaces:
+ * the join screen's (src/scenes/JoinScene.ts; gotoGame starts the run through
+ * its startRun) and the game's (src/scenes/SandboxScene.ts).
  *
  * Specs import `test` and `expect` from here, not from '@playwright/test':
  * this `test` carries the zero-console-error gate, so every case fails on a

@@ -93,7 +93,12 @@ test('a stray join on the empty seat can leave again, then the lone top seat pla
   await tap(page, t, { x: 60, y: 450 });
   expect(await picks(page)).toEqual({ p1: 'easy', p2: null });
   expect((await panel(page, 'p1')).countdown).toBeNull();
-  // ...until P2 taps its ring again to leave; the countdown comes back.
+  // A second tap on the ring right after joining (a double-tap, or two fingers
+  // landing together) doesn't undo the join...
+  await tap(page, t, p2.ring);
+  expect(await picks(page)).toEqual({ p1: 'easy', p2: null });
+  // ...but once the grace has passed, tapping the ring leaves; the countdown comes back.
+  await stepGame(page, 100, 6);
   await tap(page, t, p2.ring);
   expect(await picks(page)).toEqual({ p1: 'easy' });
   await stepGame(page, 16, 1);
@@ -133,6 +138,29 @@ test('both seats join for co-op, and a late join holds the countdown until it pi
   expect(await difficulty(page, 1)).toBe('easy');
   expect(await difficulty(page, 2)).toBe('normal');
   expect(await bannerAngles(page)).toEqual([180, 0]);
+});
+
+test('a seat leaving mid-countdown restarts it, so the leaver has time to come back', async ({ page }) => {
+  await gotoGame(page, '', 'join');
+  const p1 = await panel(page, 'p1');
+  const p2 = await panel(page, 'p2');
+  const t = await touchscreen(page);
+  await tap(page, t, p1.ring);
+  await tap(page, t, p1.normal);
+  await tap(page, t, p2.ring);
+  await tap(page, t, p2.normal);
+  await stepGame(page, 100, 22);
+  expect((await panel(page, 'p2')).countdown).toBe('1');
+  // P1 leaves at "1": P2's countdown starts over instead of running out.
+  await tap(page, t, p1.ring);
+  expect(await picks(page)).toEqual({ p2: 'normal' });
+  await stepGame(page, 16, 1);
+  expect((await panel(page, 'p2')).countdown).toBe('3');
+  // P1 changes their mind and rejoins in time: the run waits for their pick.
+  await tap(page, t, p1.ring);
+  await tap(page, t, p1.easy);
+  await stepGame(page, 100, 31);
+  expect(await seats(page)).toEqual(['p1', 'p2']);
 });
 
 test('an Easy seat fires past the Normal ammo cap; its readout shows ∞', async ({ page }) => {

@@ -6,7 +6,7 @@
  * ammo pips). Picking one makes the seat ready; tapping the ring again leaves.
  * Once every joined seat is ready, a numeral countdown starts the run with
  * just those seats (lineup.ts). A seat that joins mid-countdown cancels it
- * until that seat picks too. No reading anywhere: icons and numerals only.
+ * until that seat picks too; a seat that leaves restarts it from the top. No reading anywhere: icons and numerals only.
  *
  * All timing runs off update(delta), not tweens, so the e2e suite's fixed
  * timestep drives it (TweenManager is wall-clock driven).
@@ -41,6 +41,9 @@ export class JoinScene extends Phaser.Scene {
   /** Countdown left (ms) while every joined seat is ready; null otherwise. */
   private countdownLeft: number | null = null;
   private clockMs = 0;
+  /** When (clockMs) each joined seat joined: a ring tap only leaves after
+   *  JOIN.leaveGraceMs, so a double-tap or a two-finger slap stays joined. */
+  private joinedAt: Partial<Record<PlayerId, number>> = {};
 
   constructor() {
     super('Join');
@@ -48,6 +51,7 @@ export class JoinScene extends Phaser.Scene {
 
   create(): void {
     this.picks = {};
+    this.joinedAt = {};
     this.countdownLeft = null;
     this.clockMs = 0;
     generateTextures(this); // the ring's rocket glyph (idempotent across scenes)
@@ -117,7 +121,9 @@ export class JoinScene extends Phaser.Scene {
   }
 
   /** A tap belongs to the seat whose half it lands in. Unjoined: join. Joined:
-   *  the ring leaves, a pick button picks, anything else does nothing. */
+   *  the ring leaves (once the join grace has passed), a pick button picks,
+   *  anything else does nothing. A join or a leave changes who plays, so it
+   *  restarts the countdown; a changed pick doesn't. */
   private onDown(pointer: Phaser.Input.Pointer): void {
     const edge: SeatEdge = pointer.y >= JOIN.halfY ? 'bottom' : 'top';
     const { player } = this.panels.find((p) => p.edge === edge)!;
@@ -125,8 +131,12 @@ export class JoinScene extends Phaser.Scene {
     const pick = this.picks[player];
     if (pick === undefined) {
       this.picks[player] = null;
+      this.joinedAt[player] = this.clockMs;
+      this.countdownLeft = null;
     } else if (within(at, JOIN.ring)) {
+      if (this.clockMs - (this.joinedAt[player] ?? 0) < JOIN.leaveGraceMs) return;
       delete this.picks[player];
+      this.countdownLeft = null;
     } else if (within(at, JOIN.easy)) {
       this.picks[player] = 'easy';
     } else if (within(at, JOIN.normal)) {
