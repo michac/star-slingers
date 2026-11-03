@@ -17,7 +17,7 @@
  *    the zone's visual: a knob along the current aim inside the range arc.
  *  - Lefty swap (#21): a small ⇄ above FIRE (CONTROLS_V2.swap). Held for
  *    `holdMs` (a ring fills round it), it mirrors the seat (toggleLefty) and tells
- *    the scene (onLeftyChange); an earlier release cancels. It claims only a
+ *    the scene (onLeftyChange); an earlier release, or sliding off it, cancels. It claims only a
  *    pointer that goes down inside its own circle, which overlaps neither
  *    button nor the aim zone, so it never takes their pointers. The hold runs
  *    on update(delta), so the e2e fixed timestep drives it.
@@ -193,6 +193,15 @@ export class TwoThumbControl {
   }
 
   handleMove(pointer: Phaser.Input.Pointer): void {
+    if (pointer.id === this.swapPointer) {
+      // Sliding off the swap cancels its hold (a thumb that landed on it by
+      // accident and slid away mustn't flip the seat).
+      if (!hits(this.toSeat(pointer), this.swap, CONTROLS_V2.swap.hitPad)) {
+        this.swapPointer = null;
+        this.dirty = true;
+      }
+      return;
+    }
     if (pointer.id !== this.aimPointer) return; // a held button ignores sliding
     const p = this.toSeat(pointer);
     this.setAim(this.aimDeg - (p.x - this.dragLastX) * CONTROLS_V2.drag.gainDegPerPx);

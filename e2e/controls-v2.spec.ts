@@ -188,14 +188,19 @@ test('swap: a short hold does nothing, the ⇄ never aims or fires, and the top 
   const L2 = await v2Layout(page, 2);
   const t = await touchscreen(page);
 
-  // A touch on the ⇄ that slides and lets go early: no aim, no button, no shot, no swap.
+  // A touch on the ⇄ that lets go early: no button, no shot, no swap.
   await t.down(1, L2.swap.x, L2.swap.y);
   expect(await held(page, 2)).toBe(null);
-  await t.move(1, L2.swap.x + 40, L2.swap.y);
-  expect(await aimDeg(page, 2)).toBe(90);
   await stepGame(page, 16, HOLD_FRAMES - 10);
   await t.up(1);
   await stepGame(page, 16, HOLD_FRAMES); // a let-go hold never completes later
+  // A thumb that lands on the ⇄ and slides off cancels the hold (and never aims),
+  // however long it then stays down.
+  await t.down(1, L2.swap.x, L2.swap.y);
+  await t.move(1, L2.swap.x + 40, L2.swap.y);
+  expect(await aimDeg(page, 2)).toBe(90);
+  await stepGame(page, 16, HOLD_FRAMES * 2);
+  await t.up(1);
   expect(await liveShots(page)).toHaveLength(0);
   expect(await lefty(page)).toBe('none');
 

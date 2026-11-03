@@ -10,9 +10,8 @@
  * reads as the default (nobody mirrored).
  */
 
-export type LeftySetting = 'p1' | 'p2' | 'both' | 'none';
-
-const ALLOWED: readonly string[] = ['p1', 'p2', 'both', 'none'] satisfies readonly LeftySetting[];
+const ALLOWED = ['p1', 'p2', 'both', 'none'] as const;
+export type LeftySetting = (typeof ALLOWED)[number];
 
 /** Storage key (unchanged since the old `?lefty` URL switch, so a saved choice carries over). */
 const LEFTY_KEY = 'starSlingers.lefty';
@@ -28,7 +27,7 @@ export function leftySetting(): LeftySetting {
     } catch {
       // No storage: the default.
     }
-    cached = saved !== null && ALLOWED.includes(saved) ? (saved as LeftySetting) : 'none';
+    cached = saved !== null && (ALLOWED as readonly string[]).includes(saved) ? (saved as LeftySetting) : 'none';
   }
   return cached;
 }
