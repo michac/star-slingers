@@ -32,6 +32,8 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   await hitEscort(page, 0, 'p1');
   expect(await escortsAlive(page)).toBe(4);
   expect((await escortLocks(page))[0]).toBe(1);
+  await stepGame(page, 16, 1);
+  expect(await page.evaluate(`${SCENE}.__debug.healthBars()`)).toEqual([]); // locks and the web aren't hp (#23)
   await hitEscort(page, 2, 'p2');
   await hitEscort(page, 2, 'p1');
   await stepGame(page, 16, 1);

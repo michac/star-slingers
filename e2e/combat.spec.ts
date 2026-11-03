@@ -2,7 +2,8 @@
  * combat.spec.ts — rocket vs asteroid: boot, hits, score, homing, railgun pierce, splitters, hp.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepUntil, fieldRock, fire, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fieldRock, fire, type Page } from './helpers';
+import { HEALTH_BAR } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -11,6 +12,8 @@ const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promi
 const splitCount = (page: Page) => page.evaluate(`${SCENE}.__debug.splitCount()`) as Promise<number>;
 const childrenAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.childrenAlive()`) as Promise<number>;
+const healthBars = (page: Page) =>
+  page.evaluate(`${SCENE}.__debug.healthBars()`) as Promise<{ x: number; y: number; frac: number }[]>;
 
 test('boots clean — canvas renders and score is 0', async ({ page }) => {
   await gotoGame(page);
@@ -165,12 +168,26 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
   // Asteroid health: a rock fielded with a 3-hp override takes damage from each
   // plain shot (DAMAGE.normal = 1) but only pops — and scores — on the hit that
   // takes it to 0. Each shot is stepped to its hit before the next is fired, so
-  // the hit counter isolates them on the fixed-timestep clock.
+  // the hit counter isolates them on the fixed-timestep clock. Its health bar
+  // (#23) is absent at full hp, shows the remaining fraction off the rock's
+  // right side after each non-lethal hit, and goes on the kill.
   await fieldRock(page, { x: 250, y: 300, hp: 3 });
   const hitsBefore = await hits(page);
   const hp = () => page.evaluate(`${SCENE}.__debug.asteroidHp(0)`) as Promise<number>;
   const active = () => page.evaluate(`${SCENE}.asteroids[0].isActive && !${SCENE}.asteroids[0].isPopping`);
+  const rockAt = () => page.evaluate(`({ x: ${SCENE}.asteroids[0].sprite.x, y: ${SCENE}.asteroids[0].sprite.y, r: ${SCENE}.asteroids[0].radius })`) as Promise<{ x: number; y: number; r: number }>;
+  /** The one bar sits beside the rock's current position. */
+  const expectBarBeside = async (frac: number) => {
+    const bars = await healthBars(page);
+    const rock = await rockAt();
+    expect(bars).toHaveLength(1);
+    expect(bars[0].frac).toBeCloseTo(frac, 5);
+    expect(bars[0].x).toBeCloseTo(rock.x + rock.r + HEALTH_BAR.gap + HEALTH_BAR.width / 2, 5);
+    expect(bars[0].y).toBeCloseTo(rock.y, 5);
+  };
   expect(await hp()).toBe(3);
+  await stepGame(page, 16, 1);
+  expect(await healthBars(page)).toEqual([]); // full hp: no bar
 
   for (const [n, hpLeft] of [[1, 2], [2, 1]] as const) {
     await fire(page, 170, 300, 400, 0);
@@ -179,11 +196,23 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
     expect(await hp()).toBe(hpLeft);
     expect(await score(page)).toBe(0); // a non-lethal hit never scores
     expect(await active()).toBe(true); // ...and the rock stays in play
+    await expectBarBeside(hpLeft / 3);
   }
 
-  await fire(page, 170, 300, 400, 0);
+  // The bar moves with its rock: drift it down for a few real frames (Arcade
+  // syncs the sprite in postUpdate, which the bar draws after), then park it.
+  await page.evaluate(`${SCENE}.asteroids[0].sprite.body.setVelocity(0, 240)`);
+  await stepGame(page, 16, 5);
+  await page.evaluate(`${SCENE}.asteroids[0].sprite.body.setVelocity(0, 0)`);
+  await stepGame(page, 16, 1);
+  const moved = await rockAt();
+  expect(moved.y).toBeGreaterThan(310);
+  await expectBarBeside(1 / 3);
+
+  await fire(page, 170, moved.y, 400, 0);
   const popped = await stepUntil(page, `s.__debug.score() >= 10`, 120);
   expect(popped.done).toBe(true);
   expect(await hits(page)).toBe(hitsBefore + 3);
   expect(await score(page)).toBe(10); // a standard's points, awarded once on the kill
+  expect(await healthBars(page)).toEqual([]); // the bar goes with the rock
 });
