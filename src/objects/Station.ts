@@ -9,7 +9,7 @@
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { SHAKE, SHATTER, SHIELD_FX, SHIELD_RINGS, STATION } from '../layout';
-import { BREATHER, WAVES } from '../waves';
+import { BREATHER } from '../waves';
 
 /** Outer→inner ring colors, one per stop of the mock's #neon-shield gradient
  *  (cyan → purple → magenta). Indexed by the ring's slot in SHIELD_RINGS, so
@@ -51,8 +51,8 @@ export class Station {
   private hitsLeft: number = STATION.shieldHp;
   /** ms since the last shield hit — drives regen, counts only while damaged. */
   private msSinceHit = 0;
-  /** Per-wave knob; the WaveDirector sets it at each wave start. */
-  private shieldRegenMs: number = WAVES[0].shieldRegenMs;
+  /** Per-wave knob; the WaveDirector (or the boss) sets it at each wave start. */
+  private shieldRegenMs = 0;
 
   constructor(private readonly scene: Phaser.Scene) {
     // Construction order = depth (Station is added before asteroids/rockets):

@@ -22,7 +22,7 @@
  * (physics, overlaps, deltaMs timers — all in lockstep, no rendering, no
  * wall-clock racing). No case waits for a wave rock to drift on-screen. Phaser's
  * TweenManager is wall-clock driven and does NOT advance under stepping, so the
- * boss slide-in is skipped with the __debug.snapBossIn() hook.
+ * boss slide-in is skipped with the __debug.snapBossIn() hook (enterBoss()).
  *
  * Speed: two headless-swiftshader costs dominated the old runtime. (1) A
  * screenshot forces a ~7s ReadPixels render, so the smoke-*.png eyeball frames
@@ -184,7 +184,23 @@ export const escortsAlive = (page: Page) =>
 export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
   page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
 export const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
+/** How many shield-web links are up (4 = the intact diamond). */
+export const shieldLinks = (page: Page) => page.evaluate(`${SCENE}.__debug.shieldLinks()`) as Promise<number>;
+/** Raw boss start: the boss is left mid slide-in (the tween never advances under
+ *  stepping). Cases want enterBoss(). */
 export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBoss()`);
+/** Start the boss fight ready to play: startBoss, snap the (wall-clock) entrance
+ *  tween to its end, then one 16ms frame so the encounter observes the entered boss. */
+export async function enterBoss(page: Page): Promise<void> {
+  await startBoss(page);
+  await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
+  await stepGame(page, 16, 1);
+}
+/** The health bars (#23) drawn on the latest frame: centre + remaining fraction
+ *  (HealthBars' DrawnHealthBar; not imported, because that module reads
+ *  import.meta.env, which the Node-typed e2e project doesn't declare). */
+export const healthBars = (page: Page) =>
+  page.evaluate(`${SCENE}.__debug.healthBars()`) as Promise<{ x: number; y: number; frac: number }[]>;
 
 // ---------------------------------------------------------------------------
 // Touch helpers for the controls-v2 (#7) seats: two-thumb drag aim + fire
@@ -206,6 +222,8 @@ export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBo
 // ---------------------------------------------------------------------------
 
 export type Pt = { x: number; y: number };
+/** P1's spot for a P2 point: the top seat is P2's layout rotated 180° about the centre. */
+export const mirrored = (p: Pt): Pt => ({ x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y });
 type V2Layout = { anchor: Pt; fire: Pt & { r: number }; home: Pt & { r: number }; pad: Pt & { r: number } };
 export type LiveShot = { vx: number; vy: number; charged: boolean; homing: boolean; player: string; targetIsRock0: boolean };
 

@@ -82,7 +82,7 @@ textures, tokens).
   run its deploy: `npm run deploy:preview` for a working branch such as `controls-v2`, or
   `npm run deploy` on `main`. Still ask first before merging one branch into another (for example
   `controls-v2` into `main`), before any force-push or remote branch deletion, and before running
-  `wrangler deploy` / `wrangler versions deploy` by hand (outside `npm run deploy`).
+  `wrangler deploy` / `wrangler versions deploy` by hand.
 - **Docs state what's true now; only `docs/notes.md` keeps history.** When a decision changes,
   rewrite the old text in place so it says the new thing. Don't add a correction further down
   ("update: actually…", "superseded by…") and leave the stale sentence standing. A reader who stops
@@ -103,16 +103,20 @@ textures, tokens).
 ## Game commands (from the repo root)
 
 - `npm run dev` — dev server, LAN-exposed for phone testing (see `README.md` for firewall notes)
-- `npm run build` / `npm run typecheck` — `typecheck` also checks `e2e/` and `playwright.config.ts`
-  through `tsconfig.e2e.json` (the root config plus an explicit `types: ["node"]`). `build` runs
-  `typecheck` first, so CI and both deploy pre-flights check `e2e/` too.
+- `npm run build` / `npm run typecheck` — `typecheck` runs `tsconfig.json` (browser code: `src/`,
+  `prototype/`, no Node types) and `tsconfig.node.json` (root config + `types: ["node"]`: `e2e/`,
+  `playwright.config.ts`, `vite.config.ts`). `src/no-node-globals.ts` is never imported; it is the
+  guard that fails `typecheck` if Node types reach the root config. `build` runs `typecheck` first,
+  so CI and both deploy pre-flights check all of it.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
-  score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the `src/waves.ts` solver and solo
-  target scaling), `boss.spec.ts` (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
+  score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the 10-wave `RUN` table and its
+  play order, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
+  (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
   (`?players=1`), `controls-v2.spec.ts` (two-thumb buttons + drag aim) and `haptics.spec.ts`. The
-  shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, the `__debug`
-  wrappers and the CDP `touchscreen`. Its exported `test` carries the zero-console-error gate as an
-  auto fixture, so **specs import `test`/`expect` from `./helpers`, never from `@playwright/test`**
+  shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
+  the `__debug` wrappers (e.g. `shieldLinks`), `mirrored` for the top seat and the CDP `touchscreen`.
+  Its exported `test` carries the zero-console-error gate as an auto fixture, so **specs import
+  `test`/`expect` from `./helpers`, never from `@playwright/test`**
   (`harness.spec.ts` fails the suite if one does).
   A helper used by more than one spec goes in `helpers.ts`; a new case goes in its area's spec. The
   suite auto-starts the dev server headless on :5181 and drives real touches + direct shots. First
@@ -125,27 +129,28 @@ textures, tokens).
   one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
   the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
   TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
-  skipped with the `__debug.snapBossIn()` hook. **Speed** (~27s for the 23 cases, ~1.4 min at
-  `--repeat-each=3`): headless swiftshader makes rendering pathologically slow, so (a) the `smoke-*.png`
+  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~30s for the
+  29 cases, ~1.4 min at `--repeat-each=3` when it was 23): headless swiftshader makes rendering pathologically slow,
+  so (a) the `smoke-*.png`
   eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —
   and (b) `gotoGame()` **parks the RAF loop right after boot**, because any `page.evaluate` that runs
   against a live render loop stalls ~0.8s on the in-flight software frame (this alone took the boss case
   8s→1.7s). Parallel workers do *not* help — the one software-GL context is the bottleneck — so the
   config stays `workers: 1`.
 - `npm run deploy` — **commit first** (it refuses a dirty tree), then it pushes `main`, watches the
-  `deploy-pages.yml` Action, and verifies the live URL. It then publishes the same build to the
-  Cloudflare Worker's own URL (https://star-slingers.green-smoke-1027.workers.dev) with
-  `wrangler deploy`, tagged `main@<sha>`. Both hosts serve `main`; each is a separate install on the
-  phone. Needs `gh` and wrangler authed and a GitHub remote with Pages enabled. Docs-only commits
-  (`docs/**`, `plans/**`, `*.md`) deploy to neither.
+  `deploy-pages.yml` Action, and verifies the live URL. **GitHub Pages is the only host for `main`**
+  (https://michac.github.io/star-slingers/); the same Action also deploys a PR merged on GitHub.
+  Cloudflare is for branch previews only (below). Needs `gh` authed and a GitHub remote with Pages
+  enabled. Docs-only commits (`docs/**`, `plans/**`, `*.md`) don't deploy.
 - `npm run deploy:prototype` — ship the **prototype shelf** (`prototype/` → `…/prototype/`) for
   remote review. Unlike `deploy`, it commits `prototype/**` itself and tolerates other in-progress
   edits — an automated path to push review artifacts (glow spikes, sketches) to Michael's phone.
   Drop a `prototype/<name>.html` (+ `.ts`) and it auto-lists on the shelf (see `prototype/README.md`).
 - `npm run deploy:preview` — upload the **current branch** as a **Cloudflare Workers preview**
   (`wrangler versions upload --preview-alias <branch>`), so a long-lived branch such as `controls-v2`
-  gets its own installable phone URL beside the stable game. It never changes production (Pages or the
-  Worker's own URL). It tolerates a dirty tree and tags the version `branch@sha[-dirty]`. Config is in
+  gets its own installable phone URL beside the stable game. It never changes production (Pages). The
+  Worker's own workers.dev URL is not maintained: it's frozen at an old `main` and nothing updates
+  it, so don't install or test from it. It tolerates a dirty tree and tags the version `branch@sha[-dirty]`. Config is in
   `wrangler.jsonc`. The Worker is named `star-slingers` and **shares a Cloudflare account with the
   card-games Worker, so never reuse that name.** Keep Cloudflare's default HTML handling: `/` and the
   `/prototype/` shelf need it, and it's safe only because `public/sw.js` never precaches HTML or caches

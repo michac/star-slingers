@@ -1,21 +1,26 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredDamagePerSec, waveTarget, WAVES } from './waves';
+import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredDamagePerSec, RUN, waveTarget } from './waves';
 import { COLORS } from './tokens';
 import { controlsVariant, playerCount } from './controlsVariant';
 import { SandboxScene } from './scenes/SandboxScene';
 
-// Difficulty readout — the tuning loop is: change a WAVES target, reload,
+// Difficulty readout — the tuning loop is: change a RUN target, reload,
 // read these. Shows target vs achieved (the solver lands at-or-above target,
 // or below if saturated) and the tier the solver settled on (see docs/design.md §7).
 if (import.meta.env.DEV) {
   const players = playerCount(controlsVariant()); // solo scales the targets (SOLO in waves.ts)
-  for (const [i, w] of WAVES.entries()) {
+  for (const [i, { act, kind, boss, field: w, placeholder }] of RUN.entries()) {
+    const label = `wave ${i + 1} (act ${act}, ${boss ?? kind}${placeholder ? ' placeholder' : ''})`;
+    if (!w) {
+      console.log(`${label}: boss encounter (BOSS dials)`);
+      continue;
+    }
     const specs = asteroidsFor(w, players);
     const splitters = specs.filter((s) => s.kind === 'splitter').length;
     const speedScale = (specs[0].speed / LANE_SLOTS[0].baseSpeed).toFixed(2);
     console.log(
-      `wave ${i + 1} (${players}p): target ${waveTarget(w, players).toFixed(2)} -> achieved ` +
+      `${label} (${players}p): target ${waveTarget(w, players).toFixed(2)} -> achieved ` +
         `${requiredDamagePerSec(w, players).toFixed(2)} required damage/s ` +
         `[lanes ${specs.length}, speed x${speedScale}, splitters ${splitters}], ` +
         `break-even ${(breakEvenAccuracy(w, players) * 100).toFixed(0)}%, quota ${w.quota}`

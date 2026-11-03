@@ -1,6 +1,6 @@
 /**
  * waves.ts — the difficulty dials. This is the one file to tune the run:
- * the per-wave targets (`WAVES`), the knob ranges the solver moves through
+ * the run (`RUN`: 10 waves in 4 acts, each wave's kind and targets), the knob ranges the solver moves through
  * (`DIFFICULTY_MODEL`), the physical lanes (`LANE_SLOTS`), and the
  * budget/solver math that turns a target into a concrete asteroid field.
  *
@@ -85,30 +85,84 @@ export interface WaveConfig {
   shieldRegenMs: number; // a ring regrows after this long unhit; 0 = off
 }
 
+/** The run's four acts: 1 asteroids, 2 ships, 3 space monsters, 4 the finale. */
+export type Act = 1 | 2 | 3 | 4;
+
+/** What a wave fields. Each kind gets its real content from its act's issue
+ *  (#25 asteroids, #27 ships, #28 monsters); until then a `placeholder` wave
+ *  plays as a solver asteroid field. */
+export type WaveKind = 'asteroid' | 'ship' | 'monster' | 'boss' | 'finale';
+
+/** Which boss a `boss` wave is: the giant asteroid ends act 1, the command
+ *  ship (BOSS below, docs/design.md §9) ends act 2, the monster boss act 3. */
+export type BossId = 'giantAsteroid' | 'commandShip' | 'monsterBoss';
+
+/** One wave of the run. A wave with a `field` is played by the difficulty
+ *  solver (an asteroid field today); the command ship has none and is played
+ *  by the BossEncounter with the BOSS dials. */
+export interface RunWave {
+  act: Act;
+  kind: WaveKind;
+  boss?: BossId;
+  field?: WaveConfig;
+  /** Plays as an asteroid field until its act's issue builds the real content. */
+  placeholder?: true;
+}
+
 /**
- * The run: 4 escalating waves (boss B5 comes after, separately). Each wave
- * is just a target; solveWave() realizes it. Targets chosen so the waterfall
- * is visible AND each wave feels distinct (Playtest 3 fix: waves 1 & 2 used
- * to solve to near-identical all-1-hit fields). The shape (B32 floor raise —
- * every wave now runs 4 lanes @ max speed, splitter count is the ramp):
- *   W1 one splitter → W2/W3 two splitters → W4 three splitters.
- *   "Noticeably harder, still soloable": a skilled solo player can scrape W4
- *   (~75% accuracy) but two is comfy.
- * Tune by the dev boot log (target vs achieved + tier). Raise targets to add
- * more splitters; drop targets to soften. (The slow-lane
- * gentle lever is gone from W1 — the 5yo's cushion is homing (B8/B14), not
- * speed; if W1 is too steep for him, soften its target toward ~0.25.)
+ * THE RUN — 10 waves in 4 acts, in play order (docs/design.md §3). Every dial
+ * for the run lives here so each act's issue retunes it in one place.
+ *
+ * Targets: each act eases back a step from the last one's peak, then climbs.
+ * The act-1 targets are the calibrated ones from Playtest 3 / B37 (W1 one
+ * splitter → W2/W3 two; the 5yo's cushion is homing, not speed: if W1 plays
+ * too steep, soften its target toward ~0.25). The rest are placeholders,
+ * revisable in playtest. Tune by the dev boot log (target vs achieved + tier).
+ *
+ * The finale is a long, dense, forgiving wave to blast with every upgrade:
+ * its target solves to all four lanes as splitters at max speed, with a big
+ * quota and a quick shield regen.
  */
-export const WAVES: WaveConfig[] = [
-  { required: 0.3, quota: 8, shieldRegenMs: 10000 },
-  { required: 0.45, quota: 10, shieldRegenMs: 11000 },
-  { required: 0.6, quota: 12, shieldRegenMs: 13000 },
-  { required: 0.75, quota: 14, shieldRegenMs: 15000 },
+export const RUN: readonly RunWave[] = [
+  { act: 1, kind: 'asteroid', field: { required: 0.3, quota: 8, shieldRegenMs: 10000 } },
+  { act: 1, kind: 'asteroid', field: { required: 0.45, quota: 10, shieldRegenMs: 11000 } },
+  { act: 1, kind: 'boss', boss: 'giantAsteroid', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
+  { act: 2, kind: 'ship', placeholder: true, field: { required: 0.45, quota: 10, shieldRegenMs: 11000 } },
+  { act: 2, kind: 'ship', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
+  { act: 2, kind: 'boss', boss: 'commandShip' },
+  { act: 3, kind: 'monster', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
+  { act: 3, kind: 'monster', placeholder: true, field: { required: 0.75, quota: 14, shieldRegenMs: 15000 } },
+  { act: 3, kind: 'boss', boss: 'monsterBoss', placeholder: true, field: { required: 0.75, quota: 14, shieldRegenMs: 15000 } },
+  { act: 4, kind: 'finale', field: { required: 0.9, quota: 24, shieldRegenMs: 8000 } },
 ];
+
+/** The 1-based wave number of the command-ship boss (`?boss` jumps here). */
+export const COMMAND_SHIP_WAVE = RUN.findIndex((w) => w.boss === 'commandShip') + 1;
+
+/** True when `n` is a 1-based wave number of the run (1..RUN.length). */
+export function isWaveNumber(n: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= RUN.length;
+}
+
+/** The 1-based first wave of wave `n`'s act: where Try again restarts after a loss. */
+export function actStartWave(n: number): number {
+  const act = RUN[n - 1].act;
+  return RUN.findIndex((w) => w.act === act) + 1;
+}
+
+/** The wave a fresh load starts at, from the URL's query string: `?wave=N`
+ *  (1..RUN.length) wins, else `?boss` gives the command ship, else wave 1. An
+ *  out-of-range or non-numeric N is ignored. */
+export function startWaveFromQuery(search: string): number {
+  const params = new URLSearchParams(search);
+  const n = Number(params.get('wave'));
+  if (isWaveNumber(n)) return n;
+  return params.has('boss') ? COMMAND_SHIP_WAVE : 1;
+}
 
 /**
  * Solo (?players=1, #6 prototype slice) difficulty dial. A solo run fields the
- * same waves with each target scaled: `required × requiredScale`. Shipped at
+ * same field waves with each target scaled: `required × requiredScale`. Shipped at
  * 1.0 (no change) — the playtest finds the real value. Ammo regen is per seat,
  * so one player already has half the team's firepower; the dev boot log's
  * break-even % accounts for that. Boss timing is NOT scaled (out of this slice).
@@ -132,7 +186,7 @@ export const BREATHER = {
 } as const;
 
 /**
- * Final boss (B5) BALANCE dials — the run's finale (geometry is in layout.ts).
+ * Command-ship boss (B5) BALANCE dials — wave 6, act 2's boss (geometry is in layout.ts).
  * One continuous CHARGING phase (B34 shield web):
  *
  *   CHARGING: four escorts rotate a physical shield web around the boss.

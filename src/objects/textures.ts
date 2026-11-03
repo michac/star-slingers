@@ -12,8 +12,6 @@ export const TEX = {
   rocketP2: 'rocket-p2',
   /** One texture per distinct asteroid radius. */
   asteroid: (radius: number) => `asteroid-${radius}`,
-  /** Damage stage 1..ASTEROID_CRACK_STAGES of that rock (multi-hp rocks only). */
-  asteroidCracked: (radius: number, stage: number) => `asteroid-${radius}-crack${stage}`,
   boss: 'boss', // B34 directional command ship
   escort: 'escort-both-locks', // B33 escort ship with both player locks
   escortP1Lock: 'escort-p1-lock', // cyan lock remains
@@ -74,43 +72,6 @@ function makeAsteroid(scene: Phaser.Scene, r: number): void {
   drawAsteroid(g, r);
   g.generateTexture(TEX.asteroid(r), r * 2, r * 2);
   g.destroy();
-}
-
-/** How many crack stages a multi-hp rock steps through as it loses hp. */
-export const ASTEROID_CRACK_STAGES = 3;
-
-/** Jagged cracks in unit-radius coords (rock center = 0,0), one added per
- *  stage. Fixed (not random) so a radius's textures are stable. Every point
- *  stays inside the unit circle, so cracks never poke past the rim. */
-const CRACKS: [number, number][][] = [
-  [[0.04, -0.04], [0.3, -0.22], [0.36, -0.5], [0.6, -0.66]],
-  [[-0.02, 0.04], [-0.26, 0.18], [-0.34, 0.48], [-0.58, 0.66]],
-  [[0.06, 0.04], [0.34, 0.14], [0.52, 0.4], [0.76, 0.44]],
-];
-
-/**
- * Damage stages for one radius (asteroid health): the base rock plus 1..stage cracks.
- * Same 2r x 2r canvas as the base texture, so swapping to a cracked stage never
- * touches the physics body. Generated on demand by the first rock whose max hp
- * is > 1 (today's 1-hp rocks never need them), then cached on the Game.
- */
-export function ensureAsteroidCracks(scene: Phaser.Scene, r: number): void {
-  for (let stage = 1; stage <= ASTEROID_CRACK_STAGES; stage++) {
-    const key = TEX.asteroidCracked(r, stage);
-    if (scene.textures.exists(key)) continue;
-    const g = scene.make.graphics({}, false);
-    drawAsteroid(g, r);
-    g.lineStyle(STROKES.rockCrack.width, COLORS.rockCrack, 1);
-    const reach = r - STROKES.rock.width; // keep cracks inside the rim stroke
-    for (const crack of CRACKS.slice(0, stage)) {
-      g.strokePoints(
-        crack.map(([x, y]) => new Phaser.Geom.Point(r + x * reach, r + y * reach)),
-        false
-      );
-    }
-    g.generateTexture(key, r * 2, r * 2);
-    g.destroy();
-  }
 }
 
 function drawAsteroid(g: Phaser.GameObjects.Graphics, r: number): void {
