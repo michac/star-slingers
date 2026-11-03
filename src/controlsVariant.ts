@@ -1,16 +1,13 @@
 /**
- * controlsVariant.ts — this boot's per-phone seat option for the two-thumb
- * controls (TwoThumbControl). Which seats play, and at what difficulty, is the
- * join screen's call (lineup.ts), not a URL switch.
+ * controlsVariant.ts — the phone's per-seat option for the two-thumb controls
+ * (TwoThumbControl): which seats play lefty. Which seats play, and at what
+ * difficulty, is the join screen's call (lineup.ts).
  *
- *   ?lefty=p1|p2|both|none   mirror that seat's layout (aim zone left, buttons right)
- *
- * Resolution: the URL wins and is SAVED to localStorage; an absent (or
- * unrecognised) param falls back to the saved value, then the default. Saving is
- * what lets the installed home-screen PWA (which always opens at the bare start
- * URL) keep the last option picked from the prototype shelf. Every storage call
- * is try/caught: private mode or blocked storage just means no memory. Saved
- * keys this module doesn't read are ignored.
+ * Lefty is switched in game with each seat's swap control (#21) and SAVED to
+ * localStorage, so the phone remembers it across runs and reloads (the
+ * installed home-screen PWA too). Every storage call is try/caught: private
+ * mode or blocked storage just means no memory. Saved keys this module doesn't
+ * read are ignored.
  */
 
 export type LeftySetting = 'p1' | 'p2' | 'both' | 'none';
@@ -22,15 +19,14 @@ export interface ControlsVariant {
 /** Default: nobody mirrored. */
 const DEFAULTS: ControlsVariant = { lefty: 'none' };
 
-const ALLOWED: { [K in keyof ControlsVariant]: readonly ControlsVariant[K][] } = {
-  lefty: ['p1', 'p2', 'both', 'none'],
-};
+const ALLOWED: readonly LeftySetting[] = ['p1', 'p2', 'both', 'none'];
 
-const STORAGE_PREFIX = 'starSlingers.';
+/** Storage key (unchanged since the old `?lefty` URL switch, so a saved choice carries over). */
+const LEFTY_KEY = 'starSlingers.lefty';
 
 function storageGet(key: string): string | null {
   try {
-    return window.localStorage.getItem(STORAGE_PREFIX + key);
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
@@ -38,32 +34,20 @@ function storageGet(key: string): string | null {
 
 function storageSet(key: string, value: string): void {
   try {
-    window.localStorage.setItem(STORAGE_PREFIX + key, value);
+    window.localStorage.setItem(key, value);
   } catch {
     // No storage (private mode, blocked site data): the choice lasts this boot only.
   }
 }
 
-function resolve<K extends keyof ControlsVariant>(params: URLSearchParams, key: K): ControlsVariant[K] {
-  const allowed = ALLOWED[key] as readonly string[];
-  const fromUrl = params.get(key);
-  if (fromUrl !== null && allowed.includes(fromUrl)) {
-    storageSet(key, fromUrl);
-    return fromUrl as ControlsVariant[K];
-  }
-  const saved = storageGet(key);
-  if (saved !== null && allowed.includes(saved)) return saved as ControlsVariant[K];
-  return DEFAULTS[key];
-}
-
 let cached: ControlsVariant | null = null;
 
-/** The boot's variant, resolved once (a scene restart reuses it). */
+/** The phone's variant, read from storage once; setSeatLefty keeps it current. */
 export function controlsVariant(): ControlsVariant {
   if (!cached) {
-    const params = new URLSearchParams(window.location.search);
+    const saved = storageGet(LEFTY_KEY);
     cached = {
-      lefty: resolve(params, 'lefty'),
+      lefty: saved !== null && (ALLOWED as readonly string[]).includes(saved) ? (saved as LeftySetting) : DEFAULTS.lefty,
     };
   }
   return cached;
@@ -72,4 +56,13 @@ export function controlsVariant(): ControlsVariant {
 /** Is this seat mirrored (aim zone on the player's left, buttons on their right)? */
 export function isLefty(lefty: LeftySetting, player: 'p1' | 'p2'): boolean {
   return lefty === 'both' || lefty === player;
+}
+
+/** Set one seat's lefty, leaving the other seat's as it was, and save it. */
+export function setSeatLefty(player: 'p1' | 'p2', on: boolean): void {
+  const variant = controlsVariant();
+  const p1 = player === 'p1' ? on : isLefty(variant.lefty, 'p1');
+  const p2 = player === 'p2' ? on : isLefty(variant.lefty, 'p2');
+  variant.lefty = p1 && p2 ? 'both' : p1 ? 'p1' : p2 ? 'p2' : 'none';
+  storageSet(LEFTY_KEY, variant.lefty);
 }

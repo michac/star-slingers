@@ -42,6 +42,7 @@ export class PlayerHud {
   private readonly scoreValue: Phaser.GameObjects.Text;
   /** The special row's label: the current special's icon. */
   private readonly specialIcon: Phaser.GameObjects.Graphics;
+  private readonly column: Phaser.GameObjects.Container;
   private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
   private unlimited = false;
   /** Each pool's looping regen timer (restarted by spend() from full). */
@@ -74,7 +75,7 @@ export class PlayerHud {
     this.refresh();
     this.setSpecial(this.currentSpecial);
 
-    scene.add
+    this.column = scene.add
       .container(cfg.x, cfg.y, [
         waveLabel,
         waveValue,
@@ -136,7 +137,16 @@ export class PlayerHud {
     SPECIALS[kind].drawIcon(this.specialIcon, HUD_ROWS.specialIconX, HUD_ROWS.special, HUD_ROWS.specialIconR, this.cfg.color);
   }
 
+  /** Move the column's origin (a seat's lefty swap, #21, shifts it). */
+  setPosition(x: number, y: number): void {
+    this.column.setPosition(x, y);
+  }
+
   // ---- read-outs (DEV hooks / tests) ----
+
+  get position(): { x: number; y: number } {
+    return { x: this.column.x, y: this.column.y };
+  }
 
   get ammoCount(): number {
     return this.counts.fire;

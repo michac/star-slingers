@@ -1,9 +1,9 @@
 /**
- * controls-v2.spec.ts — two-thumb FIRE/SPECIAL buttons + drag aim (#7), the two ammo pools (#22), driven by real CDP touches.
+ * controls-v2.spec.ts — two-thumb FIRE/SPECIAL buttons + drag aim (#7), the lefty swap (#21), the two ammo pools (#22), driven by real CDP touches.
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, stepUntil, fieldRock, touchscreen, v2Layout, liveShots, mirrored, countShots, fired, type LiveShot, type Page } from './helpers';
-import { AMMO, AMMO_REGEN_MS, CONTROLS_V2, MISSILE, SLING, SPECIAL } from '../src/layout';
+import { AMMO, AMMO_REGEN_MS, CONTROLS_V2, GAME_WIDTH, MISSILE, P2_ANCHOR, SLING, SPECIAL } from '../src/layout';
 
 const aimDeg = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.aimDeg(${player})`) as Promise<number>;
 
@@ -113,9 +113,14 @@ test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   expect(Math.abs(shotDeg(shots[0], 1) - 130)).toBeLessThan(2);
 });
 
-test('v2: drag aim clamps; ?lefty mirrors a seat', async ({ page }) => {
-  await gotoGame(page, '?lefty=p2');
-  expect(await page.evaluate(`${SCENE}.__debug.lefty()`)).toBe('p2');
+test('v2: ?lefty is ignored; a remembered lefty seat mirrors and its drag aim clamps', async ({ page }) => {
+  await gotoGame(page, '?lefty=p2'); // the URL switch is gone (#21)
+  expect(await lefty(page)).toBe('none');
+  expect((await v2Layout(page, 2)).fire.x).toBeLessThan(P2_ANCHOR.x);
+  // The phone remembers a lefty seat in storage (the swap control saves it).
+  await page.evaluate(() => localStorage.setItem('starSlingers.lefty', 'p2'));
+  await gotoGame(page);
+  expect(await lefty(page)).toBe('p2');
   const L = await v2Layout(page, 2);
   expect(L.fire.x).toBeGreaterThan(L.anchor.x); // lefty: buttons on the player's right
   expect(L.pad.x).toBeLessThan(L.anchor.x);
@@ -128,6 +133,100 @@ test('v2: drag aim clamps; ?lefty mirrors a seat', async ({ page }) => {
   await t.move(1, 300, 600); // way past: clamps
   expect(await aimDeg(page, 2)).toBe(15);
   await t.up(1);
+});
+
+// ---- the lefty swap (#21) ----
+
+const lefty = (page: Page) => page.evaluate(`${SCENE}.__debug.lefty()`) as Promise<string>;
+const hudPos = (page: Page, player: 1 | 2) =>
+  page.evaluate(`${SCENE}.__debug.hudPos(${player})`) as Promise<{ x: number; y: number }>;
+const held = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.controls[${player - 1}].held`);
+/** Frames of 16ms that just reach / fall just short of the swap's hold. */
+const HOLD_FRAMES = Math.ceil(CONTROLS_V2.swap.holdMs / 16);
+
+test('swap: holding a seat\'s ⇄ mirrors that seat only, and the phone remembers it', async ({ page }) => {
+  await gotoGame(page);
+  const L2 = await v2Layout(page, 2);
+  const L1 = await v2Layout(page, 1);
+  expect(L2.swap.x).toBeLessThan(L2.anchor.x); // righty: on the buttons' side
+  expect(await hudPos(page, 2)).toEqual(CONTROLS_V2.hud);
+  const t = await touchscreen(page);
+
+  await t.down(1, L2.swap.x, L2.swap.y);
+  await stepGame(page, 16, HOLD_FRAMES - 2); // just short of the hold
+  expect(await lefty(page)).toBe('none');
+  expect((await v2Layout(page, 2)).fire).toEqual(L2.fire);
+  await stepGame(page, 16, 2); // the hold completes: P2 mirrors at once
+  const M = await v2Layout(page, 2);
+  expect(M.fire.x).toBeCloseTo(GAME_WIDTH - L2.fire.x, 5); // buttons on the player's right
+  expect(M.special.x).toBeCloseTo(GAME_WIDTH - L2.special.x, 5);
+  expect(M.pad.x).toBeCloseTo(GAME_WIDTH - L2.pad.x, 5); // aim pad on their left
+  expect(M.swap.x).toBeCloseTo(GAME_WIDTH - L2.swap.x, 5); // the ⇄ follows the buttons
+  expect(await hudPos(page, 2)).toEqual(CONTROLS_V2.hudLefty);
+  expect(await v2Layout(page, 1)).toEqual(L1); // the other seat is untouched
+  expect(await lefty(page)).toBe('p2');
+  expect(await page.evaluate(() => localStorage.getItem('starSlingers.lefty'))).toBe('p2');
+  // Still holding: one hold is one swap, it doesn't flip back.
+  await stepGame(page, 16, HOLD_FRAMES * 2);
+  expect(await lefty(page)).toBe('p2');
+  await t.up(1);
+
+  // The new aim zone works: a thumb on the player's left now turns the aim.
+  await t.down(2, 60, 600);
+  await t.move(2, 85, 600);
+  expect(await aimDeg(page, 2)).toBeCloseTo(90 - 25 * CONTROLS_V2.drag.gainDegPerPx, 3);
+  await t.up(2);
+
+  await gotoGame(page); // a fresh boot keeps it
+  expect(await lefty(page)).toBe('p2');
+  expect((await v2Layout(page, 2)).fire.x).toBeGreaterThan(P2_ANCHOR.x);
+  expect(await hudPos(page, 2)).toEqual(CONTROLS_V2.hudLefty);
+});
+
+test('swap: a short hold does nothing, the ⇄ never aims or fires, and the top seat swaps too', async ({ page }) => {
+  await gotoGame(page);
+  const L2 = await v2Layout(page, 2);
+  const t = await touchscreen(page);
+
+  // A touch on the ⇄ that slides and lets go early: no aim, no button, no shot, no swap.
+  await t.down(1, L2.swap.x, L2.swap.y);
+  expect(await held(page, 2)).toBe(null);
+  await t.move(1, L2.swap.x + 40, L2.swap.y);
+  expect(await aimDeg(page, 2)).toBe(90);
+  await stepGame(page, 16, HOLD_FRAMES - 10);
+  await t.up(1);
+  await stepGame(page, 16, HOLD_FRAMES); // a let-go hold never completes later
+  expect(await liveShots(page)).toHaveLength(0);
+  expect(await lefty(page)).toBe('none');
+
+  // The ⇄'s hit circle clears both buttons and the aim zone, on either side.
+  const S = CONTROLS_V2.swap;
+  const reach = S.r + S.hitPad;
+  expect(S.x + reach).toBeLessThan(CONTROLS_V2.drag.minX); // righty zone: x ≥ minX
+  expect(GAME_WIDTH - S.x - reach).toBeGreaterThan(GAME_WIDTH - CONTROLS_V2.drag.minX); // lefty zone
+  for (const b of [CONTROLS_V2.fire, CONTROLS_V2.special]) {
+    expect(Math.hypot(b.x - S.x, b.y - S.y)).toBeGreaterThan(reach + b.r + CONTROLS_V2.buttonHitPad);
+  }
+
+  // A swap mid-charge drops the held FIRE: its release fires nothing.
+  await t.down(1, L2.fire.x, L2.fire.y);
+  await t.down(2, L2.swap.x, L2.swap.y);
+  await stepGame(page, 16, HOLD_FRAMES);
+  expect(await lefty(page)).toBe('p2');
+  expect(await held(page, 2)).toBe(null);
+  await t.up(1);
+  await t.up(2);
+  expect(await liveShots(page)).toHaveLength(0);
+
+  // The top seat's ⇄ (P2's rotated 180°) swaps P1 only, and a second hold swaps it back.
+  for (const want of ['both', 'p2']) {
+    const L1 = await v2Layout(page, 1);
+    await t.down(3, L1.swap.x, L1.swap.y);
+    await stepGame(page, 16, HOLD_FRAMES);
+    await t.up(3);
+    expect(await lefty(page)).toBe(want);
+  }
+  expect((await v2Layout(page, 1)).swap).toMatchObject(mirrored(L2.swap));
 });
 
 // ---- the two ammo pools (#22) ----

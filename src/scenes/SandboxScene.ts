@@ -1,8 +1,8 @@
 /**
  * SandboxScene — game orchestrator. Wires together stars, the station +
  * shield, a TwoThumbControl per joined seat (multitouch; the seats and their
- * Easy/Normal come from the join screen via lineup.ts, and ?lefty in
- * controlsVariant.ts mirrors a seat), the rocket pool, the WaveDirector
+ * Easy/Normal come from the join screen via lineup.ts; each seat's lefty swap
+ * mirrors it and is remembered in controlsVariant.ts), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
  * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
  * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
@@ -11,7 +11,7 @@
  */
 import Phaser from 'phaser';
 import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, SLING, STATION } from '../layout';
-import { controlsVariant, isLefty } from '../controlsVariant';
+import { controlsVariant, isLefty, setSeatLefty } from '../controlsVariant';
 import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
 import { generateTextures } from '../objects/textures';
 import { drawStarfield } from '../objects/draw';
@@ -94,9 +94,10 @@ export class SandboxScene extends Phaser.Scene {
     const live = liveSeats(run);
     const players = live.length === 1 ? 1 : 2;
     // Each HUD sits in the centre column under its launcher, between SPECIAL and
-    // the aim pad (P1's rotated 180° about the field centre).
-    const hudAt = (player: 'p1' | 'p2') => {
-      const at = isLefty(variant.lefty, player) ? CONTROLS_V2.hudLefty : CONTROLS_V2.hud;
+    // the aim pad (P1's rotated 180° about the field centre); a lefty seat's
+    // shifts to clear its mirrored buttons.
+    const hudAt = (player: 'p1' | 'p2', lefty = isLefty(variant.lefty, player)) => {
+      const at = lefty ? CONTROLS_V2.hudLefty : CONTROLS_V2.hud;
       return player === 'p2'
         ? { x: at.x, y: at.y, angle: 0 }
         : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
@@ -173,6 +174,12 @@ export class SandboxScene extends Phaser.Scene {
           color,
           edge,
           lefty: isLefty(variant.lefty, player),
+          // The swap (#21) mirrored this seat: remember it, move its HUD.
+          onLeftyChange: (lefty) => {
+            setSeatLefty(player, lefty);
+            const at = hudAt(player, lefty);
+            hud.setPosition(at.x, at.y);
+          },
           rocketTexture: tex,
           canFire: (button) => hud.canFire(button),
           onFire: (x, y, dirx, diry, kind) => {
@@ -225,7 +232,9 @@ export class SandboxScene extends Phaser.Scene {
         splitCount: () => this.waveDirector.splitCount,
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         healthBars: () => this.healthBars.lastDrawn,
+        // The phone's lefty setting (kept current by the seats' swaps, #21).
         lefty: () => variant.lefty,
+        hudPos: (player: number) => hud(player)?.position,
         seats: () => seats.map((seat) => seat.player),
         // The lineup's pick for a seat: 'easy' | 'normal', or null if it didn't join.
         difficulty: (player: number) => {
