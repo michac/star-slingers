@@ -60,19 +60,32 @@ export const test = base.extend<{ consoleGate: void }>({
 });
 
 export const SCENE = `window.__game.scene.keys['Sandbox']`;
+/** The join screen (#20), the scene every boot opens on. */
+export const JOIN_SCENE = `window.__game.scene.keys['Join']`;
 
-export async function gotoGame(page: Page, query = ''): Promise<void> {
+export type Difficulty = 'easy' | 'normal';
+/** The seats to join and their picks; a seat left out doesn't join. */
+export type Lineup = { p1?: Difficulty; p2?: Difficulty };
+
+/** Boot the game. By default it skips the join screen through its DEV
+ *  startRun hook with `lineup` (both Normal: the co-op every older case
+ *  assumes). `'join'` stops on the join screen instead, for the cases that
+ *  drive it with touches. Either way the RAF loop is parked on return. */
+export async function gotoGame(page: Page, query = '', lineup: Lineup | 'join' = { p1: 'normal', p2: 'normal' }): Promise<void> {
   // Default 'load' (not 'networkidle' — Vite HMR keeps the socket busy).
   await page.goto('/' + query);
   await page.waitForSelector('#game canvas', { timeout: 15_000 });
-  // Wait for the scene's create() to run (its DEV __debug hook is the last thing
+  // Wait for a scene's create() to run (its DEV __debug hook is the last thing
   // it installs) rather than a fixed sleep — returns as soon as the game is ready
   // to drive, which is both faster and less flaky than "hope a second is enough".
-  await page.waitForFunction(
-    () => (window as any).__game?.scene?.keys?.['Sandbox']?.__debug !== undefined,
-    undefined,
-    { timeout: 15_000 }
-  );
+  const sceneReady = (key: string) =>
+    page.waitForFunction((k) => (window as any).__game?.scene?.keys?.[k]?.__debug !== undefined, key, { timeout: 15_000 });
+  await sceneReady('Join');
+  if (lineup !== 'join') {
+    // The live loop processes the queued scene start.
+    await page.evaluate((l) => (window as any).__game.scene.keys['Join'].__debug.startRun(l), lineup);
+    await sceneReady('Sandbox');
+  }
   // Park the RAF loop immediately. Under headless SwiftShader a live render frame
   // is slow, and any page.evaluate that touches the scene stalls waiting for the
   // in-flight frame (~0.8s each) — the dominant cost once screenshots are off.

@@ -49,7 +49,7 @@ test('the run is one table of 10 waves in 4 acts', () => {
 test('the start wave comes from ?wave, else ?boss, else wave 1', () => {
   expect(startWaveFromQuery('')).toBe(1);
   expect(startWaveFromQuery('?wave=9')).toBe(9);
-  expect(startWaveFromQuery('?wave=10&players=1')).toBe(10);
+  expect(startWaveFromQuery('?wave=10&lefty=p1')).toBe(10);
   expect(startWaveFromQuery('?boss')).toBe(6);
   expect(startWaveFromQuery('?wave=9&boss')).toBe(9);
   for (const bad of ['?wave=0', '?wave=11', '?wave=abc', '?wave=2.5', '?wave=']) {

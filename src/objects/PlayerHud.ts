@@ -2,7 +2,8 @@
  * PlayerHud — one player's HUD column, anchored at the mock HUD GROUP
  * origin with rows at the mock's local offsets: WAVE (y=0), SCORE (y=20), and
  * AMMO (y=40). P1's container is rotated 180° so the whole column reads
- * right-side-up from the top edge.
+ * right-side-up from the top edge. An Easy seat (#20) has unlimited ammo: its
+ * AMMO value reads ∞ and a shot never spends it.
  */
 import Phaser from 'phaser';
 import { CSS, FONTS } from '../tokens';
@@ -17,6 +18,7 @@ export interface PlayerHudConfig {
 
 export class PlayerHud {
   private ammo: number = AMMO.max;
+  private unlimited = false;
   private readonly ammoValue: Phaser.GameObjects.Text;
   private readonly waveValue: Phaser.GameObjects.Text;
   private readonly scoreValue: Phaser.GameObjects.Text;
@@ -70,17 +72,34 @@ export class PlayerHud {
     this.scoreValue.setText(String(n));
   }
 
+  /** Unlimited ammo (an Easy seat, #20): the pool refills, every shot can
+   *  fire, and the readout shows ∞ instead of a count. */
+  setUnlimitedAmmo(on: boolean): void {
+    this.unlimited = on;
+    this.ammo = AMMO.max;
+    this.refresh();
+  }
+
+  get unlimitedAmmo(): boolean {
+    return this.unlimited;
+  }
+
+  /** Shots left in the pool (an unlimited seat stays at the max). */
+  get ammoCount(): number {
+    return this.ammo;
+  }
+
   canFire(): boolean {
-    return this.ammo > 0;
+    return this.unlimited || this.ammo > 0;
   }
 
   spend(): void {
-    if (this.ammo === 0) return;
+    if (this.unlimited || this.ammo === 0) return;
     this.ammo -= 1;
     this.refresh();
   }
 
   private refresh(): void {
-    this.ammoValue.setText(String(this.ammo));
+    this.ammoValue.setText(this.unlimited ? '∞' : String(this.ammo));
   }
 }

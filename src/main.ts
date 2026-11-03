@@ -2,18 +2,18 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
 import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredDamagePerSec, RUN, waveTarget } from './waves';
 import { COLORS } from './tokens';
-import { controlsVariant, playerCount } from './controlsVariant';
+import { JoinScene } from './scenes/JoinScene';
 import { SandboxScene } from './scenes/SandboxScene';
 
 // Difficulty readout — the tuning loop is: change a RUN target, reload,
 // read these. Shows target vs achieved (the solver lands at-or-above target,
 // or below if saturated) and the tier the solver settled on (see docs/design.md §7).
+// Logged for solo and co-op: the join screen picks the seat count later.
 if (import.meta.env.DEV) {
-  const players = playerCount(controlsVariant()); // solo scales the targets (SOLO in waves.ts)
-  for (const [i, { act, kind, boss, field: w, placeholder }] of RUN.entries()) {
+  for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, placeholder }] of RUN.entries()) {
     const label = `wave ${i + 1} (act ${act}, ${boss ?? kind}${placeholder ? ' placeholder' : ''})`;
     if (!w) {
-      console.log(`${label}: boss encounter (BOSS dials)`);
+      if (players === 2) console.log(`${label}: boss encounter (BOSS dials)`);
       continue;
     }
     const specs = asteroidsFor(w, players);
@@ -58,7 +58,8 @@ function boot(): void {
     // so four thumbs + two spares (a resting palm, a stray finger). Phaser's
     // default is 1, which drops every simultaneous touch after the first.
     input: { activePointers: 6 },
-    scene: [SandboxScene],
+    // The join screen (#20) runs first; it starts Sandbox with the lineup.
+    scene: [JoinScene, SandboxScene],
   });
 
   // Debug handle for the headless e2e suite (e2e/) and console poking.

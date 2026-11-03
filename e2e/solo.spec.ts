@@ -1,10 +1,10 @@
 /**
- * solo.spec.ts — ?players=1: one-seat escort rule, the top seat hidden and ignored, the choice remembered.
+ * solo.spec.ts — one joined seat (#6, #20): one-seat escort rule, the empty top seat hidden and ignored.
+ * Joining through the join screen itself is join.spec.ts.
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
 
-const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
 const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
 const hudCount = (page: Page) => page.evaluate(`${SCENE}.scoreKeeper.huds.length`) as Promise<number>;
 /** Per-seat copies of the wave banner's numeral / an end card's text. */
@@ -13,10 +13,10 @@ const overlayCopies = (page: Page, which: 'failOverlay' | 'victoryOverlay') =>
   page.evaluate(`${SCENE}.${which}.container.list.filter((o) => o.type === 'Text').length`) as Promise<number>;
 
 test('solo: one player downs an escort with two of their own hits', async ({ page }) => {
-  // ?players=1 (#6 slice): an escort still takes two hits, but a repeat from the
+  // Solo (#6 slice): an escort still takes two hits, but a repeat from the
   // one seat fills the absent seat's lock instead of being rejected. (Two-player
   // rejection of a repeat colour is covered by the co-op boss case in boss.spec.ts.)
-  await gotoGame(page, '?players=1');
+  await gotoGame(page, '', { p2: 'normal' });
   await enterBoss(page);
   await hitEscort(page, 0, 'p2');
   expect(await escortsAlive(page)).toBe(4); // one hit is not enough
@@ -27,9 +27,8 @@ test('solo: one player downs an escort with two of their own hits', async ({ pag
   expect(await shieldLinks(page)).toBe(2);
 });
 
-test('solo (?players=1) keeps only the bottom seat, ignores the top, and is remembered', async ({ page }) => {
-  await gotoGame(page, '?players=1');
-  expect(await players(page)).toBe('1');
+test('solo (only the bottom seat joined) keeps only the bottom seat and ignores the top', async ({ page }) => {
+  await gotoGame(page, '', { p2: 'normal' });
   expect(await seats(page)).toEqual(['p2']);
   expect(await v2Layout(page, 1)).toBeNull();
   expect(await hudCount(page)).toBe(1);
@@ -65,11 +64,9 @@ test('solo (?players=1) keeps only the bottom seat, ignores the top, and is reme
   expect(await liveShots(page)).toHaveLength(0); // a fresh scene: P2's shot is gone
   expect(await seats(page)).toEqual(['p2']);
 
-  // Saved: a bare reload stays solo; ?players=2 brings the top seat back.
+  // Nothing is remembered across a reload: joining both seats then brings the
+  // top seat back.
   await gotoGame(page);
-  expect(await players(page)).toBe('1');
-  expect(await seats(page)).toEqual(['p2']);
-  await gotoGame(page, '?players=2');
   expect(await seats(page)).toEqual(['p1', 'p2']);
   expect(await v2Layout(page, 1)).not.toBeNull();
   expect(await hudCount(page)).toBe(2);

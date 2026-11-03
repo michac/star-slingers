@@ -1,17 +1,19 @@
 /**
  * SandboxScene — game orchestrator. Wires together stars, the station +
- * shield, two seats of TwoThumbControls (multitouch; seat options from
- * controlsVariant.ts: ?lefty mirrors a seat, ?players=1 builds only the bottom
- * seat, P2), the rocket pool, the WaveDirector
+ * shield, a TwoThumbControl per joined seat (multitouch; the seats and their
+ * Easy/Normal come from the join screen via lineup.ts, and ?lefty in
+ * controlsVariant.ts mirrors a seat), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
  * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
  * and the fail/victory overlays. All logic lives in objects/.
  */
 import Phaser from 'phaser';
 import { COLORS, CSS } from '../tokens';
-import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, P1_ANCHOR, P2_ANCHOR, STARS, STATION } from '../layout';
-import { controlsVariant, isLefty, playerCount } from '../controlsVariant';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, P1_ANCHOR, P2_ANCHOR, STATION } from '../layout';
+import { controlsVariant, isLefty } from '../controlsVariant';
+import { clearLineup, lineup, liveSeats, seatCount } from '../lineup';
 import { generateTextures, TEX } from '../objects/textures';
+import { drawStarfield } from '../objects/draw';
 import { TwoThumbControl } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
@@ -68,7 +70,7 @@ const seatId = (player: number): PlayerId | undefined => (player === 1 ? 'p1' : 
 const HOMING_MAX_TAN = Math.tan(Phaser.Math.DegToRad(HOMING.coneHalfAngleDeg));
 
 export class SandboxScene extends Phaser.Scene {
-  /** The live seats' controls (both seats, or just P2 in solo). */
+  /** The live seats' controls (both seats, or the one joined seat in solo). */
   private controls: TwoThumbControl[] = [];
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
@@ -91,13 +93,15 @@ export class SandboxScene extends Phaser.Scene {
    *  absent on a fresh load or a win's restart, which start from the query. */
   create(data: { startWave?: number } = {}): void {
     generateTextures(this);
-    this.drawStars();
+    drawStarfield(this);
     this.station = new Station(this); // under the asteroids/rockets
 
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
     const variant = controlsVariant();
-    const players = playerCount(variant);
+    const run = lineup(); // the join screen's seats + difficulties (#20)
+    const live = liveSeats(run);
+    const players = seatCount(run);
     // Each HUD sits in the centre column under its launcher, between HOME and
     // the aim pad (P1's rotated 180° about the field centre).
     const hudAt = (player: 'p1' | 'p2') => {
@@ -106,17 +110,18 @@ export class SandboxScene extends Phaser.Scene {
         ? { x: at.x, y: at.y, angle: 0 }
         : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
     };
-    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Solo
-    // (?players=1) builds only P2 (its HUD here, its control below), so nothing
-    // claims touches in P1's old regions.
-    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => players === 2 || d.player === 'p2').map((d) => ({
-      ...d,
-      hud: new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss }),
-    }));
+    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Only joined
+    // seats are built (their HUD here, their control below), so in solo nothing
+    // claims touches in the empty seat's region. An Easy seat never runs dry.
+    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => live.includes(d.player)).map((d) => {
+      const hud = new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss });
+      hud.setUnlimitedAmmo(run[d.player] === 'easy');
+      return { ...d, hud };
+    });
     const huds = seats.map((seat) => seat.hud);
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
-    // Solo draws no banner/end-card copy toward the empty top seat either.
-    const banner = new WaveBanner(this, players);
+    // Solo draws no banner/end-card copy toward the empty seat either.
+    const banner = new WaveBanner(this, live);
     // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
     // Try again retries it, so a tester can re-run one wave. Survives the
     // restart (the query string sticks). Harmless in normal play — nobody
@@ -124,15 +129,16 @@ export class SandboxScene extends Phaser.Scene {
     const queryWave = startWaveFromQuery(window.location.search);
     // Try again restarts at the lost act's first wave (AC5), but never before
     // a shortcut's wave, so a shortcut's wave retries itself until the players
-    // pass it.
-    this.failOverlay = new Overlay(this, FAIL_CONFIG, players, () => ({
-      startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)),
-    }));
-    // A win's tap starts a fresh run. It passes an explicit empty object:
-    // restart(undefined) would keep the previous restart's data (Phaser's
-    // Systems.start only replaces settings.data when given some), so a win after
-    // a Try again would restart at the retry wave.
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players, () => ({}));
+    // pass it. It keeps the lineup: the restart rebuilds from it (#20).
+    this.failOverlay = new Overlay(this, FAIL_CONFIG, live, () =>
+      this.scene.restart({ startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)) })
+    );
+    // A win ends the run and goes back to the join screen for a fresh lineup
+    // (#20); the join screen starts the next run with fresh data.
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, live, () => {
+      clearLineup();
+      this.scene.start('Join');
+    });
 
     // The command-ship boss (B5) creates its boss + escort sprites up front
     // (parked); the run hands it the field for wave 6.
@@ -230,8 +236,14 @@ export class SandboxScene extends Phaser.Scene {
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         healthBars: () => this.healthBars.lastDrawn,
         lefty: () => variant.lefty,
-        players: () => variant.players,
         seats: () => seats.map((seat) => seat.player),
+        // The lineup's pick for a seat: 'easy' | 'normal', or null if it didn't join.
+        difficulty: (player: number) => {
+          const id = seatId(player);
+          return id ? run[id] : undefined;
+        },
+        ammo: (player: number) => seats[seatIndex(player)]?.hud.ammoCount,
+        setUnlimitedAmmo: (player: number, on: boolean) => seats[seatIndex(player)]?.hud.setUnlimitedAmmo(on),
         // Seat aim (seat-frame degrees) + world-space control layout.
         aimDeg: (player: number) => this.controls[seatIndex(player)]?.aimDegrees,
         v2Layout: (player: number) => this.controls[seatIndex(player)]?.worldLayout() ?? null,
@@ -424,12 +436,4 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets.recycle(pair.rocket);
     return false;
   };
-
-  private drawStars(): void {
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.star, 1);
-    for (const star of STARS) {
-      g.fillCircle(star.x, star.y, star.r);
-    }
-  }
 }
