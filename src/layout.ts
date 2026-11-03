@@ -226,7 +226,7 @@ export const HEALTH_BAR = {
   width: 4,
   heightPerRadius: 1.4,
   minHeight: 16,
-  depth: 1, // over the rocks (depth 0), under escorts, banners and overlays
+  depth: 1, // a readout: over the depth-0 field (rocks, rockets, trails, shield), under escorts, banners and overlays
 } as const;
 
 /** Explicit render depths for late-created UI (creation order isn't enough:

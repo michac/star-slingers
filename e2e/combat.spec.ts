@@ -3,7 +3,7 @@
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fieldRock, fire, healthBars, type Page } from './helpers';
-import { HEALTH_BAR } from '../src/layout';
+import { GAME_WIDTH, HEALTH_BAR } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -213,4 +213,21 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
   expect(await hits(page)).toBe(hitsBefore + 3);
   expect(await score(page)).toBe(10); // a standard's points, awarded once on the kill
   expect(await healthBars(page)).toEqual([]); // the bar goes with the rock
+});
+
+test('a health bar near the right edge flips to the rock\'s left side', async ({ page }) => {
+  await gotoGame(page);
+
+  // A rock chipped just after it enters (e.g. by a homing shot) sits so close to
+  // the right edge that a right-side bar would be off-screen (#23), so the bar
+  // takes the rock's left side instead and stays on the field.
+  await fieldRock(page, { x: GAME_WIDTH - 10, y: 300, hp: 3 });
+  await page.evaluate(`${SCENE}.asteroids[0].takeHit(1)`);
+  await stepGame(page, 16, 1);
+  const bars = await healthBars(page);
+  const rock = (await page.evaluate(`({ x: ${SCENE}.asteroids[0].sprite.x, r: ${SCENE}.asteroids[0].radius })`)) as { x: number; r: number };
+  expect(bars).toHaveLength(1);
+  expect(bars[0].frac).toBeCloseTo(2 / 3, 5);
+  expect(bars[0].x).toBeCloseTo(rock.x - rock.r - HEALTH_BAR.gap - HEALTH_BAR.width / 2, 5);
+  expect(bars[0].x + HEALTH_BAR.width / 2).toBeLessThanOrEqual(GAME_WIDTH);
 });

@@ -1,7 +1,8 @@
 /**
  * HealthBars (#23) — the "how much is left" readout on a damaged enemy. A
  * short vertical pill just off the enemy's right (trailing) side, so it never
- * sits between the enemy and either seat. Its fill is centred and shrinks
+ * sits between the enemy and either seat (flipped to the left side while the
+ * right one would be off the field's right edge). Its fill is centred and shrinks
  * toward the middle as hp drops, so the top and bottom seats see the same
  * picture (no reading, no up/down). An enemy at full hp shows no bar.
  *
@@ -14,7 +15,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
-import { HEALTH_BAR } from '../layout';
+import { GAME_WIDTH, HEALTH_BAR } from '../layout';
 import type { HomingTarget } from './HomingTarget';
 
 /** What a bar needs from an enemy: the HomingTarget shape (sprite, live/popping
@@ -25,7 +26,8 @@ export type HealthBarTarget = HomingTarget & {
   readonly maxHp: number;
 };
 
-/** A drawn bar: its centre and remaining fraction (the e2e healthBars() hook). */
+/** A drawn bar: its centre and remaining fraction (the e2e healthBars() hook;
+ *  recorded in dev builds only). */
 export interface DrawnHealthBar {
   x: number;
   y: number;
@@ -57,7 +59,9 @@ export class HealthBars {
       const { x, y } = t.sprite;
       const frac = t.hp / t.maxHp;
       const h = Math.max(HEALTH_BAR.minHeight, t.radius * HEALTH_BAR.heightPerRadius);
-      const left = x + t.radius + HEALTH_BAR.gap;
+      const reach = t.radius + HEALTH_BAR.gap;
+      const right = x + reach;
+      const left = right + w <= GAME_WIDTH ? right : x - reach - w;
       const cx = left + w / 2;
       const top = y - h / 2;
       // Track.
@@ -69,7 +73,7 @@ export class HealthBars {
       const fh = frac * h;
       g.fillStyle(COLORS.health, 0.95);
       g.fillRoundedRect(left, y - fh / 2, w, fh, Math.min(w / 2, fh / 2));
-      this.drawn.push({ x: cx, y, frac });
+      if (import.meta.env.DEV) this.drawn.push({ x: cx, y, frac });
     }
   }
 }

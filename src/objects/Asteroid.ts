@@ -105,7 +105,7 @@ export class Asteroid {
     this.child = false; // defensive: lane reconfigure clears any child identity
     this.aliveMs = 0;
     this.resetHp();
-    this.sprite.setTexture(TEX.asteroid(spec.radius)); // the only place a wrapper's radius changes
+    this.sprite.setTexture(TEX.asteroid(spec.radius)); // radius may change here; spawnChild needs no swap (child wrappers are built at the child radius)
     (this.sprite.body as Phaser.Physics.Arcade.Body).setCircle(spec.radius);
     this.park();
   }

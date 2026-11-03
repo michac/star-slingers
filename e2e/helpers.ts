@@ -36,7 +36,6 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
-import type { DrawnHealthBar } from '../src/objects/HealthBars';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -197,9 +196,11 @@ export async function enterBoss(page: Page): Promise<void> {
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
 }
-/** The health bars (#23) drawn on the latest frame. */
+/** The health bars (#23) drawn on the latest frame: centre + remaining fraction
+ *  (HealthBars' DrawnHealthBar; not imported, because that module reads
+ *  import.meta.env, which the Node-typed e2e project doesn't declare). */
 export const healthBars = (page: Page) =>
-  page.evaluate(`${SCENE}.__debug.healthBars()`) as Promise<DrawnHealthBar[]>;
+  page.evaluate(`${SCENE}.__debug.healthBars()`) as Promise<{ x: number; y: number; frac: number }[]>;
 
 // ---------------------------------------------------------------------------
 // Touch helpers for the controls-v2 (#7) seats: two-thumb drag aim + fire
