@@ -2,7 +2,7 @@
 
 A two-player co-op space defense for one phone laid flat between the players.
 Each seat has two-thumb controls: drag on the right to aim, hold FIRE (charge
-for a railgun) or HOME (a homing shot) on the left. The design lives in
+for a charged railgun round) or SPECIAL (a homing missile) on the left. The design lives in
 `docs/design.md`; all colors/fonts live in `src/tokens.ts`.
 
 Layout and palette are ported 1:1 from
@@ -17,8 +17,8 @@ npm run dev        # serves on http://localhost:5173 (and your LAN IP)
 ```
 
 Desktop check (mouse = one pointer, so no aiming while a button is held):
-drag sideways on a seat's right side to aim, then click FIRE or HOME to shoot.
-Ammo regens 1 per second up to 5.
+drag sideways on a seat's right side to aim, then click FIRE or SPECIAL to shoot.
+FIRE ammo regens 1 per second up to 5; SPECIAL's own pool regens 1 per 3 seconds up to 2.
 
 ## Phone testing (Pixel 6)
 
