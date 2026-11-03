@@ -61,6 +61,10 @@ textures, tokens).
   `quality` around 0.3: sharper lagged the Pixel 6.
 - An Arcade collider binds to the sprites that exist when it's built. Mutate pooled wrappers in
   place; never recreate them, or the collider silently stops firing.
+- Probe collisions through **one real step**, never right after a spawn or fire. `Body.reset()`
+  sets `prev`/`prevFrame` from the *rotated* top-left, and Arcade syncs the sprite to its body only
+  in `postUpdate`, so during `scene.update` `rocket.x/y` is still the frame-start position. A probe
+  taken straight after `fire()` measures that reset state, not real flight (#8).
 
 ## Working agreement
 
