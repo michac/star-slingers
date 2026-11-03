@@ -89,16 +89,17 @@ test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   const L1 = await v2Layout(page, 1);
   const L2 = await v2Layout(page, 2);
   // P1's controls are P2's rotated about the field centre.
-  const want = { fire: mirrored(L2.fire), pad: mirrored(L2.pad) };
-  expect(L1.fire.x).toBeCloseTo(want.fire.x, 5);
-  expect(L1.fire.y).toBeCloseTo(want.fire.y, 5);
-  expect(L1.pad.x).toBeCloseTo(want.pad.x, 5);
+  const fireWant = mirrored(L2.fire);
+  expect(L1.fire.x).toBeCloseTo(fireWant.x, 5);
+  expect(L1.fire.y).toBeCloseTo(fireWant.y, 5);
+  expect(L1.pad.x).toBeCloseTo(mirrored(L2.pad).x, 5);
   const t = await touchscreen(page);
-  // P1's aim zone is P2's rotated: world (60,140) is seat-frame (300,600). A
-  // drag toward P1's LEFT (+x on screen, since P1 faces down the field) turns
-  // the aim from 90° up to 130°.
-  await t.down(1, 60, 140);
-  await t.move(1, 60 + dragFor(40), 140);
+  // P1's aim zone is P2's rotated: seat-frame (300,600) is on screen at
+  // mirrored(). A drag toward P1's LEFT (+x on screen, since P1 faces down the
+  // field) turns the aim from 90° up to 130°.
+  const aim = mirrored({ x: 300, y: 600 });
+  await t.down(1, aim.x, aim.y);
+  await t.move(1, aim.x + dragFor(40), aim.y);
   expect(await aimDeg(page, 1)).toBeCloseTo(130, 3);
   await t.down(2, L1.fire.x, L1.fire.y);
   await stepGame(page, 16, 2);

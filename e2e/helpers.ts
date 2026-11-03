@@ -186,6 +186,8 @@ export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
 export const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
 /** How many shield-web links are up (4 = the intact diamond). */
 export const shieldLinks = (page: Page) => page.evaluate(`${SCENE}.__debug.shieldLinks()`) as Promise<number>;
+/** Raw boss start: the boss is left mid slide-in (the tween never advances under
+ *  stepping). Cases want enterBoss(). */
 export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBoss()`);
 /** Start the boss fight ready to play: startBoss, snap the (wall-clock) entrance
  *  tween to its end, then one 16ms frame so the encounter observes the entered boss. */
