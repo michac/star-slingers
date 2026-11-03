@@ -1,9 +1,9 @@
 /**
- * HomingTarget — the minimal shape the homing system (B14) needs from anything
- * a shot can lock onto: a physics sprite, live/popping flags, and a radius for
- * the aim-highlight ring. Asteroid and Escort satisfy it, so homing keeps
- * working through the wave run AND the final-boss fight (the boss itself is
- * railgun-only).
+ * HomingTarget — the minimal shape the SPECIAL homing missile (#22) needs from
+ * anything it can take: a physics sprite, live/popping flags, and a radius for
+ * the aim-preview ring. Asteroid and Escort satisfy it, so the missile keeps
+ * working through the wave run AND the boss fight (the boss itself takes only
+ * charged FIRE rounds).
  */
 import Phaser from 'phaser';
 

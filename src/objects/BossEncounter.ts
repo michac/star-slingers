@@ -9,7 +9,7 @@
  *
  *   CHARGING: live adjacent escorts make a physical shield web. Destroying a
  *   node opens two gaps for BOSS.escortRegenMs and resets + pauses the charge;
- *   railguns can hit the boss only if they physically pass through a gap.
+ *   charged FIRE rounds can hit the boss only if they physically pass through a gap.
  *   won: boss HP 0 · lost: a fired charge with no shield left.
  *
  * Boss + escort sprites are created ONCE here (parked) so the scene's
@@ -114,9 +114,10 @@ export class BossEncounter {
     });
   }
 
-  /** Homing is an escort aid only — the boss stays railgun-only. Callers
-   *  filter on isActive/isPopping, so this hands back the pooled list as-is. */
-  homingTargets(): readonly HomingTarget[] {
+  /** What a SPECIAL missile can take here: the escorts, while charging. The
+   *  missile is an escort aid only; the boss takes only charged FIRE rounds.
+   *  Callers filter on isActive/isPopping, so this hands back the pooled list as-is. */
+  missileTargets(): readonly HomingTarget[] {
     return this.phaseState === 'charging' ? this.escorts : NO_TARGETS;
   }
 

@@ -120,7 +120,7 @@ export class WaveDirector {
     // Append dedicated child wrappers to the SAME array, parked. They
     // join here (before SandboxScene builds the rocket→asteroid collider once
     // over this.asteroids), so they get the collider + update loop + station
-    // contact + homing + field-empty checks for free. They differ from lane
+    // contact + missile + field-empty checks for free. They differ from lane
     // rocks in exactly two ways: onWantRespawn returns false (one-shot — they
     // park rather than respawn off the right edge), and they're fielded via
     // spawnChild() at a scatter position. Their indices are ≥ lane count, so

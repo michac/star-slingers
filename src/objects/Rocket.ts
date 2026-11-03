@@ -1,11 +1,12 @@
 /**
- * RocketPool — pooled arcade-physics sprites for both players' rockets.
- * Rockets fly straight (no gravity) and recycle when they hit the world
- * bounds or an asteroid. Homing shots (B14) additionally carry a locked
+ * RocketPool — pooled arcade-physics sprites for both players' shots: FIRE
+ * rounds (plain or charged) and SPECIAL homing missiles (#22). Rounds fly
+ * straight (no gravity) and recycle at the world bounds or on a hit (a charged
+ * round carries on past a kill, see the scene's spendShot). Missiles carry a
  * target and get steered toward it each frame by steer().
  */
 import Phaser from 'phaser';
-import { HOMING, TRAIL } from '../layout';
+import { MISSILE, TRAIL } from '../layout';
 import { COLORS } from '../tokens';
 import type { HomingTarget } from './HomingTarget';
 import { TEX } from './textures';
@@ -14,11 +15,17 @@ export type PlayerId = 'p1' | 'p2';
 
 /** Optional shot modifiers applied at fire time. */
 export interface ShotOptions {
-  /** B13 railgun: pierces asteroids and wears the bright trail tier. */
+  /** A charged FIRE round: double damage, carries on past a kill, bright trail tier. */
   charged?: boolean;
-  /** B14 homing lock picked at fire; null/absent = a straight shot. */
+  /** A SPECIAL homing missile: steered by steer(). */
+  missile?: boolean;
+  /** The missile's target at launch; null/absent = it acquires one in flight. */
   target?: HomingTarget | null;
 }
+
+/** Picks a missile's target: the live enemy nearest the line from (ox, oy)
+ *  along (dirx, diry), inside MISSILE's cone and range, or null. */
+export type AcquireTarget = (ox: number, oy: number, dirx: number, diry: number) => HomingTarget | null;
 
 /** A point on a rocket's flight history; stored per-sprite via setData. */
 type TrailPoint = { x: number; y: number };
@@ -54,7 +61,7 @@ export class RocketPool {
   }
 
   /** Returns the launched sprite (or null if the pool is exhausted). A fresh
-   *  rocket starts plain; `opts` makes it a railgun and/or locks a homing target.
+   *  rocket starts plain; `opts` makes it a charged round or a missile.
    *  (The e2e suite also tags rockets directly via the same setData keys.) */
   fire(
     textureKey: string,
@@ -70,14 +77,14 @@ export class RocketPool {
     rocket.setTexture(textureKey); // pooled sprite may carry the other player's
     rocket.setActive(true).setVisible(true);
     rocket.setData('isRocket', true);
-    rocket.setData('homing', false); // pooled sprite may carry a stale flag
-    rocket.setData('charged', false); // B13: pooled sprite may carry a stale flag
+    rocket.setData('missile', false); // pooled sprite may carry a stale flag
+    rocket.setData('charged', false); // pooled sprite may carry a stale flag
     rocket.setData('player', player); // B33: escorts need one hit from each seat
-    rocket.setData('hitSet', new Set()); // B13: rocks this railgun has chipped
     rocket.setData('dist', 0); // reset travelled distance for the arm/ramp curve
+    rocket.setData('age', 0); // ms in flight (the missile's lifetime cap)
     rocket.setData('history', [{ x, y }] as TrailPoint[]); // fresh trail history
     if (opts.charged) rocket.setData('charged', true);
-    if (opts.target) this.lockOn(rocket, opts.target, x, y, vx, vy);
+    if (opts.missile) this.arm(rocket, opts.target ?? null, x, y, vx, vy);
 
     const body = rocket.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y); // clears stale pooled velocity + syncs position
@@ -100,44 +107,51 @@ export class RocketPool {
     });
   }
 
-  /** Arm a homing shot (B14): steer() reads these keys. The straight arming
-   *  run is capped so it can't sail past a closer target. */
-  private lockOn(rocket: Phaser.Physics.Arcade.Sprite, target: HomingTarget, x: number, y: number, vx: number, vy: number): void {
-    rocket.setData('homing', true);
+  /** Arm a missile: steer() reads these keys. The straight arming run is
+   *  capped at MISSILE.armFraction of the way to a close target, so it can't
+   *  sail past it. */
+  private arm(rocket: Phaser.Physics.Arcade.Sprite, target: HomingTarget | null, x: number, y: number, vx: number, vy: number): void {
+    rocket.setData('missile', true);
     rocket.setData('target', target);
     rocket.setData('speed', Math.hypot(vx, vy));
-    const toTarget = Phaser.Math.Distance.Between(x, y, target.sprite.x, target.sprite.y);
-    rocket.setData('armAt', Math.min(HOMING.armDistancePx, toTarget * HOMING.armFraction));
+    const toTarget = target ? Phaser.Math.Distance.Between(x, y, target.sprite.x, target.sprite.y) : Infinity;
+    rocket.setData('armAt', Math.min(MISSILE.armDistancePx, toTarget * MISSILE.armFraction));
   }
 
-  /** Per-frame homing steer (B14). Each in-flight homing rocket flies STRAIGHT
-   *  for its arm distance, then its turn-rate ramps 0→full over the next
-   *  rampDistancePx, so the curve eases in as an obvious "smart rocket" move
-   *  rather than snapping. Steering is pure-pursuit at a high capped turn-rate:
-   *  a shot only ever homes if it locked a target at fire, and a lock is meant
-   *  to connect. If that locked target dies (e.g. the other player popped it),
-   *  drop homing and fly straight — we never re-acquire a different rock. */
-  steer(deltaMs: number): void {
-    const fullTurn = Phaser.Math.DegToRad(HOMING.turnRateDeg) * (deltaMs / 1000);
+  /** Per-frame missile steering (#22). Each missile flies STRAIGHT for its
+   *  arming run, then its turn-rate eases 0→full over MISSILE.rampDistancePx and
+   *  it pursues hard. Whenever it has no live target (none at launch, or the one
+   *  it had died) it asks `acquire` for the enemy nearest its CURRENT heading,
+   *  so it is hard to miss. A missile still flying after MISSILE.lifetimeMs
+   *  recycles (no endless orbiting). */
+  steer(deltaMs: number, acquire: AcquireTarget): void {
+    const fullTurn = Phaser.Math.DegToRad(MISSILE.turnRateDeg) * (deltaMs / 1000);
     this.group.children.iterate((child) => {
       const rocket = child as Phaser.Physics.Arcade.Sprite;
-      if (!rocket.active || !rocket.getData('homing')) return true;
+      if (!rocket.active || !rocket.getData('missile')) return true;
+      const age = ((rocket.getData('age') as number) ?? 0) + deltaMs;
+      rocket.setData('age', age);
+      if (age >= MISSILE.lifetimeMs) {
+        this.recycle(rocket);
+        return true;
+      }
       const body = rocket.body as Phaser.Physics.Arcade.Body;
       const speed = rocket.getData('speed') as number;
 
-      // Advance the rocket's travelled distance, then derive how much of the
+      // Advance the missile's travelled distance, then derive how much of the
       // turn-rate is unlocked: nothing until armed, then eased in over the ramp.
       const dist = ((rocket.getData('dist') as number) ?? 0) + (speed * deltaMs) / 1000;
       rocket.setData('dist', dist);
-      const armAt = (rocket.getData('armAt') as number) ?? HOMING.armDistancePx;
-      const ramp = (dist - armAt) / HOMING.rampDistancePx;
+      const armAt = (rocket.getData('armAt') as number) ?? MISSILE.armDistancePx;
+      const ramp = (dist - armAt) / MISSILE.rampDistancePx;
       if (ramp <= 0) return true; // still in the straight arming run
       const maxTurn = fullTurn * Math.min(1, ramp);
 
-      const target = rocket.getData('target') as HomingTarget | null;
+      let target = rocket.getData('target') as HomingTarget | null;
       if (!target || !target.isActive || target.isPopping) {
-        rocket.setData('homing', false); // lock lost — fly straight, don't re-aim
-        return true;
+        target = acquire(rocket.x, rocket.y, body.velocity.x, body.velocity.y);
+        rocket.setData('target', target);
+        if (!target) return true; // nothing in its cone: fly straight, keep looking
       }
 
       const desired = Math.atan2(target.sprite.y - rocket.y, target.sprite.x - rocket.x);
@@ -155,8 +169,9 @@ export class RocketPool {
     body.stop();
     body.enable = false;
     rocket.setData('history', undefined); // drop the trail so a refire starts clean
-    rocket.setData('charged', false); // B13: clear the railgun flag…
-    rocket.setData('hitSet', undefined); // …and drop its pierced-rock refs
+    rocket.setData('charged', false); // clear the shot-kind flags…
+    rocket.setData('missile', false);
+    rocket.setData('target', null); // …and drop its target ref
     rocket.setData('player', undefined);
   }
 
@@ -182,8 +197,8 @@ export class RocketPool {
       history.unshift(head);
 
       // Per-rocket trail tier (B13): the absolute TRAIL values are the CHARGED
-      // (railgun) baseline; a normal shot gets a subdued multiplier set. So the
-      // in-flight trail doubles as the "this was a railgun" read.
+      // baseline; any other shot gets a subdued multiplier set. So the in-flight
+      // trail doubles as the "this was a charged round" read.
       const m = rocket.getData('charged') ? TRAIL.chargedMul : TRAIL.normalMul;
       this.afterimage(history, m.alpha, m.width, m.len); // long faint light-streak (under)
       this.strip(history, TRAIL.bodyHalf * TRAIL.glowMul * m.width, EXHAUST, TRAIL.glowAlpha * m.alpha, TRAIL.bodyFlux, m.len); // glow halo

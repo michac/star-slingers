@@ -6,8 +6,9 @@
 export const GAME_WIDTH = 360;
 export const GAME_HEIGHT = 740;
 
-/** Launcher (each seat's rocket origin) geometry + shot speed. Every shot,
- *  plain, homing or railgun, leaves at `maxSpeed`. */
+/** Launcher (each seat's rocket origin) geometry + shot speed. Every FIRE
+ *  round, plain or charged, leaves at `maxSpeed` (the missile has its own
+ *  `MISSILE.speed`). */
 export const SLING = {
   anchorRadius: 6, // launcher base dot under the nocked rocket (mock: sling-anchor r=6)
   maxSpeed: 560, // rocket launch speed (px/s)
@@ -16,10 +17,10 @@ export const SLING = {
 } as const;
 
 /**
- * Charged shot (B13) — hold FIRE to power up a **railgun**: a full charge fires
- * a rocket that pierces straight through every asteroid in its path (chipping
- * each once) until it leaves the screen. Charge fills over `fullMs` of held
- * game time. The cue is a ring round the FIRE button that sweeps in the charge
+ * Charged shot (#22) — FIRE is the railgun. Hold it to a full charge for a
+ * charged round: double damage (`DAMAGE.charged`), and it carries on along its
+ * line past a target only if that hit kills it; it stops in anything it doesn't
+ * kill. Charge fills over `fullMs` of held game time. The cue is a ring round the FIRE button that sweeps in the charge
  * violet, then breathes when armed (no text, orientation-neutral). All
  * code-drawn (Graphics), no postFX.
  */
@@ -35,32 +36,30 @@ export const P1_ANCHOR = { x: 180, y: 100 } as const; // top player
 export const P2_ANCHOR = { x: 180, y: 640 } as const; // bottom player
 
 /**
- * Homing (B14) — the 5yo fairness lever. A shot fired from HOME curves toward
- * the target it locked at fire. Tuning lives here, beside SLING (control feel is
- * a layout concern).
+ * SPECIAL homing missile (#22) — the 5yo fairness lever, built to be hard to
+ * miss from a rough aim. At launch it takes the enemy nearest its aim line
+ * inside a WIDE forward cone (no tight perpendicular gate); whenever it has no
+ * live target (none at launch, or its target died) it picks the enemy nearest
+ * its current heading inside the same cone. It flies straight for a short
+ * arming run, eases its turn-rate in over `rampDistancePx`, then steers hard.
+ * `lifetimeMs` recycles a missile that never connects (no endless orbiting).
  */
-export const HOMING = {
-  // Target selection — used both at fire AND for the lock ring while HOME is held.
-  // Tight on purpose: you must aim fairly close to a rock to lock/highlight it.
-  coneHalfAngleDeg: 25, // the launch ray must point within this of the target
-  maxRange: 520, // ignore targets farther than this along the ray
-  maxPerp: 50, // AND the ray must pass within this many px of the rock's center
-  ringPad: 6, // aim-highlight ring sits this far outside the locked rock
-  // Steering. The design (Michael, 2026-06-09): a shot only homes if it LOCKED
-  // a target at fire (no lock → ordinary straight shot), and a lock should
-  // CONNECT — so the turn-rate is cranked high. The challenge lives in earning
-  // the lock (the tight cone/maxPerp above), not in the flight.
-  turnRateDeg: 600, // max deg/sec the velocity may rotate toward the target
-  // Delayed + eased curve so homing reads as a deliberate "smart rocket": the
-  // shot flies STRAIGHT for the arm distance (a long, obvious straight run),
-  // then the turn-rate ramps 0→full over the next rampDistancePx and snaps onto
-  // the target. Distance-based (not time) so it looks the same at any shot
-  // speed. armFraction caps a shot's arm distance at this fraction of its
-  // distance-to-target, so a closer lock still leaves runway to curve in and
-  // connect (a long straight run never sails past a near target).
-  armDistancePx: 140, // straight flight before any curving begins
-  armFraction: 0.4, // …but never more than this share of the way to the target
-  rampDistancePx: 120, // then ease the turn-rate in over this much more travel
+export const MISSILE = {
+  speed: 420, // px/s — a touch slower than a FIRE round, so it can turn tight
+  coneHalfAngleDeg: 45, // target must sit within this of the aim/heading line
+  maxRange: 700, // ignore targets farther than this along the line
+  ringPad: 6, // aim-preview ring sits this far outside the targeted enemy
+  armDistancePx: 40, // straight flight before any steering…
+  armFraction: 0.5, // …but never more than this share of the way to a launch target
+  rampDistancePx: 50, // then ease the turn-rate 0→full over this much more travel
+  turnRateDeg: 720, // max deg/s the heading may rotate toward the target
+  lifetimeMs: 3000, // recycle a missile still flying after this long
+} as const;
+
+/** SPECIAL ammo (#22): its own, smaller pool beside FIRE's (AMMO). */
+export const SPECIAL = {
+  max: 2,
+  regenMs: 3000, // one missile back every this many ms
 } as const;
 
 /** Star backdrop, exact positions from the mock's <g class="stars">. */
@@ -296,7 +295,7 @@ export const AMMO_REGEN_MS = 1000;
  *
  * Written in the BOTTOM seat's (P2's) frame, as screen coords for P2:
  *
- *    [FIRE]  [HOME]     (launcher)      ( aim pad )
+ *    [FIRE] [SPECIAL]   (launcher)      ( aim pad )
  *    player's left     P2_ANCHOR        player's right
  *
  * P1 (top edge) is the same layout rotated 180° about the field centre, i.e.
@@ -309,8 +308,8 @@ export const AMMO_REGEN_MS = 1000;
  * the field at the other player, 180° = toward the player's left.
  *
  * Clearances (checked against the trajectory at the aim clamps, 15°/165°, from
- * the launcher at (180,640)): the line passes 2px outside HOME and ~20px above
- * the pad; FIRE/HOME centres are 74 apart (gap 11); HOME's right edge is 145
+ * the launcher at (180,640)): the line passes 2px outside SPECIAL and ~20px above
+ * the pad; FIRE/SPECIAL centres are 74 apart (gap 11); SPECIAL's right edge is 145
  * and the pad's left edge 254, which bracket the HUD column (x 150..~250 with a
  * 4-digit score). Controls stay below y≈625, well under the lanes (y≤480).
  * Sized for small thumbs; exact numbers are for tuning on the phone.
@@ -318,8 +317,8 @@ export const AMMO_REGEN_MS = 1000;
 export const CONTROLS_V2 = {
   /** Big round FIRE button (hold to charge the railgun, release to fire). */
   fire: { x: 52, y: 682, r: 38 },
-  /** Smaller round HOME button beside FIRE, a little higher and inward. */
-  home: { x: 120, y: 652, r: 25 },
+  /** Smaller round SPECIAL button beside FIRE, a little higher and inward. */
+  special: { x: 120, y: 652, r: 25 },
   /** Touch slop outside a button's drawn radius (a down in the overlap goes
    *  to the button whose centre is nearer, relative to its radius). */
   buttonHitPad: 5,
@@ -336,37 +335,41 @@ export const CONTROLS_V2 = {
   /** Aim clamp (seat-frame degrees) + the boot aim (straight across). */
   aim: { minDeg: 15, maxDeg: 165, startDeg: 90 },
   /** Nocked-rocket draw-back along −aim: FIRE eases to `pullBack` with the
-   *  charge (from `pullBackMinFrac`); HOME holds at `homePullBack`. */
+   *  charge (from `pullBackMinFrac`); SPECIAL holds at `specialPullBack`. */
   pullBack: 12,
   pullBackMinFrac: 0.3,
-  homePullBack: 6,
+  specialPullBack: 6,
   /** Resting trajectory alpha, as a fraction of STROKES.trajectory.alpha (it
    *  brightens to full while the seat aims or holds a button). */
   trajectoryRestFrac: 0.35,
   /** HUD group origin under the launcher (rows run +x/+y from here, see
    *  HUD_ROWS): below the nocked rocket's furthest draw-back (y≈659), between
-   *  HOME and the pad. `hudLefty` shifts it left to clear the mirrored HOME
+   *  SPECIAL and the pad. `hudLefty` shifts it left to clear the mirrored SPECIAL
    *  (x≥215) while staying right of the mirrored pad's range arc (x≤111). */
   hud: { x: 150, y: 670 },
   hudLefty: { x: 116, y: 670 },
 } as const;
 
 /** Phone vibration (#3), in ms; values accepted on the Pixel 6: a buzz
- *  per shot fired (FIRE or HOME) and a tick the moment FIRE is fully charged
+ *  per shot fired, by kind (plain / missile / charged), and a tick the moment FIRE is fully charged
  *  with ammo to fire. Pulses of 15ms or less can be imperceptible on some
  *  Android motors. See src/haptics.ts. */
 export const HAPTICS = {
   shotMs: 20,
-  homingMs: 25,
-  railgunMs: 40,
+  missileMs: 25,
+  chargedMs: 40,
   armedMs: 20,
 } as const;
 
-/** Mock HUD group row offsets (local y): WAVE 0, SCORE 20, AMMO 40. */
+/** Mock HUD group row offsets (local y): WAVE 0, SCORE 20, AMMO 40, plus the
+ *  SPECIAL ammo row (#22) at 60, labelled with the current special's icon. */
 export const HUD_ROWS = {
   wave: 0,
   score: 20, // built in B6
   ammo: 40,
+  special: 60,
+  specialIconR: 7, // the special row's icon label: drawn in a circle of this radius…
+  specialIconX: 8, // …centred this far along the row
 } as const;
 
 /**
