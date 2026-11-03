@@ -1,6 +1,6 @@
-// Cloudflare Workers (static assets only — no Worker script). Its production URL
-// serves main, published by `npm run deploy` (deploy.mjs) alongside GitHub Pages.
-// Branch previews (deploy-preview.mjs) give a long-lived branch (e.g. controls-v2)
+// Cloudflare Workers (static assets only — no Worker script), used for branch
+// previews only: main is hosted on GitHub Pages, and the Worker's own workers.dev
+// URL is not maintained. Branch previews (deploy-preview.mjs) give a long-lived branch (e.g. controls-v2)
 // its own installable URL. Each preview alias is its own hostname, so its service
 // worker + caches never touch the stable game's.
 //

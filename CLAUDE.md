@@ -82,7 +82,7 @@ textures, tokens).
   run its deploy: `npm run deploy:preview` for a working branch such as `controls-v2`, or
   `npm run deploy` on `main`. Still ask first before merging one branch into another (for example
   `controls-v2` into `main`), before any force-push or remote branch deletion, and before running
-  `wrangler deploy` / `wrangler versions deploy` by hand (outside `npm run deploy`).
+  `wrangler deploy` / `wrangler versions deploy` by hand.
 - **Docs state what's true now; only `docs/notes.md` keeps history.** When a decision changes,
   rewrite the old text in place so it says the new thing. Don't add a correction further down
   ("update: actually…", "superseded by…") and leave the stale sentence standing. A reader who stops
@@ -138,19 +138,19 @@ textures, tokens).
   8s→1.7s). Parallel workers do *not* help — the one software-GL context is the bottleneck — so the
   config stays `workers: 1`.
 - `npm run deploy` — **commit first** (it refuses a dirty tree), then it pushes `main`, watches the
-  `deploy-pages.yml` Action, and verifies the live URL. It then publishes the same build to the
-  Cloudflare Worker's own URL (https://star-slingers.green-smoke-1027.workers.dev) with
-  `wrangler deploy`, tagged `main@<sha>`. Both hosts serve `main`; each is a separate install on the
-  phone. Needs `gh` and wrangler authed and a GitHub remote with Pages enabled. Docs-only commits
-  (`docs/**`, `plans/**`, `*.md`) deploy to neither.
+  `deploy-pages.yml` Action, and verifies the live URL. **GitHub Pages is the only host for `main`**
+  (https://michac.github.io/star-slingers/); the same Action also deploys a PR merged on GitHub.
+  Cloudflare is for branch previews only (below). Needs `gh` authed and a GitHub remote with Pages
+  enabled. Docs-only commits (`docs/**`, `plans/**`, `*.md`) don't deploy.
 - `npm run deploy:prototype` — ship the **prototype shelf** (`prototype/` → `…/prototype/`) for
   remote review. Unlike `deploy`, it commits `prototype/**` itself and tolerates other in-progress
   edits — an automated path to push review artifacts (glow spikes, sketches) to Michael's phone.
   Drop a `prototype/<name>.html` (+ `.ts`) and it auto-lists on the shelf (see `prototype/README.md`).
 - `npm run deploy:preview` — upload the **current branch** as a **Cloudflare Workers preview**
   (`wrangler versions upload --preview-alias <branch>`), so a long-lived branch such as `controls-v2`
-  gets its own installable phone URL beside the stable game. It never changes production (Pages or the
-  Worker's own URL). It tolerates a dirty tree and tags the version `branch@sha[-dirty]`. Config is in
+  gets its own installable phone URL beside the stable game. It never changes production (Pages). The
+  Worker's own workers.dev URL is not maintained: it's frozen at an old `main` and nothing updates
+  it, so don't install or test from it. It tolerates a dirty tree and tags the version `branch@sha[-dirty]`. Config is in
   `wrangler.jsonc`. The Worker is named `star-slingers` and **shares a Cloudflare account with the
   card-games Worker, so never reuse that name.** Keep Cloudflare's default HTML handling: `/` and the
   `/prototype/` shelf need it, and it's safe only because `public/sw.js` never precaches HTML or caches

@@ -1,6 +1,7 @@
 /**
- * deploy.mjs — push main, watch the GitHub Pages deploy to the finish line, then
- * publish the same build to the Cloudflare Worker's own URL.
+ * deploy.mjs — push main and watch the GitHub Pages deploy to the finish line.
+ * Pages is the only host for main; Cloudflare is used for branch previews only
+ * (deploy-preview.mjs).
  *
  * Scope by design: push + watch + verify. Committing is a human step, so this
  * REFUSES a dirty working tree — you can never think you deployed work that
@@ -17,10 +18,6 @@
  *   5. git push
  *   6. finds the workflow run for this commit and `gh run watch`es it
  *   7. prints + HTTP-checks the live URL
- *   8. `wrangler deploy` of the built dist/ to the Worker's production URL
- *      (star-slingers.<account>.workers.dev), tagged main@<sha>, then HTTP-checks
- *      it. Branch previews (deploy-preview.mjs) are separate versions and are
- *      not affected. Wrangler auth: `npx wrangler login`.
  *
  * Usage:  npm run deploy            (from the repo root)
  *         npm run deploy -- --skip-build
@@ -30,7 +27,6 @@ import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
 const WORKFLOW = 'deploy-pages.yml';
-const WORKER_URL = 'https://star-slingers.green-smoke-1027.workers.dev/'; // wrangler.jsonc "name" + account subdomain
 // Docs-only pushes (these paths) don't fire deploy-pages.yml — keep in sync
 // with its paths-ignore filter.
 const isDocsOnly = (f) => f.startsWith('docs/') || f.startsWith('plans/') || f.endsWith('.md');
@@ -67,7 +63,6 @@ if (ahead === 0) {
   console.log('\nNothing to push — local main already matches origin.');
   console.log(`Live: ${liveUrl()}`);
   console.log(`(To force a rebuild with no new commit:  gh workflow run ${WORKFLOW})`);
-  console.log('(To republish the Worker with no new commit:  npm run build && npx wrangler deploy)');
   process.exit(0);
 }
 console.log(`${ahead} commit(s) ahead of origin/main.`);
@@ -123,27 +118,7 @@ try {
   console.log('Could not reach the URL just now (CDN lag?) — the deploy itself succeeded.');
 }
 
-// --- 8. publish the same build to the Worker ------------------------------
-// The pre-flight built dist/ from this clean HEAD; with --skip-build there is
-// no fresh dist/, so build it now.
-const sha = sh('git rev-parse --short HEAD');
-if (skipBuild) {
-  step('Building dist/ for the Worker (npm run build)…');
-  if (spawnSync('npm', ['run', 'build'], { stdio: 'inherit', shell: true, cwd: here }).status !== 0)
-    die(`Pages is live at ${url}, but the Worker build failed. Fix it, then:  npx wrangler deploy`);
-}
-step(`Publishing to the Worker (wrangler deploy, tag main@${sha})…`);
-const wr = spawnSync('npx', ['wrangler', 'deploy', '--tag', `main@${sha}`, '--message', `main@${sha}`],
-  { stdio: 'inherit', shell: true, cwd: here });
-if (wr.status !== 0)
-  die(`Pages is live at ${url}, but wrangler deploy failed (auth?  npx wrangler login). Retry:  npx wrangler deploy`);
-try {
-  const res = await fetch(WORKER_URL, { cache: 'no-store' });
-  console.log(res.ok ? `HTTP ${res.status} ✔` : `HTTP ${res.status} — published, but the Worker URL didn't return OK.`);
-} catch {
-  console.log('Could not reach the Worker URL just now — the upload itself succeeded.');
-}
-console.log(`\n✔ Deployed. Live: ${url}  and  ${WORKER_URL}`);
+console.log(`\n✔ Deployed. Live: ${url}`);
 
 // --- helpers --------------------------------------------------------------
 function liveUrl() {
