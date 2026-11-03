@@ -16,7 +16,24 @@ Two players sit facing each other across a phone held in portrait, one at the to
 ## 3. The goal
 Keep the station alive. One shared station, one shared score — there's no competing, ever.
 
-**The run (decided 2026-06-06, built):** 4 escalating waves. Each wave fields a **finite quota** of asteroids — respawns stop when it's spent, and the wave clears when the field empties ("we beat them all!"; asteroids that reach the station also count as spent, so a wave always ends). Between waves: a short **breather** — the shield restores to full, ring by ring, a big mirrored numeral announces the next wave, and a celebratory **star-shower** rains across the field (§4). After wave 4: the **final boss** (§9) — the climax the run builds toward (it replaced the earlier placeholder victory card).
+**The run (#24, built 2026-11-03): 10 waves in 4 acts**, played in order from one table (`RUN` in `src/waves.ts`, §7):
+
+| Act | Waves |
+|---|---|
+| 1 · Asteroids | 1 asteroids · 2 asteroids · 3 **giant-asteroid boss** |
+| 2 · Ships | 4 ships · 5 shielded ships · 6 **command-ship boss** (§9) |
+| 3 · Space monsters | 7 monsters · 8 monsters · 9 **monster boss** |
+| 4 · Finale | 10 · a long, dense, forgiving wave to blast with everything |
+
+Each act's real content is its own issue (#25 asteroids, #27 ships, #28 monsters). **Until each is built, its waves are placeholders that play as asteroid waves**: the ship and monster waves and the giant-asteroid and monster bosses field solver asteroid fields at their own targets. The command-ship boss (wave 6) is the real encounter. The finale is built as an asteroid wave: every lane a splitter, a big quota, a quick shield regen.
+
+A field wave fields a **finite quota** of asteroids. Respawns stop when the quota is spent, and the wave clears when the field empties ("we beat them all!"). Asteroids that reach the station also count as spent, so a wave always ends. The command-ship wave ends when the boss is down.
+
+**Between waves** comes a short **breather**: the shield restores to full ring by ring, and a celebratory **star-shower** rains across the field (§4). Then two seams run in order: after a boss wave, its **upgrade drop** (#26), and when the act changes, the **act transition** (#29). Neither has behaviour yet; both pass straight through. Last, a big mirrored numeral (2 to 10) announces the next wave. The starting wave has no banner, so play begins within seconds. **After wave 10 the run is won** ("You did it!"). A tap there starts a fresh run.
+
+**Try again restarts at the first wave of the act you lost in** (wave 1, 4, 7 or 10; decided by Michael). It doesn't go back to wave 1, so the 5yo never replays the whole run after one bad wave. Score starts again from 0.
+
+**Test shortcuts:** `?wave=N` boots straight into wave N (1–10), and `?boss` is the same as `?wave=6`. With either in the URL, Try again retries wave N itself, not its act's first wave, so a tester can re-run one wave.
 
 **Score (B37, built 2026-08-03):** one shared, live-only number that climbs as the team pops rocks — shown on both HUDs' SCORE row. A **standard** scores 10; a **splitter** scores 20 immediately, and its two standard children score 10 each, for **40** on a complete splitter clear. A rock that **reaches the station scores nothing** (it's a loss, not a kill). A small accent-colored **`+N`** pops at each kill site and grows-and-fades in place (orientation-neutral so it reads the same from both seats; the HUD number is the canonical read). No persistent "best" across restarts — `scene.restart()` resets the score to 0. The **boss fight stays unscored** for now (its health/charge gauges carry the climax; a number on top would clutter it).
 
@@ -76,9 +93,11 @@ Precedent: MMO DPS-checks/enrage timers, tower-defense threat-vs-defense through
 2. **Speed** — raise the speed scale.
 3. **Splitters** — replace standards with a one-hit splitter (r=17); its split plus two children cost 3 required damage, so this is the last, most demanding lever.
 
-Among the many knob combos that hit any given number, the priority order is the **kid-friendly tiebreaker** — the taste the raw scalar can't encode. So low waves are *many weak slow* rocks, not few tough fast ones. Caveat: the count floor has its own minimum threat (~0.05 net), so very low targets can't go lower (the dev boot log prints **target vs achieved + the chosen tier** so any gap is visible). `WAVES` is just a list of `{ required, quota, shieldRegenMs }`, in `src/waves.ts` alongside the model and solver.
+Among the many knob combos that hit any given number, the priority order is the **kid-friendly tiebreaker** — the taste the raw scalar can't encode. So low waves are *many weak slow* rocks, not few tough fast ones. Caveat: the count floor has its own minimum threat (~0.05 net), so very low targets can't go lower (the dev boot log prints **target vs achieved + the chosen tier** so any gap is visible). The run is one table, `RUN` in `src/waves.ts`, alongside the model and solver. Each row is a wave's act, kind (`asteroid`, `ship`, `monster`, `boss` or `finale`), which boss it is, and, for every wave the solver plays, a `field` of `{ required, quota, shieldRegenMs }`. All the run's dials live there, so each act's issue retunes its waves in one place.
 
-- **Current run targets** (B37, 2026-08-03): required **0.30 / 0.45 / 0.60 / 0.75**. The targets are intentionally unchanged for the first splitter phone playtest. The post-change boot-log calibration is **W1 1 splitter; W2 2; W3 2; W4 3** (all four lanes at ×0.85); use that record before any retune. The final solver tier is standard → splitter only: it never generates a 3-hit rock. **The "slow rocks" gentle lever is gone from W1** — the 5yo's cushion is homing (B8/B14), not speed; if W1 plays too steep for him, soften its target toward ~0.25 rather than reintroducing slow lanes.
+**How the solver applies to each kind:** asteroid waves, the finale, and every placeholder (ship and monster waves, the giant-asteroid and monster bosses) are solver fields: the target is realized as an asteroid field by the waterfall above. When an act's issue builds its real enemies, that kind gets its own way to realize the same target. The command-ship boss isn't solved: it has no field and is tuned by its own `BOSS` dials (§9).
+
+- **Current run targets** (#24, 2026-11-03; required damage/s · quota · shield regen s): W1 0.30·8·10 · W2 0.45·10·11 · W3 0.60·12·13 · W4 0.45·10·11 · W5 0.60·12·13 · W6 boss · W7 0.60·12·13 · W8 0.75·14·15 · W9 0.75·14·15 · W10 0.90·24·8. Each act eases back a step from the last one's peak, then climbs. Act 1 keeps the calibrated B37 values; the rest are placeholders, revisable in playtest. On the B37 calibration W1 solves to 1 splitter and W2/W3 to 2, all four lanes at ×0.85; 0.75 solves to 3 and the finale to all 4. Use that record before any retune. The final solver tier is standard → splitter only: it never generates a 3-hit rock. Two-hit rocks for wave 2 are #25's. **The "slow rocks" gentle lever is gone from W1**: the 5yo's cushion is homing (B8/B14), not speed. If W1 plays too steep for him, soften its target toward ~0.25 rather than reintroducing slow lanes.
 - Ammo regen is global (1 shot/s/player) — it deliberately does not escalate.
 - Known limits of the scalar (judgment stays on top): per-hit aim difficulty of small/fast rocks, and burst overlap at the shield.
 - **Splitter children are modeled** by `threatOf`: a splitter costs 3 required damage (one split plus two standard child pops), via `clearDamage`. The targets remain fixed through the first B37 phone playtest; if children feel oppressive, tune `SPLITTER_CHILDREN.childSpeed` or `lifetimeMs` before changing target bands.
@@ -112,9 +131,9 @@ and iPhone (iOS Safari), since it being a webpage is the whole point.
   have. All PWA URLs are relative so they resolve under the `…/star-slingers/`
   subpath; the SW registers PROD-only (dev + the headless test suite never get one).
 
-## 9. Final boss (B5, reworked by B34 2026-08-05)
+## 9. Command-ship boss (B5, reworked by B34 2026-08-05)
 
-The run's finale, replacing the wave-4 placeholder card. A **boss slides in from
+Wave 6, act 2's boss (§3). A **boss slides in from
 the side** (slowly, menacing) and parks at **center**, fully on screen, **stationary
 while battling**, guarded by a **fixed-radius rotating diamond** of 4 escort vessels.
 
@@ -134,9 +153,10 @@ while battling**, guarded by a **fixed-radius rotating diamond** of 4 escort ves
 - **If the charge fills first:** the boss **fires** a beam that **shatters a shield
   ring** (reusing the station shield + regen), then resets the charge; live escort lock
   progress remains in place.
-- **Win:** chip the boss's 10 HP through successive web gaps → **"You did it!"**.
-  **Loss:** a charge fires with the shield already gone → **"Try again?"** (both reuse
-  the existing end-cards).
+- **Win:** chip the boss's 10 HP through successive web gaps. The boss, escorts, web and
+  gauges leave the field and the run goes on: breather, then wave 7 (§3).
+  **Loss:** a charge fires with the shield already gone → **"Try again?"**, which restarts
+  act 2 at wave 4 (§3).
 
 - **Each escort is a directional ship with two player-color lock fins:** one cyan P1 and
   one amber P2. It needs **one rocket from each player**, in either order; a duplicate hit

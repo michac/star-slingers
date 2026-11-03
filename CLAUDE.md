@@ -107,8 +107,9 @@ textures, tokens).
   through `tsconfig.e2e.json` (the root config plus an explicit `types: ["node"]`). `build` runs
   `typecheck` first, so CI and both deploy pre-flights check `e2e/` too.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
-  score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the `src/waves.ts` solver and solo
-  target scaling), `boss.spec.ts` (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
+  score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the 10-wave `RUN` table and its
+  play order, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
+  (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
   (`?players=1`), `controls-v2.spec.ts` (two-thumb buttons + drag aim) and `haptics.spec.ts`. The
   shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, the `__debug`
   wrappers and the CDP `touchscreen`. Its exported `test` carries the zero-console-error gate as an
