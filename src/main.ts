@@ -7,7 +7,7 @@ import { SandboxScene } from './scenes/SandboxScene';
 
 // Difficulty readout — the tuning loop is: change a WAVES target, reload,
 // read these. Shows target vs achieved (the solver lands at-or-above target,
-// or below if saturated) and the tier the solver settled on (see spec.md §7).
+// or below if saturated) and the tier the solver settled on (see docs/design.md §7).
 if (import.meta.env.DEV) {
   const players = playerCount(controlsVariant()); // solo scales the targets (SOLO in waves.ts)
   for (const [i, w] of WAVES.entries()) {

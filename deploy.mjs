@@ -9,7 +9,7 @@
  * What it does:
  *   1. sanity checks (git repo, gh auth, on main, clean tree)
  *   2. fetches origin; bails early if there's nothing to push
- *   3. warns if the pending commits are docs-only (plans/** or *.md) — the Pages
+ *   3. warns if the pending commits are docs-only (docs/**, plans/** or *.md) — the Pages
  *      workflow (deploy-pages.yml) ignores those paths, so such a push deploys
  *      nothing
  *   4. local `npm run build` pre-flight (fail fast before reddening main; skip
@@ -33,7 +33,7 @@ const WORKFLOW = 'deploy-pages.yml';
 const WORKER_URL = 'https://star-slingers.green-smoke-1027.workers.dev/'; // wrangler.jsonc "name" + account subdomain
 // Docs-only pushes (these paths) don't fire deploy-pages.yml — keep in sync
 // with its paths-ignore filter.
-const isDocsOnly = (f) => f.startsWith('plans/') || f.endsWith('.md');
+const isDocsOnly = (f) => f.startsWith('docs/') || f.startsWith('plans/') || f.endsWith('.md');
 const FALLBACK_URL = 'https://michac.github.io/star-slingers/';
 const here = dirname(fileURLToPath(import.meta.url));
 const skipBuild = process.argv.includes('--skip-build');
@@ -83,7 +83,7 @@ if (triggersDeploy && !skipBuild) {
     die('Local build failed — fix it before pushing (or rerun with --skip-build).');
 } else if (!triggersDeploy) {
   console.log(
-    '\n⚠ These commits are docs-only (plans/** or *.md) — this push will NOT trigger a Pages deploy.'
+    '\n⚠ These commits are docs-only (docs/**, plans/** or *.md) — this push will NOT trigger a Pages deploy.'
   );
 }
 

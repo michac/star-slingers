@@ -10,12 +10,12 @@ This repo is the game and its design record — nothing else.
 
 | File | Role |
 |---|---|
-| `plans/spec.md` | **Current reviewed design** — only worked-out, reviewed decisions |
-| `plans/backlog.md` | **Work queue** — record changes here BEFORE working them |
-| `plans/notes.md` | History: playtests, layout lineage (v0→v5), decisions-with-reasons |
+| `docs/design.md` | **The game as built**, with the reasons behind it |
+| [GitHub Issues](https://github.com/michac/star-slingers/issues) | **Work not built yet**: the vision (#30, colony-ship campaign) and one issue per piece, with acceptance criteria and open questions |
+| `docs/notes.md` | History: playtests, layout lineage (v0→v5), decisions-with-reasons, and the archived B1–B40 backlog |
+| `docs/tech-stack.md` | Tech decisions (Phaser 3 + TS + Vite) and mock conventions |
 | `plans/polish-pass.md` | **Visual/UI decisions from prototyping** — staged to apply to the game in one pass |
 | `plans/mockups/layout-edge-wireframe.html` | Canonical layout mock (**v5**: compact edge station + funnel) |
-| `plans/tech-stack.md` | Tech decisions (Phaser 3 + TS + Vite) and mock conventions |
 | `src/` | The game source |
 
 ## Code shape (`src/`)
@@ -52,7 +52,7 @@ the declaration and its JSDoc, then read the matching file under `node_modules/p
 behaviour. This repo's own `src/` is the best example of house patterns (pooling, code-drawn
 textures, tokens).
 
-**Phaser 3.90 behaviours we've already hit** (details in `plans/notes.md`):
+**Phaser 3.90 behaviours we've already hit** (details in `docs/notes.md`):
 - `TweenManager` runs on **wall-clock time**, so it doesn't advance under the test suite's manual
   `scene.update()` stepping. That's why the boss slide-in needs `__debug.snapBossIn()`.
 - `game.step()` **renders** a frame, which is slow under headless swiftshader. Step with
@@ -68,23 +68,28 @@ textures, tokens).
 
 ## Working agreement
 
-- **Change flow:** Michael lists wants → recorded in `plans/backlog.md` as numbered items → worked
-  one at a time (or batched into a workflow when several are big and independent).
-- **Finishing an item includes syncing `plans/spec.md`** and appending a line to `plans/notes.md`.
-  The spec must never drift from decisions again; chat-only decisions don't count as recorded.
+- **Change flow:** Michael lists wants → each is recorded as a GitHub issue (assigned to Michael)
+  before work starts → worked one at a time, or batched (the `coordinate-github-issues` skill runs
+  several in parallel). Decisions made before building go into the issue body (acceptance criteria,
+  answered open questions); chat-only decisions don't count as recorded. Issue labels carry status
+  (`status: idea`, `status: partly done`, `status: done`). New work is named by issue number; the
+  B-numbers in older docs and comments point at the archive in `docs/notes.md`.
+- **Finishing an issue includes syncing `docs/design.md`** (rewrite the sections it changes, in
+  place) and appending a line to `docs/notes.md`. Then close the issue. `docs/design.md` describes
+  only what's built, so it must never drift from the game.
 - **Push and deploy to wrap up an item, without asking.** This is a personal project whose only
   user is Michael. Once an item's change is committed and verified, push the branch you're on and
   run its deploy: `npm run deploy:preview` for a working branch such as `controls-v2`, or
   `npm run deploy` on `main`. Still ask first before merging one branch into another (for example
   `controls-v2` into `main`), before any force-push or remote branch deletion, and before running
   `wrangler deploy` / `wrangler versions deploy` by hand (outside `npm run deploy`).
-- **Docs state what's true now; only `plans/notes.md` keeps history.** When a decision changes,
+- **Docs state what's true now; only `docs/notes.md` keeps history.** When a decision changes,
   rewrite the old text in place so it says the new thing. Don't add a correction further down
   ("update: actually…", "superseded by…") and leave the stale sentence standing. A reader who stops
-  early would act on it. This applies to `spec.md`, backlog items, `polish-pass.md`, this file and
-  code comments. The story of what changed and why belongs in `notes.md`.
-- Backlog items tagged `[draft]` are unreviewed auto-generated material — raw ideas to react
-  to, not decisions. Don't build them as-is without review.
+  early would act on it. This applies to `design.md`, issue bodies, `polish-pass.md`, this file
+  and code comments. The story of what changed and why belongs in `notes.md`.
+- Issues labelled `draft` are unreviewed or largely undecided material — raw ideas to react to,
+  not decisions. Don't build them as-is without review.
 - **Mockups:** geometry lives in the HTML, paint in `tokens-<style>.css`; superseded mocks move
   to `plans/mockups/shelved/` (use `../shared/` asset paths there). **Neon** is the chosen skin —
   its live palette is `src/tokens.ts`.
@@ -132,7 +137,7 @@ textures, tokens).
   Cloudflare Worker's own URL (https://star-slingers.green-smoke-1027.workers.dev) with
   `wrangler deploy`, tagged `main@<sha>`. Both hosts serve `main`; each is a separate install on the
   phone. Needs `gh` and wrangler authed and a GitHub remote with Pages enabled. Docs-only commits
-  (`plans/**`, `*.md`) deploy to neither.
+  (`docs/**`, `plans/**`, `*.md`) deploy to neither.
 - `npm run deploy:prototype` — ship the **prototype shelf** (`prototype/` → `…/prototype/`) for
   remote review. Unlike `deploy`, it commits `prototype/**` itself and tolerates other in-progress
   edits — an automated path to push review artifacts (glow spikes, sketches) to Michael's phone.

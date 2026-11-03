@@ -1,6 +1,6 @@
 /**
  * tokens.ts — the game's THEMING API, ported 1:1 from
- * plans/star-slingers/mockups/tokens-neon.css (Neon Arcade, the B9 style winner).
+ * plans/mockups/tokens-neon.css (Neon Arcade, the B9 style winner).
  *
  * Every color and font in the game comes from here and nowhere else.
  * Restyling = swapping these values for another style variant's token file.

@@ -3,7 +3,7 @@
 A two-player co-op space defense for one phone laid flat between the players.
 Each seat has two-thumb controls: drag on the right to aim, hold FIRE (charge
 for a railgun) or HOME (a homing shot) on the left. The design lives in
-`plans/spec.md`; all colors/fonts live in `src/tokens.ts`.
+`docs/design.md`; all colors/fonts live in `src/tokens.ts`.
 
 Layout and palette are ported 1:1 from
 `plans/mockups/style-wireframe.html` (canonical v3) +

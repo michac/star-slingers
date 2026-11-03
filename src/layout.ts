@@ -1,6 +1,6 @@
 /**
  * layout.ts — geometry constants, ported 1:1 from the canonical v3 mock
- * (plans/star-slingers/mockups/style-wireframe.html, viewBox 360x740).
+ * (plans/mockups/style-wireframe.html, viewBox 360x740).
  */
 
 export const GAME_WIDTH = 360;
@@ -277,7 +277,7 @@ export const BOSS_LAYOUT = {
 export const AMMO_REGEN_MS = 1000;
 
 // Wave targets, the difficulty model, lanes, and the budget/solver math live
-// in waves.ts — that's the one file to tune the run. See spec.md §7.
+// in waves.ts — that's the one file to tune the run. See docs/design.md §7.
 
 /**
  * Controls v2 (#7): two-thumb drag aim + fire buttons. ALL control geometry

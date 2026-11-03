@@ -3,7 +3,7 @@
  * Design is agreed; this file is the spec to match when we build it into
  * src/objects/Station.ts. Kept here as a reference, not an open experiment.
  *
- * Decisions (see plans/star-slingers/polish-pass.md):
+ * Decisions (see plans/polish-pass.md):
  *   - Shields PULSE: ring brightness breathes on a sine, trough 0.6 (half-fade,
  *     never ghostly), crest full. Slow — ~3.2s per breath.
  *   - Multiple shields FLOW: each ring is phase-offset so the bright crest

@@ -4,7 +4,7 @@
  * (`DIFFICULTY_MODEL`), the physical lanes (`LANE_SLOTS`), and the
  * budget/solver math that turns a target into a concrete asteroid field.
  *
- * The model (see spec.md §7 "Difficulty"): a wave is a TARGET — the net team
+ * The model (see docs/design.md §7 "Difficulty"): a wave is a TARGET — the net team
  * damage/s it should demand — and `solveWave` realizes it by advancing knobs in
  * priority order (count → speed → toughness) until the field's threat meets the
  * target. Every shot deals 1 damage today (`DAMAGE`), so damage/s == hits/s.
@@ -80,7 +80,7 @@ export const DIFFICULTY_MODEL = {
  *  scalar, now the input) plus length (quota) and shield regen. The solver
  *  derives the asteroid composition. */
 export interface WaveConfig {
-  required: number; // target net damage/s players must land (see spec.md §7)
+  required: number; // target net damage/s players must land (see docs/design.md §7)
   quota: number; // total asteroids this wave fields, then respawns stop
   shieldRegenMs: number; // a ring regrows after this long unhit; 0 = off
 }
@@ -153,7 +153,7 @@ export const BOSS = {
   shieldRegenMs: 14000, // regen during the boss (the leak allowance)
 } as const;
 
-// ---- difficulty budget + solver (see spec.md "Difficulty") ----
+// ---- difficulty budget + solver (see docs/design.md §7 "Difficulty") ----
 // threat = sum of clearDamage*speed/travel; leak = what shield regen forgives;
 // required = threat - leak is THE scalar (damage/s; == hits/s while DAMAGE is
 // all 1). The solver INVERTS it: given a target required, pick knobs (in

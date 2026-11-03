@@ -24,10 +24,10 @@ Mocks stay HTML/SVG — but under a convention. **Hard rules:**
 4. **Colors and effects come only from tokens.** Each style variant defines a `tokens-<style>.css` (CSS custom properties: palette, fonts, glow/stroke/shadow recipes). The winning variant's token file becomes the game's design constants.
 5. **One layout, many skins.** Style-exploration mocks must all use the same layout skeleton (`_layout-skeleton.html`) so variants differ *only* in style. Layout changes are a separate kind of mock, versioned (v1, v2, …) like the originals.
 
-### File layout (per game)
+### File layout
 
 ```
-plans/<game>/mockups/
+plans/mockups/
 ├── shared/
 │   ├── mock.css              ← phone frame, annotation labels, shared motion
 │   └── mock.js               ← label toggle only

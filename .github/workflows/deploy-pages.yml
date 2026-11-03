@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     # The game lives at the repo root now; only docs-only pushes skip a deploy.
-    paths-ignore: ['plans/**', '**/*.md']
+    paths-ignore: ['docs/**', 'plans/**', '**/*.md']
   workflow_dispatch:
 
 permissions:

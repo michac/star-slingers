@@ -1,9 +1,8 @@
-# Star Slingers — Design Spec
-*(working title — placeholder, swap freely; see backlog B11)*
+# Star Slingers — Design
 
-> Non-technical design spec. Status: **building** (sandbox playable with station, shield, funnel approach, and fail/retry loop; waves next).
-> This file holds **current truth only** — decisions that were worked out and reviewed.
-> The work queue (including unreviewed draft systems) is [`backlog.md`](backlog.md); history and playtests live in [`notes.md`](notes.md).
+> **The game as it is built now**, with the reasons behind it. Non-technical.
+> Work that isn't built yet lives in [GitHub Issues](https://github.com/michac/star-slingers/issues); the current vision is the colony-ship campaign, #30.
+> Finishing an issue rewrites the sections it changes, in place. History and playtests live in [`notes.md`](notes.md).
 
 ## 1. Pitch
 Two players sit facing each other across a phone held in portrait, one at the top edge and one at the bottom. Each mans a rocket launcher with two thumbs (one aims, one fires), slinging rockets across the field at asteroids and enemy ships that sweep in from the right and funnel toward the space station — which sits mostly off the left edge of the screen, just a sliver of hull and glowing shield poking into view. You defend it together: win together or lose together.
@@ -29,8 +28,8 @@ Keep the station alive. One shared station, one shared score — there's no comp
 - **When the shield is gone and one more enemy reaches the hull:** gentle fail — calm dim plus an **opaque modal card** (field clutter never shows through it; Playtest 2), one big circular-arrow replay icon (reads either way up; "Try again?" text is decoration, never load-bearing), tap **anywhere** to restart.
 - **Enemies enter from the right, sweep left, and *funnel* toward the station** on final approach — ships' noses and shots aim at it, lanes turn toward it near the wall (currently a single straight-line redirect at the approach threshold; smooth steering is a tuning upgrade if the kink reads badly). Anything that reaches the station is consumed by the hit.
 - **Why the funnel:** it keeps the whole field shared, so either player can cover for the other anywhere — and the kid-legible read is "everything is heading for the glowy thing." (The v4 central-core layout was rejected exactly because a centered objective blocked cover fire; see notes.md layout history.)
-- **Canonical layout mock:** [`mockups/layout-edge-wireframe.html`](mockups/layout-edge-wireframe.html) (wireframe reference).
-- **Visual style — Neon Arcade** *(decided 2026-06-07, B9)*: synthwave palette — deep purple-black space, hot-cyan P1 / amber-orange P2 / magenta enemies, Audiowide font. Palette lives in [`mockups/tokens-neon.css`](mockups/tokens-neon.css); the canonical neon mock [`mockups/style-neon.html`](mockups/style-neon.html) is cut against v5 geometry (B10). The palette is **live in the game** (B21): `src/tokens.ts` holds the neon values, the 3 shield rings take the cyan→purple→magenta gradient stops, and Audiowide loads before Phaser boots. Only the mock's **gradient fills (B24)** stay deferred (solids read fine); glow/bloom, the shield pulse, and the burst/trail juice all shipped in the polish pass below.
+- **Canonical layout mock:** [`mockups/layout-edge-wireframe.html`](../plans/mockups/layout-edge-wireframe.html) (wireframe reference).
+- **Visual style — Neon Arcade** *(decided 2026-06-07, B9)*: synthwave palette — deep purple-black space, hot-cyan P1 / amber-orange P2 / magenta enemies, Audiowide font. Palette lives in [`mockups/tokens-neon.css`](../plans/mockups/tokens-neon.css); the canonical neon mock [`mockups/style-neon.html`](../plans/mockups/style-neon.html) is cut against v5 geometry (B10). The palette is **live in the game** (B21): `src/tokens.ts` holds the neon values, the 3 shield rings take the cyan→purple→magenta gradient stops, and Audiowide loads before Phaser boots. Only the mock's **gradient fills (B24)** stay deferred (solids read fine); glow/bloom, the shield pulse, and the burst/trail juice all shipped in the polish pass below.
 - **Shield look — glow + pulse + flow** *(B22 + B23, polish pass 2026-06-15; prototyped + locked first, see `plans/polish-pass.md`)*: the rings live in their own per-frame layer that **breathes** — each ring's **color brightness** pulses on a slow sine (trough 0.6 → crest 1.0, ~3.2s/breath) and the crest **flows** outer→inner (a per-ring phase offset), reading as energy shields rather than a solid object. An ambient **glow** bloom hugs and recolors to the outermost remaining ring and breathes with it. A shattered ring **flares its glow bright then expands + fades**. Two locked constraints: pulse **color brightness, never alpha** (a thick semi-transparent ring shows radial "grid" spokes at its tessellation joins), and **perf first** (no DPI render; glow `quality` 0.3 — sharper lagged the Pixel 6). Tuning in `SHIELD_FX` (`src/layout.ts`); built in `Station.ts`.
 - **Asteroid break — composed burst** *(B29, polish pass 2026-06-15)*: a popped asteroid replaces the old flat scale-up+fade with a **flash** (white core under a transient magenta glow), a **shockwave** ring, **debris** (rock shards flung out, spinning + falling), and additive **sparks**, while the rock itself snaps bigger and vanishes. Built on **one shared pair of particle emitters** (never new emitters per pop) + one transient glow; `Explosions.ts` owns it, fired via a `boom(x,y,r)` callback threaded through the `WaveDirector` into each `Asteroid.pop()`. Tuning in `EXPLOSION` (`src/layout.ts`). *(Asteroids only; boss/escort pops keep their current effect for now.)*
 - **One-hit large splitters** *(B37, built 2026-08-03)*: lane rocks are either **standard** (r=13, one rocket hit, no label, 10 points) or **splitter** (r=17, one rocket hit, no label, 20 points). A rocket immediately breaks a splitter into **two standard-size, one-hit children**; the full clear is 40 points (20 + 10 + 10). Only rocket-kills split — station contact is a loss and never creates children. Children retain the self-balancing station threat: they scatter leftward, funnel toward the station, can cost a shield ring, get a brief railgun-safe spawn grace, and expire at a hard lifetime cap. They are preallocated wrappers appended to the fixed asteroid pool, retaining collision, update, homing, station-contact, and wave-clear integration; they are one-shot (no respawn) and fielded in-place via `spawnChild`. Tuning is `SPLITTER_CHILDREN` (`src/layout.ts`).
@@ -83,7 +82,6 @@ Among the many knob combos that hit any given number, the priority order is the 
 - Ammo regen is global (1 shot/s/player) — it deliberately does not escalate.
 - Known limits of the scalar (judgment stays on top): per-hit aim difficulty of small/fast rocks, and burst overlap at the shield.
 - **Splitter children are modeled** by `threatOf`: a splitter costs 3 required damage (one split plus two standard child pops), via `clearDamage`. The targets remain fixed through the first B37 phone playtest; if children feel oppressive, tune `SPLITTER_CHILDREN.childSpeed` or `lifetimeMs` before changing target bands.
-- Calibration TODO: time the kids' real shots/s on the phone and refine the target bands.
 
 ## 8. Install & offline (PWA) — decided 2026-06-09 (B12)
 
@@ -156,8 +154,5 @@ while battling**, guarded by a **fixed-radius rotating diamond** of 4 escort ves
   rule is fixed in `Escort.ts`, not a balance dial. Boss HP remains 10 and railgun timing
   is unchanged; the escort charge race remains 5 seconds.
 
-## Everything else
-Enemy ships, sound/juice, fairness-lever backups: the original brainstorm's drafts live as **[draft]-tagged backlog items** (B4/B8, plus the audio half of B7) — raw material to react to, not decisions. They graduate into this spec when worked out, reviewed, and built. (Waves = §3/§7; scoring = §3; controls, homing + shot haptics = §5; boss = §9; wave-clear shower = §4 — all built.)
-
-## Open questions
-Tracked in [`backlog.md`](backlog.md) — nothing floats in chat.
+## Not built yet
+Everything planned but not built is a GitHub issue. The colony-ship campaign (#30) is the current vision, with one sub-issue per piece. A section here changes only when the issue that changes it is finished.

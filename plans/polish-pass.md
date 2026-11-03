@@ -13,10 +13,10 @@
 >
 > **Status key:** `queued` (next to prototype) · `prototyped` (on the shelf, in
 > review) · `locked` (agreed, archived to `reference/` as the spec) · `building` ·
-> `done` (in the game + spec/notes synced).
+> `done` (in the game, with `docs/design.md` and `docs/notes.md` synced).
 >
 > Nothing here is in the live game until it says `done`. When an item ships, fold
-> it into `spec.md`, append to `notes.md`, and resolve its `backlog.md` item.
+> it into `docs/design.md`, append to `docs/notes.md`, and close its issue.
 
 ---
 
@@ -42,7 +42,7 @@ outermost remaining ring; a destroyed ring **flares then fades**.
 **Build target — `src/objects/Station.ts`:** split the rings out of the hull
 `Graphics` into their own per-frame layer; drive color brightness from the sine
 (flow offset by ring index); add the ambient `postFX.addGlow` recolored/resized to
-the outer ring; replace `shatterRing` with the flare-then-fade. Ties off backlog
+the outer ring; replace `shatterRing` with the flare-then-fade. Ties off
 **B22** (glow) + **B23** (pulse); the destroy-flare is the shield cousin of **B29**.
 
 ---
@@ -129,8 +129,7 @@ per-event — same discipline as the asteroid burst), `Explosions.starShower()` 
 batch at a spread of X positions; fired via a `celebrate()` callback threaded
 `SandboxScene → WaveDirector` (the `boom` callback's template). Fires on **every**
 wave clear, including the wave-4→boss hand-off. Tuning in `STAR_SHOWER` (`layout.ts`);
-tints from `tokens.ts`. Final density/fall tuning wants a Pixel 6 pass. (The **audio +
-haptics** half of the wave-clear juice stays queued in backlog **B7**.)
+tints from `tokens.ts`. Final density/fall tuning wants a Pixel 6 pass. (Haptics shipped with #3; the **audio** half of the wave-clear juice is still open in #3.)
 
 ---
 
