@@ -4,7 +4,8 @@
  * controlsVariant.ts: ?lefty mirrors a seat, ?players=1 builds only the bottom
  * seat, P2), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 4-wave run), per-player HUDs, the wave
- * banner, and the fail/victory overlays. All logic lives in objects/.
+ * banner, damaged enemies' health bars, and the fail/victory overlays. All
+ * logic lives in objects/.
  */
 import Phaser from 'phaser';
 import { COLORS, CSS } from '../tokens';
@@ -24,6 +25,7 @@ import { WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
+import { HealthBars } from '../objects/HealthBars';
 import type { HomingTarget } from '../objects/HomingTarget';
 import { DAMAGE } from '../waves';
 import { shotBuzz } from '../haptics';
@@ -75,6 +77,7 @@ export class SandboxScene extends Phaser.Scene {
   private scoreKeeper!: ScoreKeeper;
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
+  private healthBars!: HealthBars;
   private failOverlay!: Overlay;
   private victoryOverlay!: Overlay;
   /** Cumulative rocket→asteroid hits — a deterministic signal for the e2e suite. */
@@ -138,6 +141,14 @@ export class SandboxScene extends Phaser.Scene {
     );
     this.asteroids = this.waveDirector.asteroids;
 
+    // Health bars (#23) redraw after Arcade's postUpdate has synced each sprite
+    // to its body (registered on scene START, so it runs before this listener),
+    // so a bar sits on its rock's current-frame position.
+    this.healthBars = new HealthBars(this);
+    const drawHealthBars = () => this.healthBars.draw(this.asteroids);
+    this.events.on(Phaser.Scenes.Events.POST_UPDATE, drawHealthBars);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, drawHealthBars));
+
     this.controls = seats.map(
       ({ player, anchor, color, edge, tex, hud }) =>
         new TwoThumbControl(this, {
@@ -190,6 +201,7 @@ export class SandboxScene extends Phaser.Scene {
         childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
         splitCount: () => this.waveDirector.splitCount,
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
+        healthBars: () => this.healthBars.lastDrawn,
         lefty: () => variant.lefty,
         players: () => variant.players,
         seats: () => seats.map((seat) => seat.player),

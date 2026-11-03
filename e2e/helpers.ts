@@ -196,6 +196,11 @@ export async function enterBoss(page: Page): Promise<void> {
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
 }
+/** The health bars (#23) drawn on the latest frame: centre + remaining fraction
+ *  (HealthBars' DrawnHealthBar; not imported, because that module reads
+ *  import.meta.env, which the Node-typed e2e project doesn't declare). */
+export const healthBars = (page: Page) =>
+  page.evaluate(`${SCENE}.__debug.healthBars()`) as Promise<{ x: number; y: number; frac: number }[]>;
 
 // ---------------------------------------------------------------------------
 // Touch helpers for the controls-v2 (#7) seats: two-thumb drag aim + fire
