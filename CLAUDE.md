@@ -95,8 +95,8 @@ textures, tokens).
 
 - `npm run dev` — dev server, LAN-exposed for phone testing (see `README.md` for firewall notes)
 - `npm run build` / `npm run typecheck` — `typecheck` also checks `e2e/` and `playwright.config.ts`
-  through `tsconfig.e2e.json` (the root config plus Node's types; the root `tsconfig.json` stays
-  browser-only). `build` does not check `e2e/`.
+  through `tsconfig.e2e.json` (the root config plus an explicit `types: ["node"]`). `build` does not
+  check `e2e/`.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
   score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the `src/waves.ts` solver and solo
   target scaling), `boss.spec.ts` (co-op escort locks, shield web, `?boss`), `solo.spec.ts`

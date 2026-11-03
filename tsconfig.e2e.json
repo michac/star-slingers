@@ -1,6 +1,8 @@
 {
   // The e2e suite + Playwright config run under Node (they read process.env),
-  // so they get Node's types here. The root tsconfig.json stays browser-only.
+  // so this config names Node's types explicitly (TS 6 loads no @types by
+  // default). They sit outside tsconfig.json's include, so `npm run build`
+  // doesn't check them; `npm run typecheck` runs both configs.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["node"]

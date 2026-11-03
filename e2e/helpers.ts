@@ -35,6 +35,7 @@
  */
 import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
+import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -99,7 +100,7 @@ export async function gotoGame(page: Page, query = ''): Promise<void> {
 /** Eyeball-aid screenshot — OFF by default (a headless swiftshader ReadPixels
  *  render costs ~7s/frame, and since the interaction cases step WITHOUT rendering
  *  the frame is stale anyway). Set SMOKE_SHOTS=1 to write the smoke-*.png frames. */
-export const SMOKE_SHOTS = !!process.env.SMOKE_SHOTS;
+const SMOKE_SHOTS = !!process.env.SMOKE_SHOTS;
 export async function shot(page: Page, path: string): Promise<void> {
   if (SMOKE_SHOTS) await page.screenshot({ path });
 }
@@ -212,7 +213,7 @@ export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBo
 // ---------------------------------------------------------------------------
 
 export type Pt = { x: number; y: number };
-export type V2Layout = { anchor: Pt; fire: Pt & { r: number }; home: Pt & { r: number }; pad: Pt & { r: number } };
+type V2Layout = { anchor: Pt; fire: Pt & { r: number }; home: Pt & { r: number }; pad: Pt & { r: number } };
 export type LiveShot = { vx: number; vy: number; charged: boolean; homing: boolean; player: string; targetIsRock0: boolean };
 
 /** A multi-touch screen over CDP, in GAME coords (mapped through the canvas
@@ -223,10 +224,10 @@ export type LiveShot = { vx: number; vy: number; charged: boolean; homing: boole
  *  uses). */
 export async function touchscreen(page: Page) {
   const cdp = await page.context().newCDPSession(page);
-  const rect = await page.evaluate(() => {
+  const rect = await page.evaluate(({ w, h }) => {
     const r = document.querySelector('#game canvas')!.getBoundingClientRect();
-    return { left: r.left, top: r.top, sx: r.width / 360, sy: r.height / 740 };
-  });
+    return { left: r.left, top: r.top, sx: r.width / w, sy: r.height / h };
+  }, { w: GAME_WIDTH, h: GAME_HEIGHT });
   const down = new Map<number, Pt>();
   const toPage = (id: number, p: Pt) => ({ id, x: rect.left + p.x * rect.sx, y: rect.top + p.y * rect.sy, radiusX: 4, radiusY: 4, force: 1 });
   const points = () => [...down].map(([id, p]) => toPage(id, p));
