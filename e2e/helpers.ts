@@ -206,6 +206,8 @@ export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBo
 // ---------------------------------------------------------------------------
 
 export type Pt = { x: number; y: number };
+/** P1's spot for a P2 point: the top seat is P2's layout rotated 180° about the centre. */
+export const mirrored = (p: Pt): Pt => ({ x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y });
 type V2Layout = { anchor: Pt; fire: Pt & { r: number }; home: Pt & { r: number }; pad: Pt & { r: number } };
 export type LiveShot = { vx: number; vy: number; charged: boolean; homing: boolean; player: string; targetIsRock0: boolean };
 

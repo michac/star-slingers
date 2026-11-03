@@ -2,8 +2,7 @@
  * solo.spec.ts — ?players=1: one-seat escort rule, the top seat hidden and ignored, the choice remembered.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, startBoss, touchscreen, v2Layout, liveShots, type Page, type Pt } from './helpers';
-import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
+import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, startBoss, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
 
 const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
 const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
@@ -12,8 +11,6 @@ const hudCount = (page: Page) => page.evaluate(`${SCENE}.scoreKeeper.huds.length
 const bannerCopies = (page: Page) => page.evaluate(`${SCENE}.waveDirector.banner.numerals.length`) as Promise<number>;
 const overlayCopies = (page: Page, which: 'failOverlay' | 'victoryOverlay') =>
   page.evaluate(`${SCENE}.${which}.container.list.filter((o) => o.type === 'Text').length`) as Promise<number>;
-/** P1's spot for a P2 point: the top seat is P2's layout rotated 180° about the centre. */
-const mirrored = (p: Pt): Pt => ({ x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y });
 
 test('solo: one player downs an escort with two of their own hits', async ({ page }) => {
   // ?players=1 (#6 slice): an escort still takes two hits, but a repeat from the

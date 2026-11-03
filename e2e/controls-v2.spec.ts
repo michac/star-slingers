@@ -2,7 +2,7 @@
  * controls-v2.spec.ts — two-thumb FIRE/HOME buttons + drag aim (#7), driven by real CDP touches.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, fieldRock, touchscreen, v2Layout, liveShots, type LiveShot, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, fieldRock, touchscreen, v2Layout, liveShots, mirrored, type LiveShot, type Page } from './helpers';
 import { CONTROLS_V2, SLING } from '../src/layout';
 
 const aimDeg = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.aimDeg(${player})`) as Promise<number>;
@@ -89,9 +89,10 @@ test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   const L1 = await v2Layout(page, 1);
   const L2 = await v2Layout(page, 2);
   // P1's controls are P2's rotated about the field centre.
-  expect(L1.fire.x).toBeCloseTo(360 - L2.fire.x, 5);
-  expect(L1.fire.y).toBeCloseTo(740 - L2.fire.y, 5);
-  expect(L1.pad.x).toBeCloseTo(360 - L2.pad.x, 5);
+  const fire2 = mirrored(L2.fire);
+  expect(L1.fire.x).toBeCloseTo(fire2.x, 5);
+  expect(L1.fire.y).toBeCloseTo(fire2.y, 5);
+  expect(L1.pad.x).toBeCloseTo(mirrored(L2.pad).x, 5);
   const t = await touchscreen(page);
   // P1's aim zone is P2's rotated: world (60,140) is seat-frame (300,600). A
   // drag toward P1's LEFT (+x on screen, since P1 faces down the field) turns
