@@ -4,7 +4,7 @@
  * two links of the shield web (B34); destroying one opens a gap and RESETS the
  * boss's charge (the defensive payoff). The BossEncounter places it on the orbit each frame
  * (kinematic — we set position, the arcade body follows). Satisfies
- * HomingTarget so the 5yo's homing can lock it.
+ * HomingTarget so the 5yo's SPECIAL missile can take it.
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
@@ -77,20 +77,21 @@ export class Escort {
   /** One unique hit from each player is required. Duplicate shots are consumed
    * but leave the lock unchanged, with a small muted reject spark. Solo (a
    * temporary prototype rule until #7's shot-type locks): it still takes two
-   * hits, but a repeat from the same seat fills the other lock. */
-  takeHit(player: PlayerId): void {
-    if (!this.active || this.popping) return;
+   * hits, but a repeat from the same seat fills the other lock. Returns true
+   * when this hit downed the escort (its second lock). */
+  takeHit(player: PlayerId): boolean {
+    if (!this.active || this.popping) return false;
     let bit = player === 'p1' ? 1 : 2;
     if (this.solo && this.contributions & bit) bit ^= 3; // credit the absent seat's lock
     if (this.contributions & bit) {
       this.rejectSpark();
-      return;
+      return false;
     }
     this.contributions |= bit;
     if (this.contributions !== 3) {
       this.sprite.setTexture(player === 'p1' ? TEX.escortP2Lock : TEX.escortP1Lock);
       this.pulseRemainingLock(player === 'p1' ? COLORS.p2 : COLORS.p1);
-      return;
+      return false;
     }
     // Destroyed: stop being a target/orbiter NOW so the gate fires immediately,
     // then a throwaway pop tween for juice.
@@ -108,6 +109,7 @@ export class Escort {
         if (!this.active) this.sprite.setVisible(false);
       },
     });
+    return true;
   }
 
   private pulseRemainingLock(color: number): void {

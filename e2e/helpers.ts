@@ -17,7 +17,7 @@
  * game bug.
  *
  * B36 fixed the flaky suite by taking the game clock directly: every interaction
- * case (hits, score, homing, pierce, split, boss) FIELDS a stationary rock via
+ * case (hits, score, missile, pass-through, split, boss) FIELDS a stationary rock via
  * fieldRock() — the public reconfigure()/spawn() path — then drives a fixed 16ms
  * timestep with stepGame(): pause the RAF loop and advance via game.scene.update
  * (physics, overlaps, deltaMs timers — all in lockstep, no rendering, no
@@ -164,9 +164,10 @@ export async function stepUntil(
 }
 
 /** Field a rock directly through the public reconfigure()/spawn() path (exactly
- *  what startWave does for lane rocks), then park it STATIONARY in-field at
- *  (x,y), clear of the station — so an interaction test never has to wait for a
- *  wave rock to drift into range. Uses a lane wrapper (asteroids[slot], slots
+ *  what startWave does for lane rocks), then place it in-field at (x,y), clear
+ *  of the station — so an interaction test never has to wait for a wave rock to
+ *  drift into range. STATIONARY by default; `speed` > 0 drifts it left at that
+ *  many px/s like a lane rock. Uses a lane wrapper (asteroids[slot], slots
  *  0..3; the splitter-child pool is the tail). */
 export async function fieldRock(
   page: Page,
@@ -177,27 +178,43 @@ export async function fieldRock(
     radius = ASTEROID_KIND[kind].radius,
     slot = 0,
     hp,
-  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number }
+    speed = 0,
+  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number; speed?: number }
 ): Promise<void> {
   await page.evaluate(
-    ({ x, y, kind, radius, slot, hp }) => {
+    ({ x, y, kind, radius, slot, hp, speed }) => {
       const s = (window as any).__game.scene.keys['Sandbox'];
       const a = s.asteroids[slot]; // a lane wrapper (NOT a child)
       // hp omitted = the kind's default max hp (1 today).
-      a.reconfigure({ kind, radius, y, speed: 0, ...(hp === undefined ? {} : { hp }) }, 0);
+      a.reconfigure({ kind, radius, y, speed, ...(hp === undefined ? {} : { hp }) }, 0);
       a.spawn(); // field it (off the right edge)...
       a.sprite.setPosition(x, y); // ...then place it in-field, clear of the station
       a.sprite.body.reset(x, y);
-      a.sprite.body.setVelocity(0, 0);
+      a.sprite.body.setVelocity(-speed, 0);
     },
-    { x, y, kind, radius, slot, hp }
+    { x, y, kind, radius, slot, hp, speed }
   );
 }
 
 // --- thin wrappers over the scene's DEV __debug surface + public fields ---
-/** Fire a plain P1 rocket through the public pool (no railgun/homing tags). */
-export const fire = (page: Page, x: number, y: number, vx: number, vy: number) =>
-  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy})`);
+/** Fire a P1 rocket through the public pool: plain by default, or with the
+ *  pool's shot options as a JS literal (e.g. `'{ charged: true }'`). */
+export const fire = (page: Page, x: number, y: number, vx: number, vy: number, opts = '{}') =>
+  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy}, 'p1', ${opts})`);
+/** Count every shot the pool launches from now on; read it with fired(). */
+export const countShots = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as any;
+    const pool = w.__game.scene.keys['Sandbox'].rockets;
+    const launch = pool.fire.bind(pool);
+    w.__fired = 0;
+    pool.fire = (...args: unknown[]) => {
+      const r = launch(...args);
+      if (r) w.__fired++;
+      return r;
+    };
+  });
+export const fired = (page: Page) => page.evaluate(() => (window as any).__fired) as Promise<number>;
 export const escortsAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.escortsAlive()`) as Promise<number>;
 export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
@@ -243,8 +260,8 @@ export const healthBars = (page: Page) =>
 export type Pt = { x: number; y: number };
 /** P1's spot for a P2 point: the top seat is P2's layout rotated 180° about the centre. */
 export const mirrored = (p: Pt): Pt => ({ x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y });
-type V2Layout = { anchor: Pt; fire: Pt & { r: number }; home: Pt & { r: number }; pad: Pt & { r: number } };
-export type LiveShot = { vx: number; vy: number; charged: boolean; homing: boolean; player: string; targetIsRock0: boolean };
+type V2Layout = { anchor: Pt; fire: Pt & { r: number }; special: Pt & { r: number }; pad: Pt & { r: number } };
+export type LiveShot = { vx: number; vy: number; charged: boolean; missile: boolean; player: string; targetIsRock0: boolean };
 
 /** A multi-touch screen over CDP, in GAME coords (mapped through the canvas
  *  rect). touchStart/touchMove carry every currently-down point with a stable
@@ -301,7 +318,7 @@ export const liveShots = (page: Page) =>
         vx: r.body.velocity.x,
         vy: r.body.velocity.y,
         charged: r.getData('charged') === true,
-        homing: r.getData('homing') === true,
+        missile: r.getData('missile') === true,
         player: r.getData('player'),
         targetIsRock0: r.getData('target') === s.asteroids[0],
       }));

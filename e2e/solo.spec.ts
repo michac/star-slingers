@@ -37,11 +37,11 @@ test('solo (only the bottom seat joined) keeps only the bottom seat and ignores 
   expect(await overlayCopies(page, 'failOverlay')).toBe(1);
   expect(await overlayCopies(page, 'victoryOverlay')).toBe(1);
 
-  // Touches where P1's FIRE, HOME and aim pad would be do nothing (and throw
+  // Touches where P1's FIRE, SPECIAL and aim pad would be do nothing (and throw
   // nothing: the console gate fails the case otherwise).
   const L = await v2Layout(page, 2);
   const t = await touchscreen(page);
-  for (const p of [L.fire, L.home, L.pad]) {
+  for (const p of [L.fire, L.special, L.pad]) {
     const at = mirrored(p);
     await t.down(1, at.x, at.y);
     await stepGame(page, 16, 3);
