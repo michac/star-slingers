@@ -89,10 +89,10 @@ test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   const L1 = await v2Layout(page, 1);
   const L2 = await v2Layout(page, 2);
   // P1's controls are P2's rotated about the field centre.
-  const fire2 = mirrored(L2.fire);
-  expect(L1.fire.x).toBeCloseTo(fire2.x, 5);
-  expect(L1.fire.y).toBeCloseTo(fire2.y, 5);
-  expect(L1.pad.x).toBeCloseTo(mirrored(L2.pad).x, 5);
+  const want = { fire: mirrored(L2.fire), pad: mirrored(L2.pad) };
+  expect(L1.fire.x).toBeCloseTo(want.fire.x, 5);
+  expect(L1.fire.y).toBeCloseTo(want.fire.y, 5);
+  expect(L1.pad.x).toBeCloseTo(want.pad.x, 5);
   const t = await touchscreen(page);
   // P1's aim zone is P2's rotated: world (60,140) is seat-frame (300,600). A
   // drag toward P1's LEFT (+x on screen, since P1 faces down the field) turns
