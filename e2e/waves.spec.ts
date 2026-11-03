@@ -3,7 +3,7 @@
  * play order, the ?wave shortcut, Try again's retry wave, the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, type Page } from './helpers';
+import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, type Page } from './helpers';
 import {
   actStartWave,
   ASTEROID_KIND,
@@ -142,7 +142,7 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
   await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
   await stepGame(page, 16, 2);
-  expect(await page.evaluate(`window.__game.scene.isActive('Join')`)).toBe(true);
+  expect(await sceneActive(page, 'Join')).toBe(true);
   await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
   await stepGame(page, 16, 2);
   expect(await runState(page)).toMatchObject({ wave: 1, act: 1, state: 'live' });

@@ -8,11 +8,10 @@
  * and the fail/victory overlays. All logic lives in objects/.
  */
 import Phaser from 'phaser';
-import { COLORS, CSS } from '../tokens';
-import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, P1_ANCHOR, P2_ANCHOR, STATION } from '../layout';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HOMING, STATION } from '../layout';
 import { controlsVariant, isLefty } from '../controlsVariant';
-import { clearLineup, lineup, liveSeats, seatCount } from '../lineup';
-import { generateTextures, TEX } from '../objects/textures';
+import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
+import { generateTextures } from '../objects/textures';
 import { drawStarfield } from '../objects/draw';
 import { TwoThumbControl } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
@@ -42,25 +41,10 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   return null;
 }
 
-/** One seat's fixed wiring (P1 top edge, P2 bottom). */
-interface SeatDef {
-  player: PlayerId;
-  anchor: { x: number; y: number };
-  color: number;
-  colorCss: string;
-  edge: 'top' | 'bottom';
-  tex: string;
-}
-
 /** A seat in play: its fixed wiring plus the HUD built for it. */
 interface Seat extends SeatDef {
   hud: PlayerHud;
 }
-
-const SEAT_DEFS: readonly SeatDef[] = [
-  { player: 'p1', anchor: P1_ANCHOR, color: COLORS.p1, colorCss: CSS.p1, edge: 'top', tex: TEX.rocketP1 },
-  { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, colorCss: CSS.p2, edge: 'bottom', tex: TEX.rocketP2 },
-];
 
 /** DEV seat lookups take the player number: 1 = P1 (top), 2 = P2 (bottom);
  *  any other number is no seat. */
@@ -89,9 +73,11 @@ export class SandboxScene extends Phaser.Scene {
     super('Sandbox');
   }
 
-  /** `data.startWave`: a Try again retry's wave (the fail card passes it);
-   *  absent on a fresh load or a win's restart, which start from the query. */
-  create(data: { startWave?: number } = {}): void {
+  /** `data.lineup`: the join screen's seats + difficulties (#20); Try again
+   *  passes it back unchanged. `data.startWave`: a Try again retry's wave (the
+   *  fail card passes it); absent on a run from the join screen, which starts
+   *  from the query. */
+  create(data: { lineup: Lineup; startWave?: number }): void {
     generateTextures(this);
     drawStarfield(this);
     this.station = new Station(this); // under the asteroids/rockets
@@ -99,9 +85,9 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
     const variant = controlsVariant();
-    const run = lineup(); // the join screen's seats + difficulties (#20)
+    const run = data.lineup;
     const live = liveSeats(run);
-    const players = seatCount(run);
+    const players = live.length === 1 ? 1 : 2;
     // Each HUD sits in the centre column under its launcher, between HOME and
     // the aim pad (P1's rotated 180° about the field centre).
     const hudAt = (player: 'p1' | 'p2') => {
@@ -129,16 +115,13 @@ export class SandboxScene extends Phaser.Scene {
     const queryWave = startWaveFromQuery(window.location.search);
     // Try again restarts at the lost act's first wave (AC5), but never before
     // a shortcut's wave, so a shortcut's wave retries itself until the players
-    // pass it. It keeps the lineup: the restart rebuilds from it (#20).
+    // pass it. It keeps the lineup (#20).
     this.failOverlay = new Overlay(this, FAIL_CONFIG, live, () =>
-      this.scene.restart({ startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)) })
+      this.scene.restart({ lineup: run, startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)) })
     );
     // A win ends the run and goes back to the join screen for a fresh lineup
-    // (#20); the join screen starts the next run with fresh data.
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, live, () => {
-      clearLineup();
-      this.scene.start('Join');
-    });
+    // (#20), which starts the next run with new data.
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, live, () => this.scene.start('Join'));
 
     // The command-ship boss (B5) creates its boss + escort sprites up front
     // (parked); the run hands it the field for wave 6.

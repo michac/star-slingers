@@ -3,9 +3,8 @@
  * Joining through the join screen itself is join.spec.ts.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, seats, type Page } from './helpers';
 
-const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
 const hudCount = (page: Page) => page.evaluate(`${SCENE}.scoreKeeper.huds.length`) as Promise<number>;
 /** Per-seat copies of the wave banner's numeral / an end card's text. */
 const bannerCopies = (page: Page) => page.evaluate(`${SCENE}.waveDirector.banner.numerals.length`) as Promise<number>;

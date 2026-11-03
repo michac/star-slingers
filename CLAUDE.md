@@ -131,7 +131,7 @@ textures, tokens).
   one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
   the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
   TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
-  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~33s for the
+  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~20s for the
   36 cases, ~1.4 min at `--repeat-each=3` when it was 23): headless swiftshader makes rendering pathologically slow,
   so (a) the `smoke-*.png`
   eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —

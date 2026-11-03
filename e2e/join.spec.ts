@@ -4,15 +4,16 @@
  * unlimited ammo; Try again keeps the lineup, a win goes back to the join screen.
  * Driven by real touches. Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, JOIN_SCENE, gotoGame, stepGame, touchscreen, v2Layout, liveShots, mirrored, type Page, type Pt } from './helpers';
+import {
+  test, expect, SCENE, JOIN_SCENE, gotoGame, stepGame, touchscreen, v2Layout, liveShots, mirrored, seats, sceneActive as active,
+  type Page, type Pt, type Touchscreen,
+} from './helpers';
 
 type Circle = Pt & { r: number };
 type PanelInfo = { angle: number; ring: Circle; easy: Circle; normal: Circle; easyVisible: boolean; countdown: string | null };
 
 const panel = (page: Page, player: 'p1' | 'p2') => page.evaluate(`${JOIN_SCENE}.__debug.panel('${player}')`) as Promise<PanelInfo>;
 const picks = (page: Page) => page.evaluate(`${JOIN_SCENE}.__debug.picks()`) as Promise<Record<string, string | null>>;
-const active = (page: Page, key: string) => page.evaluate(`window.__game.scene.isActive('${key}')`) as Promise<boolean>;
-const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
 const difficulty = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.difficulty(${player})`) as Promise<string | null>;
 /** Each live seat's banner copy / fail-card text, as its rotation (absolute:
  *  Phaser normalises 180° to -180°). */
@@ -24,7 +25,7 @@ const failTextAngles = (page: Page) =>
 const ammoText = (page: Page, i: number) => page.evaluate(`${SCENE}.scoreKeeper.huds[${i}].ammoValue.text`) as Promise<string>;
 
 /** One quick tap at a game point (finger 1), with a frame for the scene to read it. */
-async function tap(page: Page, t: Awaited<ReturnType<typeof touchscreen>>, at: Pt): Promise<void> {
+async function tap(page: Page, t: Touchscreen, at: Pt): Promise<void> {
   await t.down(1, at.x, at.y);
   await stepGame(page, 16, 1);
   await t.up(1);
@@ -155,7 +156,7 @@ test('an Easy seat fires past the Normal ammo cap; its readout shows ∞', async
 
 /** Show an end card and tap it. A zone made interactive joins the input list
  *  on the next frame, so one frame runs before the tap (as it would on a phone). */
-async function tapCard(page: Page, t: Awaited<ReturnType<typeof touchscreen>>, which: 'failOverlay' | 'victoryOverlay'): Promise<void> {
+async function tapCard(page: Page, t: Touchscreen, which: 'failOverlay' | 'victoryOverlay'): Promise<void> {
   await page.evaluate(`${SCENE}.${which}.show()`);
   await stepGame(page, 16, 1);
   await tap(page, t, { x: 180, y: 370 });
@@ -163,6 +164,16 @@ async function tapCard(page: Page, t: Awaited<ReturnType<typeof touchscreen>>, w
 }
 
 const wave = (page: Page) => page.evaluate(`${SCENE}.__debug.wave()`) as Promise<number>;
+
+/** The bottom seat alone joins on Normal with real taps, then the countdown
+ *  runs out and its solo run starts. */
+async function startBottomSolo(page: Page, t: Touchscreen): Promise<void> {
+  const p2 = await panel(page, 'p2');
+  await tap(page, t, p2.ring);
+  await tap(page, t, p2.normal);
+  await stepGame(page, 100, 31);
+  expect(await seats(page)).toEqual(['p2']);
+}
 
 test('Try again keeps the seats and picks; a win goes back to an empty join screen', async ({ page }) => {
   await gotoGame(page, '', { p1: 'easy' });
@@ -183,33 +194,20 @@ test('Try again keeps the seats and picks; a win goes back to an empty join scre
   expect(await active(page, 'Sandbox')).toBe(false);
   expect(await picks(page)).toEqual({});
   // The next run starts fresh at wave 1, not at the last retry's wave.
-  const p2 = await panel(page, 'p2');
-  await tap(page, t, p2.ring);
-  await tap(page, t, p2.normal);
-  await stepGame(page, 100, 31);
-  expect(await seats(page)).toEqual(['p2']);
+  await startBottomSolo(page, t);
   expect(await wave(page)).toBe(1);
 });
 
 test('?wave=N and ?boss still work behind the join screen, and Try again keeps the shortcut wave', async ({ page }) => {
   await gotoGame(page, '?wave=8', 'join');
   const t = await touchscreen(page);
-  let p2 = await panel(page, 'p2');
-  await tap(page, t, p2.ring);
-  await tap(page, t, p2.normal);
-  await stepGame(page, 100, 31);
-  expect(await seats(page)).toEqual(['p2']);
+  await startBottomSolo(page, t);
   expect(await wave(page)).toBe(8);
   await tapCard(page, t, 'failOverlay');
   expect(await wave(page)).toBe(8); // never before the shortcut's wave (#24)
   expect(await seats(page)).toEqual(['p2']);
 
   await gotoGame(page, '?boss', 'join');
-  const t2 = await touchscreen(page);
-  p2 = await panel(page, 'p2');
-  await tap(page, t2, p2.ring);
-  await tap(page, t2, p2.normal);
-  await stepGame(page, 100, 31);
-  expect(await seats(page)).toEqual(['p2']);
+  await startBottomSolo(page, await touchscreen(page));
   expect(await page.evaluate(`${SCENE}.__debug.bossPhase()`)).not.toBe('idle');
 });

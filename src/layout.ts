@@ -34,6 +34,15 @@ export const CHARGE = {
 export const P1_ANCHOR = { x: 180, y: 100 } as const; // top player
 export const P2_ANCHOR = { x: 180, y: 640 } as const; // bottom player
 
+/** Which screen edge a seat sits at; the top seat's frame is the bottom's rotated 180°. */
+export type SeatEdge = 'top' | 'bottom';
+
+/** World ↔ seat frame for a point (the same involution both ways): the top
+ *  seat's frame is the bottom seat's rotated 180° about the field centre. */
+export function seatPoint(edge: SeatEdge, p: { x: number; y: number }): { x: number; y: number } {
+  return edge === 'top' ? { x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y } : { x: p.x, y: p.y };
+}
+
 /**
  * Homing (B14) — the 5yo fairness lever. A shot fired from HOME curves toward
  * the target it locked at fire. Tuning lives here, beside SLING (control feel is

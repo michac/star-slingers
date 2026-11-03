@@ -12,34 +12,31 @@
  * timestep drives it (TweenManager is wall-clock driven).
  */
 import Phaser from 'phaser';
-import { COLORS, CSS, FONTS, STROKES } from '../tokens';
-import { AMMO, GAME_HEIGHT, GAME_WIDTH, JOIN } from '../layout';
-import { generateTextures, TEX } from '../objects/textures';
+import { COLORS, FONTS, STROKES } from '../tokens';
+import { AMMO, GAME_HEIGHT, GAME_WIDTH, JOIN, seatPoint, type SeatEdge } from '../layout';
+import { generateTextures } from '../objects/textures';
 import { drawStarfield } from '../objects/draw';
 import type { PlayerId } from '../objects/Rocket';
-import { SEAT_ORDER, setLineup, type Difficulty, type Lineup } from '../lineup';
+import { SEAT_DEFS, toLineup, type Lineup, type SeatDef } from '../lineup';
 
 type Pt = { x: number; y: number };
 
 /** One seat's panel: its container (rotated 180° for P1) and parts. */
 interface Panel {
   player: PlayerId;
+  edge: SeatEdge;
   ring: Phaser.GameObjects.Container;
   easy: Phaser.GameObjects.Graphics;
   normal: Phaser.GameObjects.Graphics;
   countdown: Phaser.GameObjects.Text;
 }
 
-/** P1's spot for a P2-frame point (and back: the map is its own inverse). */
-const toSeat = (player: PlayerId, p: Pt): Pt =>
-  player === 'p1' ? { x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y } : { x: p.x, y: p.y };
-
 const within = (p: Pt, c: { x: number; y: number; r: number }) =>
   Phaser.Math.Distance.Between(p.x, p.y, c.x, c.y) <= c.r + JOIN.hitPad;
 
 export class JoinScene extends Phaser.Scene {
   /** Per seat: not joined (undefined), joined and picking (null), or picked. */
-  private picks: Partial<Record<PlayerId, Difficulty | null>> = {};
+  private picks: Partial<Lineup> = {};
   private panels: Panel[] = [];
   /** Countdown left (ms) while every joined seat is ready; null otherwise. */
   private countdownLeft: number | null = null;
@@ -55,7 +52,7 @@ export class JoinScene extends Phaser.Scene {
     this.clockMs = 0;
     generateTextures(this); // the ring's rocket glyph (idempotent across scenes)
     drawStarfield(this);
-    this.panels = SEAT_ORDER.map((player) => this.buildPanel(player));
+    this.panels = SEAT_DEFS.map((def) => this.buildPanel(def));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onDown(p));
     this.refresh();
 
@@ -63,11 +60,10 @@ export class JoinScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       (this as unknown as { __debug: object }).__debug = {
         picks: () => ({ ...this.picks }),
-        countdownLeft: () => this.countdownLeft,
         // World-space panel layout (P1's mirrored) + its rotation, for touches.
         panel: (player: PlayerId) => {
           const panel = this.panels.find((p) => p.player === player)!;
-          const at = (c: { x: number; y: number; r: number }) => ({ ...toSeat(player, c), r: c.r });
+          const at = (c: { x: number; y: number; r: number }) => ({ ...seatPoint(panel.edge, c), r: c.r });
           return {
             angle: panel.ring.parentContainer.angle,
             ring: at(JOIN.ring),
@@ -78,7 +74,7 @@ export class JoinScene extends Phaser.Scene {
           };
         },
         // Skip the screen: start the run with this lineup straight away.
-        startRun: (l: Partial<Lineup>) => this.startRun({ p1: l.p1 ?? null, p2: l.p2 ?? null }),
+        startRun: (l: Partial<Lineup>) => this.startRun(l),
       };
     }
   }
@@ -89,8 +85,9 @@ export class JoinScene extends Phaser.Scene {
     const breath = 1 + JOIN.pulseScale * Math.sin((this.clockMs / JOIN.pulseMs) * Math.PI * 2);
     for (const panel of this.panels) panel.ring.setScale(this.picks[panel.player] === undefined ? breath : 1);
 
-    const joined = SEAT_ORDER.filter((p) => this.picks[p] !== undefined);
-    const allReady = joined.length > 0 && joined.every((p) => this.picks[p]);
+    // picks holds only the joined seats (leaving deletes the key).
+    const joined = Object.values(this.picks);
+    const allReady = joined.length > 0 && joined.every((pick) => pick !== null);
     if (!allReady) {
       if (this.countdownLeft !== null) {
         this.countdownLeft = null;
@@ -98,28 +95,33 @@ export class JoinScene extends Phaser.Scene {
       }
       return;
     }
-    if (this.countdownLeft === null) this.countdownLeft = JOIN.countdownMs;
-    else this.countdownLeft -= delta;
+    const shown = this.countdownSeconds();
+    this.countdownLeft = this.countdownLeft === null ? JOIN.countdownMs : this.countdownLeft - delta;
     if (this.countdownLeft <= 0) {
-      this.startRun({ p1: this.picks.p1 ?? null, p2: this.picks.p2 ?? null });
+      this.startRun(this.picks);
       return;
     }
-    this.refresh();
+    // Redraw only when the numeral changes (once a second), not every frame.
+    if (this.countdownSeconds() !== shown) this.refresh();
   }
 
-  private startRun(l: Lineup): void {
-    setLineup(l);
-    // Explicit empty data: Phaser keeps a scene's last start data when given
-    // none, so after a Try again (which passes a retry wave) the next run
-    // would otherwise begin at that wave instead of the query's / wave 1.
-    this.scene.start('Sandbox', {});
+  private countdownSeconds(): number | null {
+    return this.countdownLeft === null ? null : Math.ceil(this.countdownLeft / 1000);
+  }
+
+  /** The lineup travels as scene data, so Try again's restart keeps it. The
+   *  fresh payload also replaces a previous run's retry wave: Phaser keeps a
+   *  scene's last start data only when it's given none. */
+  private startRun(l: Partial<Lineup>): void {
+    this.scene.start('Sandbox', { lineup: toLineup(l) });
   }
 
   /** A tap belongs to the seat whose half it lands in. Unjoined: join. Joined:
    *  the ring leaves, a pick button picks, anything else does nothing. */
   private onDown(pointer: Phaser.Input.Pointer): void {
-    const player: PlayerId = pointer.y >= JOIN.halfY ? 'p2' : 'p1';
-    const at = toSeat(player, pointer);
+    const edge: SeatEdge = pointer.y >= JOIN.halfY ? 'bottom' : 'top';
+    const { player } = this.panels.find((p) => p.edge === edge)!;
+    const at = seatPoint(edge, pointer);
     const pick = this.picks[player];
     if (pick === undefined) {
       this.picks[player] = null;
@@ -138,7 +140,7 @@ export class JoinScene extends Phaser.Scene {
   /** Redraw every panel's state: buttons shown once joined, the pick lit, the
    *  countdown numeral while it runs. */
   private refresh(): void {
-    const seconds = this.countdownLeft === null ? null : Math.ceil(this.countdownLeft / 1000);
+    const seconds = this.countdownSeconds();
     for (const panel of this.panels) {
       const pick = this.picks[panel.player];
       const joined = pick !== undefined;
@@ -150,27 +152,28 @@ export class JoinScene extends Phaser.Scene {
     }
   }
 
-  private buildPanel(player: PlayerId): Panel {
-    const color = player === 'p1' ? COLORS.p1 : COLORS.p2;
-    const colorCss = player === 'p1' ? CSS.p1 : CSS.p2;
+  private buildPanel({ player, edge, color, colorCss, tex }: SeatDef): Panel {
     // P1's panel = P2's layout rotated 180° about the field centre: a
-    // container at (W, H) turned 180° maps local (x, y) to (W − x, H − y).
-    const root = player === 'p1'
+    // container at (W, H) turned 180° maps local (x, y) to (W − x, H − y),
+    // the same map as seatPoint.
+    const root = edge === 'top'
       ? this.add.container(GAME_WIDTH, GAME_HEIGHT).setAngle(180)
       : this.add.container(0, 0);
+    /** A Graphics at (x, y) with the seat-colour outline of radius r. */
+    const outlined = (x: number, y: number, r: number) => {
+      const g = this.add.graphics({ x, y });
+      g.lineStyle(STROKES.replay.width, color, 1);
+      g.strokeCircle(0, 0, r);
+      return g;
+    };
 
     // Join ring: the seat's colour round a big rocket glyph.
     const { ring: r } = JOIN;
-    const ringGfx = this.add.graphics();
-    ringGfx.lineStyle(STROKES.replay.width, color, 1);
-    ringGfx.strokeCircle(0, 0, r.r);
-    const rocket = this.add.image(0, 0, player === 'p1' ? TEX.rocketP1 : TEX.rocketP2).setScale(2.6);
-    const ring = this.add.container(r.x, r.y, [ringGfx, rocket]);
+    const rocket = this.add.image(0, 0, tex).setScale(2.6);
+    const ring = this.add.container(r.x, r.y, [outlined(0, 0, r.r), rocket]);
 
     // Easy: ∞ drawn as a lemniscate, so it never depends on the font's glyphs.
-    const easy = this.add.graphics({ x: JOIN.easy.x, y: JOIN.easy.y });
-    easy.lineStyle(STROKES.replay.width, color, 1);
-    easy.strokeCircle(0, 0, JOIN.easy.r);
+    const easy = outlined(JOIN.easy.x, JOIN.easy.y, JOIN.easy.r);
     const lobe = JOIN.easy.r * 0.5;
     const pts: Phaser.Math.Vector2[] = [];
     for (let i = 0; i <= 48; i++) {
@@ -182,9 +185,7 @@ export class JoinScene extends Phaser.Scene {
     easy.strokePoints(pts, false);
 
     // Normal: the regular ammo pool as a row of pips.
-    const normal = this.add.graphics({ x: JOIN.normal.x, y: JOIN.normal.y });
-    normal.lineStyle(STROKES.replay.width, color, 1);
-    normal.strokeCircle(0, 0, JOIN.normal.r);
+    const normal = outlined(JOIN.normal.x, JOIN.normal.y, JOIN.normal.r);
     normal.fillStyle(COLORS.ink, 1);
     const pipGap = 11;
     for (let i = 0; i < AMMO.max; i++) normal.fillCircle((i - (AMMO.max - 1) / 2) * pipGap, 0, 3.5);
@@ -198,6 +199,6 @@ export class JoinScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     root.add([ring, easy, normal, countdown]);
-    return { player, ring, easy, normal, countdown };
+    return { player, edge, ring, easy, normal, countdown };
   }
 }

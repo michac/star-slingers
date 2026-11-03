@@ -80,10 +80,6 @@ export class PlayerHud {
     this.refresh();
   }
 
-  get unlimitedAmmo(): boolean {
-    return this.unlimited;
-  }
-
   /** Shots left in the pool (an unlimited seat stays at the max). */
   get ammoCount(): number {
     return this.ammo;
