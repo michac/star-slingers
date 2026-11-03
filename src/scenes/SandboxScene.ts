@@ -3,9 +3,9 @@
  * shield, two seats of TwoThumbControls (multitouch; seat options from
  * controlsVariant.ts: ?lefty mirrors a seat, ?players=1 builds only the bottom
  * seat, P2), the rocket pool, the WaveDirector
- * (which owns the asteroids and the 4-wave run), per-player HUDs, the wave
- * banner, damaged enemies' health bars, and the fail/victory overlays. All
- * logic lives in objects/.
+ * (which owns the asteroids and the 10-wave run), the command-ship boss
+ * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
+ * and the fail/victory overlays. All logic lives in objects/.
  */
 import Phaser from 'phaser';
 import { COLORS, CSS } from '../tokens';
@@ -21,13 +21,13 @@ import { ScoreKeeper } from '../objects/Score';
 import { Station } from '../objects/Station';
 import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
-import { WaveDirector } from '../objects/WaveDirector';
+import { NO_INTERLUDES, WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import { HealthBars } from '../objects/HealthBars';
 import type { HomingTarget } from '../objects/HomingTarget';
-import { DAMAGE } from '../waves';
+import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
 import { shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
@@ -87,7 +87,9 @@ export class SandboxScene extends Phaser.Scene {
     super('Sandbox');
   }
 
-  create(): void {
+  /** `data.startWave`: a Try again retry's wave (the fail card passes it);
+   *  absent on a fresh load or a win's restart, which start from the query. */
+  create(data: { startWave?: number } = {}): void {
     generateTextures(this);
     this.drawStars();
     this.station = new Station(this); // under the asteroids/rockets
@@ -115,26 +117,46 @@ export class SandboxScene extends Phaser.Scene {
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
     // Solo draws no banner/end-card copy toward the empty top seat either.
     const banner = new WaveBanner(this, players);
-    this.failOverlay = new Overlay(this, FAIL_CONFIG, players);
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players);
+    // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
+    // Try again retries it, so a tester can re-run one wave. Survives the
+    // restart (the query string sticks). Harmless in normal play — nobody
+    // types it by accident. Without a shortcut this is 1.
+    const queryWave = startWaveFromQuery(window.location.search);
+    // Try again restarts at the lost act's first wave (AC5), but never before
+    // a shortcut's wave, so a shortcut's wave retries itself until the players
+    // pass it.
+    this.failOverlay = new Overlay(this, FAIL_CONFIG, players, () => ({
+      startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)),
+    }));
+    // A win's tap starts a fresh run. It passes an explicit empty object:
+    // restart(undefined) would keep the previous restart's data (Phaser's
+    // Systems.start only replaces settings.data when given some), so a win after
+    // a Try again would restart at the retry wave.
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players, () => ({}));
 
-    // The boss (B5) creates its boss + escort sprites up front (parked); the
-    // run hands off to it after wave 4 (replacing the old victory seam).
+    // The command-ship boss (B5) creates its boss + escort sprites up front
+    // (parked); the run hands it the field for wave 6.
     this.bossEncounter = new BossEncounter(
       this,
       this.station,
       this.failOverlay,
-      this.victoryOverlay,
+      () => this.waveDirector.onEncounterDefeated(),
       players
     );
 
-    // The director creates the asteroid wrappers and starts wave 1 live.
+    // The director creates the asteroid wrappers and starts the first wave live.
     this.waveDirector = new WaveDirector(
       this,
       this.station,
       huds,
       banner,
-      () => this.bossEncounter.start(),
+      {
+        startWave: data.startWave ?? queryWave,
+        hooks: NO_INTERLUDES, // #26 boss drops, #29 act transitions
+        startEncounter: () => this.bossEncounter.start(),
+        stopEncounter: () => this.bossEncounter.stop(),
+        onRunWon: () => this.victoryOverlay.show(),
+      },
       (x, y, r) => this.explosions.boom(x, y, r),
       () => this.explosions.starShower(), // B7: wave-clear celebration
       players
@@ -196,6 +218,11 @@ export class SandboxScene extends Phaser.Scene {
         clearWave: () => this.waveDirector.forceClear(),
         state: () => this.waveDirector.stateName,
         wave: () => this.waveDirector.waveNumber,
+        act: () => this.waveDirector.wave.act,
+        waveKind: () => this.waveDirector.wave.boss ?? this.waveDirector.wave.kind,
+        jumpToWave: (n: number) => this.waveDirector.jumpTo(n),
+        interludes: () => [...this.waveDirector.interludes],
+        defeatBoss: () => this.bossEncounter.debugDefeat(),
         hits: () => this.hitCount,
         score: () => this.scoreKeeper.value,
         childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
@@ -208,7 +235,7 @@ export class SandboxScene extends Phaser.Scene {
         // Seat aim (seat-frame degrees) + world-space control layout.
         aimDeg: (player: number) => this.controls[seatIndex(player)]?.aimDegrees,
         v2Layout: (player: number) => this.controls[seatIndex(player)]?.worldLayout() ?? null,
-        startBoss: () => this.startBossNow(),
+        startBoss: () => this.waveDirector.jumpTo(COMMAND_SHIP_WAVE),
         bossPhase: () => this.bossEncounter.phase,
         snapBossIn: () => this.bossEncounter.snapBossIn(),
         killEscort: (i: number) => this.bossEncounter.killEscort(i),
@@ -223,18 +250,6 @@ export class SandboxScene extends Phaser.Scene {
         stationShield: () => this.station.shieldHitsLeft,
       };
     }
-
-    // Test shortcut: visiting with ?boss boots straight into the final boss,
-    // skipping the 4 waves (testing the fight via the waves is slow). Survives
-    // the tap-to-restart (the query string sticks), so you can re-run it. Harm-
-    // less in normal play — nobody types ?boss by accident.
-    if (new URLSearchParams(window.location.search).has('boss')) this.startBossNow();
-  }
-
-  /** Skip the waves: pop wave 1's just-spawned rocks, stop respawns, start the boss. */
-  private startBossNow(): void {
-    this.waveDirector.endRunNow();
-    this.bossEncounter.start();
   }
 
   update(_time: number, delta: number): void {
@@ -248,7 +263,7 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets.update(delta);
     this.station.update(delta); // shield regen clock
     this.waveDirector.update(delta); // wave-clear check
-    this.bossEncounter.update(delta); // boss fight (no-op until the run clears)
+    this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent.
     this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
     this.checkStationContacts();
@@ -303,7 +318,7 @@ export class SandboxScene extends Phaser.Scene {
     const uy = diry / len;
     let best: HomingTarget | null = null;
     let bestPerp = Infinity;
-    // Asteroids during the waves, plus the escorts during the finale, so
+    // Asteroids during the field waves, plus the escorts during the boss, so
     // homing keeps working all the way through (B14 × B5). Two plain loops —
     // this runs every frame while a seat holds HOME, so no merged array.
     const consider = (cand: HomingTarget) => {

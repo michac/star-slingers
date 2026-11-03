@@ -34,7 +34,7 @@ Ammo regens 1 per second up to 5.
 ## Live links
 
 - [Play Star Slingers](https://michac.github.io/star-slingers/)
-- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss) — useful for phone testing the finale; the normal link still starts a full run.
+- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss): the command ship, wave 6. Useful for phone testing the fight; the normal link still starts a full run. `?wave=N` jumps to any wave (1–10).
 
 ## Scripts
 

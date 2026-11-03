@@ -1,5 +1,5 @@
 /**
- * Escort (B5) — one of the 4 small guards that orbit the final boss. Pure
+ * Escort (B5) — one of the 4 small guards that orbit the command-ship boss. Pure
  * gating target: it doesn't threaten the station, but each live escort anchors
  * two links of the shield web (B34); destroying one opens a gap and RESETS the
  * boss's charge (the defensive payoff). The BossEncounter places it on the orbit each frame
@@ -131,7 +131,9 @@ export class Escort {
     this.scene.tweens.add({ targets: g, scale: 1.5, alpha: 0, duration: 100, onComplete: () => g.destroy() });
   }
 
-  private park(): void {
+  /** Off the field: invisible, body off (the encounter's end and its skips). */
+  park(): void {
+    this.scene.tweens.killTweensOf(this.sprite);
     this.active = false;
     this.popping = false;
     this.sprite.setVisible(false);
