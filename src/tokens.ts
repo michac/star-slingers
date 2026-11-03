@@ -42,7 +42,7 @@ export const COLORS = {
   shieldMid: 0x9d6bff, // purple
   shieldInner: 0xff5ec7, // magenta
 
-  // Railgun charge (B35): the filling pull-arc reads in violet, reusing the
+  // Railgun charge (B35): the filling FIRE charge ring reads in violet, reusing the
   // shield-mid purple (== the trail's EXHAUST hue) so "charged" ties visually
   // to the railgun trail. Not a new hue — an alias onto an existing stop.
   charge: 0x9d6bff, // == shieldMid violet
@@ -68,10 +68,8 @@ export const FONTS = {
 
 /** Stroke/dash recipes from the neon paint rules. */
 export const STROKES = {
-  rangeArc: { width: 2, alpha: 0.8, dash: 3, gap: 7 }, // .sling-range-*
-  chargeArc: { width: 2, alpha: 0.95 }, // B35: solid pull-arc (base + charge fill)
-  pullLine: { width: 2.8, alpha: 0.95 }, // .sling-pull
-  touchDot: { fillAlpha: 0.28, strokeWidth: 1.8 }, // .sling-touch
+  rangeArc: { width: 2, alpha: 0.8, dash: 3, gap: 7 }, // aim pad's range arc (mock .sling-range-*)
+  chargeArc: { width: 2, alpha: 0.95 }, // B35: FIRE's solid charge ring (base + charge fill)
   trajectory: { width: 2, alpha: 0.85, dash: 2, gap: 7 }, // .trajectory
   rock: { width: 2.5 }, // .rock
   crater: { width: 1.5 }, // .crater

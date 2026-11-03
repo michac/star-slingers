@@ -22,7 +22,7 @@ This repo is the game and its design record — nothing else.
 
 - `tokens.ts` — **every color & font comes from here.** Don't hardcode; restyle = edit this file.
 - `layout.ts` — geometry/positions/sizes · `waves.ts` — wave & difficulty tuning (the dials).
-- `objects/` — one class per game thing (Station, Asteroid, SlingControl, …) · `scenes/` — the
+- `objects/` — one class per game thing (Station, Asteroid, TwoThumbControl, …) · `scenes/` — the
   orchestrating scene · `main.ts` — Phaser bootstrap.
 - Art is **code-drawn** (procedural textures in `objects/textures.ts`), not loaded asset files.
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Controls v2 (#7) — variant picker</title>
+  <title>Controls v2 (#7) — seat options</title>
   <!-- One dir deeper than the game root → fonts live at ../fonts -->
   <link rel="preload" as="font" type="font/woff2" href="../fonts/Audiowide-Regular.woff2" crossorigin />
   <style>
@@ -26,43 +26,30 @@
     }
     a:active { transform: scale(0.99); }
     a small { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }
-    a.old { border-color: rgba(255, 177, 59, 0.35); }
   </style>
 </head>
 <body>
-  <h1>Controls v2 — pick a variant</h1>
+  <h1>Controls v2 — seat options</h1>
   <p>
-    Each link opens the game with that variant. The choice is saved on this phone, so the
-    home-screen app keeps it until you pick another. FIRE: hold to charge, release to shoot.
-    HOME: hold to see the lock, release for a homing shot. Solo plays the bottom seat
-    alone; every other link is two players.
+    Each link opens the game with those seats. The choice is saved on this phone, so the
+    home-screen app keeps it until you pick another. Aim: slide a thumb sideways on your
+    right to turn the aim. FIRE: hold to charge, release to shoot. HOME: hold to see the
+    lock, release for a homing shot. Left-handed flips a seat: aim on the left, buttons
+    on the right.
   </p>
 
-  <h2>Two-thumb</h2>
+  <h2>Two players</h2>
   <ul>
-    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=none&amp;players=2">Arc aim<small>thumb direction on the pad sets the aim</small></a></li>
-    <li><a href="../?controls=v2&amp;aim=drag&amp;lefty=none&amp;players=2">Drag aim<small>slide sideways anywhere on your right to turn the aim</small></a></li>
-  </ul>
-
-  <h2>Left-handed (pad on the left, buttons on the right)</h2>
-  <ul>
-    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=p1&amp;players=2">Arc, top seat lefty</a></li>
-    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=p2&amp;players=2">Arc, bottom seat lefty</a></li>
-    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=both&amp;players=2">Arc, both seats lefty</a></li>
-    <li><a href="../?controls=v2&amp;aim=drag&amp;lefty=both&amp;players=2">Drag, both seats lefty</a></li>
+    <li><a href="../?lefty=none&amp;players=2">Both right-handed</a></li>
+    <li><a href="../?lefty=p1&amp;players=2">Top seat left-handed</a></li>
+    <li><a href="../?lefty=p2&amp;players=2">Bottom seat left-handed</a></li>
+    <li><a href="../?lefty=both&amp;players=2">Both left-handed</a></li>
   </ul>
 
   <h2>Solo (one player, bottom seat)</h2>
   <ul>
-    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=none&amp;players=1">Solo, arc aim<small>top seat hidden; an escort takes two of your hits</small></a></li>
-    <li><a href="../?controls=v2&amp;aim=drag&amp;lefty=none&amp;players=1">Solo, drag aim</a></li>
-    <li><a href="../?controls=v2&amp;aim=arc&amp;lefty=p2&amp;players=1">Solo, arc, lefty</a></li>
-    <li><a class="old" href="../?controls=sling&amp;players=1">Solo, slingshot</a></li>
-  </ul>
-
-  <h2>Old controls</h2>
-  <ul>
-    <li><a class="old" href="../?controls=sling&amp;players=2">Slingshot (pull and release)<small>today's game, with the homing switches</small></a></li>
+    <li><a href="../?lefty=none&amp;players=1">Solo, right-handed<small>top seat hidden; an escort takes two of your hits</small></a></li>
+    <li><a href="../?lefty=p2&amp;players=1">Solo, left-handed</a></li>
   </ul>
 </body>
 </html>

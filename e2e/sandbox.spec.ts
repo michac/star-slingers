@@ -45,7 +45,7 @@ import {
   waveTarget,
   WAVES,
 } from '../src/waves';
-import { GAME_HEIGHT, GAME_WIDTH, HAPTICS, P2_ANCHOR, SLING } from '../src/layout';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, SLING } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -267,17 +267,16 @@ test('off-axis homing shot curves in', async ({ page }) => {
   // Deterministic homing check on the fixed-timestep clock (no wall-clock race).
   // Field a STATIONARY 1-hit rock in-field, clear of the station, via the public
   // reconfigure()/spawn() path (as the split case does) — removes the old
-  // drift-window scan AND the moving-target race. Enable P1 homing and fire an
-  // OFF-AXIS rocket whose straight path clears the rock by > its radius (a
-  // non-homing shot misses below). Step frames until the hit counter ticks: if it
-  // ticks within the step budget, the shot curved in. (Homing is off by default,
-  // so the straight cases above are unaffected.)
+  // drift-window scan AND the moving-target race. Fire an OFF-AXIS rocket whose
+  // straight path clears the rock by > its radius (a non-homing shot misses
+  // below), tagged homing + locked on the rock as a HOME release would. Step
+  // frames until the hit counter ticks: if it ticks within the step budget, the
+  // shot curved in.
   const homingBefore = await hits(page);
   await fieldRock(page, { x: 250, y: 300 });
   await page.evaluate(() => {
     const s = (window as any).__game.scene.keys['Sandbox'];
     const a = s.asteroids[0];
-    s.__debug.setHoming(1, true);
     // Off-axis: dy = +30 (> the 17px radius) so a straight shot misses below; a
     // small explicit armAt starts the turn-rate ramp early on the short runway.
     const r = s.rockets.fire('rocket-p1', 40, 330, 150, 0);
@@ -389,7 +388,7 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
 
   // Every ship needs BOTH colors. A P1 double-tap consumes both rockets but
   // leaves escort 0 awaiting amber; the reverse order clears escort 2, the
-  // left-side node. That opens the incoming horizontal path from the slings.
+  // left-side node. That opens the incoming horizontal path from the launchers.
   await hitEscort(page, 0, 'p1');
   await hitEscort(page, 0, 'p1');
   expect(await escortsAlive(page)).toBe(4);
@@ -573,7 +572,7 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
 });
 
 // ---------------------------------------------------------------------------
-// Controls v2 (#7): two-thumb aim + fire buttons, driven by REAL touches.
+// Controls v2 (#7): two-thumb drag aim + fire buttons, driven by REAL touches.
 //
 // Touches go through a CDP session (Input.dispatchTouchEvent), so they travel
 // the browser's real touch path into Phaser's TouchManager. Does that still work
@@ -631,7 +630,6 @@ async function touchscreen(page: Page) {
 const v2Layout = (page: Page, player: 1 | 2) =>
   page.evaluate(`${SCENE}.__debug.v2Layout(${player})`) as Promise<V2Layout>;
 const aimDeg = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.aimDeg(${player})`) as Promise<number>;
-const controlsMode = (page: Page) => page.evaluate(`${SCENE}.__debug.controlsMode()`) as Promise<string>;
 
 /** Every in-flight rocket, read straight off the pool. */
 const liveShots = (page: Page) =>
@@ -649,13 +647,9 @@ const liveShots = (page: Page) =>
       }));
   }) as Promise<LiveShot[]>;
 
-/** A point on a seat's aim pad at seat-frame angle `deg` (0 = that player's
- *  right, 90 = across the field). The top seat's frame is rotated 180°. */
-function padPoint(pad: V2Layout['pad'], player: 1 | 2, deg: number, frac = 0.8): Pt {
-  const a = (deg * Math.PI) / 180;
-  const sign = player === 2 ? 1 : -1;
-  return { x: pad.x + sign * Math.cos(a) * pad.r * frac, y: pad.y - sign * Math.sin(a) * pad.r * frac };
-}
+/** Seat-frame units of sideways drag that turn the aim by `deg` (positive =
+ *  toward the player's right, which lowers the seat-frame angle). */
+const dragFor = (deg: number) => deg / CONTROLS_V2.drag.gainDegPerPx;
 
 /** Launch direction of a shot in that seat's frame, degrees. */
 const shotDeg = (shot: LiveShot, player: 1 | 2) => {
@@ -663,9 +657,8 @@ const shotDeg = (shot: LiveShot, player: 1 | 2) => {
   return (Math.atan2(-sign * shot.vy, sign * shot.vx) * 180) / Math.PI;
 };
 
-test('v2: hold FIRE + aim with a second finger fires an aimed railgun', async ({ page }) => {
+test('v2: hold FIRE + drag-aim with a second finger fires an aimed railgun', async ({ page }) => {
   await gotoGame(page);
-  expect(await controlsMode(page)).toBe('v2');
   const L = await v2Layout(page, 2);
   const t = await touchscreen(page);
 
@@ -673,9 +666,12 @@ test('v2: hold FIRE + aim with a second finger fires an aimed railgun', async ({
   // No step yet: the scene's pointerdown already ran during the dispatch.
   expect(await page.evaluate(`${SCENE}.controls[1].held`)).toBe('fire');
 
-  const aim = padPoint(L.pad, 2, 60);
-  await t.down(2, aim.x, aim.y);
-  expect(await aimDeg(page, 2)).toBeCloseTo(60, 0);
+  // Second thumb in P2's aim zone (right side of the band): touching down
+  // doesn't move the aim; dragging right by 30° worth turns it to 60°.
+  await t.down(2, 250, 600);
+  expect(await aimDeg(page, 2)).toBe(90);
+  await t.move(2, 250 + dragFor(30), 600);
+  expect(await aimDeg(page, 2)).toBeCloseTo(60, 3);
 
   await stepGame(page, 16, 45); // 720ms of game time > CHARGE.fullMs (600)
   expect(await liveShots(page)).toHaveLength(0); // fires on release, not press
@@ -820,9 +816,12 @@ test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   expect(L1.fire.y).toBeCloseTo(740 - L2.fire.y, 5);
   expect(L1.pad.x).toBeCloseTo(360 - L2.pad.x, 5);
   const t = await touchscreen(page);
-  const aim = padPoint(L1.pad, 1, 130);
-  await t.down(1, aim.x, aim.y);
-  expect(await aimDeg(page, 1)).toBeCloseTo(130, 0);
+  // P1's aim zone is P2's rotated: world (60,140) is seat-frame (300,600). A
+  // drag toward P1's LEFT (+x on screen, since P1 faces down the field) turns
+  // the aim from 90° up to 130°.
+  await t.down(1, 60, 140);
+  await t.move(1, 60 + dragFor(40), 140);
+  expect(await aimDeg(page, 1)).toBeCloseTo(130, 3);
   await t.down(2, L1.fire.x, L1.fire.y);
   await stepGame(page, 16, 2);
   await t.up(2);
@@ -834,9 +833,9 @@ test('v2: the top seat is mirrored 180° (aim + fire)', async ({ page }) => {
   expect(Math.abs(shotDeg(shots[0], 1) - 130)).toBeLessThan(2);
 });
 
-test('v2: ?aim=drag turns the aim by sideways motion; ?lefty mirrors a seat', async ({ page }) => {
-  await gotoGame(page, '?aim=drag&lefty=p2');
-  expect(await page.evaluate(`${SCENE}.__debug.aimMode()`)).toBe('drag');
+test('v2: drag aim clamps; ?lefty mirrors a seat', async ({ page }) => {
+  await gotoGame(page, '?lefty=p2');
+  expect(await page.evaluate(`${SCENE}.__debug.lefty()`)).toBe('p2');
   const L = await v2Layout(page, 2);
   expect(L.fire.x).toBeGreaterThan(L.anchor.x); // lefty: buttons on the player's right
   expect(L.pad.x).toBeLessThan(L.anchor.x);
@@ -845,30 +844,10 @@ test('v2: ?aim=drag turns the aim by sideways motion; ?lefty mirrors a seat', as
   await t.down(1, 60, 600);
   expect(await aimDeg(page, 2)).toBe(90);
   await t.move(1, 85, 600); // +25 units to the player's right
-  expect(await aimDeg(page, 2)).toBeCloseTo(90 - 25 * 0.8, 3);
+  expect(await aimDeg(page, 2)).toBeCloseTo(90 - 25 * CONTROLS_V2.drag.gainDegPerPx, 3);
   await t.move(1, 300, 600); // way past: clamps
   expect(await aimDeg(page, 2)).toBe(15);
   await t.up(1);
-});
-
-test('?controls=sling boots the old controls and is remembered', async ({ page }) => {
-  await stubVibrate(page);
-  await gotoGame(page, '?controls=sling');
-  expect(await controlsMode(page)).toBe('sling');
-  expect(await page.evaluate(`${SCENE}.homingToggles.length`)).toBe(2);
-  // A real pull-and-release on P2's sling fires a rocket up the field.
-  const t = await touchscreen(page);
-  await t.down(1, 180, 642);
-  await t.move(1, 180, 700);
-  await stepGame(page, 16, 1);
-  await t.up(1);
-  const shots = await liveShots(page);
-  expect(shots).toHaveLength(1);
-  expect(shots[0].vy).toBeLessThan(0);
-  expect(await vibes(page)).toEqual([HAPTICS.shotMs]); // buzzes like v2 (#3)
-  // The choice is saved: a bare reload (like the home-screen PWA) keeps it.
-  await gotoGame(page);
-  expect(await controlsMode(page)).toBe('sling');
 });
 
 const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
@@ -929,29 +908,4 @@ test('solo (?players=1) keeps only the bottom seat, ignores the top, and is reme
   expect(await hudCount(page)).toBe(2);
   expect(await bannerCopies(page)).toBe(2);
   expect(await overlayCopies(page, 'failOverlay')).toBe(2);
-});
-
-test('solo with ?controls=sling: one sling, one homing toggle, the top seat ignored', async ({ page }) => {
-  await gotoGame(page, '?controls=sling&players=1');
-  expect(await seats(page)).toEqual(['p2']);
-  expect(await page.evaluate(`${SCENE}.homingToggles.length`)).toBe(1);
-  expect(await hudCount(page)).toBe(1);
-  const t = await touchscreen(page);
-  // P2's pull: grab just below the sling, drag down. P1's is the same pull mirrored.
-  const grab = { x: P2_ANCHOR.x, y: P2_ANCHOR.y + 2 };
-  const pull = { x: P2_ANCHOR.x, y: P2_ANCHOR.y + 60 };
-  // A pull in P1's old sling zone fires nothing.
-  await t.down(1, mirrored(grab).x, mirrored(grab).y);
-  await t.move(1, mirrored(pull).x, mirrored(pull).y);
-  await stepGame(page, 16, 1);
-  await t.up(1);
-  expect(await liveShots(page)).toHaveLength(0);
-  // P2's pull-and-release fires up the field.
-  await t.down(1, grab.x, grab.y);
-  await t.move(1, pull.x, pull.y);
-  await stepGame(page, 16, 1);
-  await t.up(1);
-  const shots = await liveShots(page);
-  expect(shots).toHaveLength(1);
-  expect(shots[0].player).toBe('p2');
 });

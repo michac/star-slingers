@@ -1,19 +1,13 @@
 /**
- * draw.ts — shared Graphics stroke helpers for the seat controls (SlingControl
- * and the controls-v2 TwoThumbControl). Phaser Graphics has no native dash, so
- * dashes are walked by hand; solid arcs are one stroked path.
+ * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl).
+ * Phaser Graphics has no native dash, so dashes are walked by hand; solid arcs
+ * are one stroked path.
  */
 import Phaser from 'phaser';
 
-/** Pull-range arc angles in screen space (y down): the top player's arc bulges
- *  up through -PI/2 (pi..2pi), the bottom player's down through +PI/2 (0..pi). */
-export function arcSpan(edge: 'top' | 'bottom'): [number, number] {
-  return edge === 'top' ? [Math.PI, Math.PI * 2] : [0, Math.PI];
-}
-
 /** Solid arc (B35) as ONE stroked path — redrawn every frame while charging, so
- *  it avoids the per-segment lineBetween paths the dashed walk needs. Passing
- *  `endAngle` short of the full span yields the partial (start→swept) fill. */
+ *  it avoids the per-segment lineBetween paths the dashed walk needs. An
+ *  `endAngle` short of a full turn yields the partial (start→swept) fill. */
 export function drawSolidArc(
   g: Phaser.GameObjects.Graphics,
   cx: number,
@@ -75,7 +69,7 @@ export function drawDashedArc(
   }
 }
 
-/** Homing aim preview (B14): glow fill + bold ring on the locked rock, so the
+/** Homing lock ring (B14): glow fill + bold ring on the locked rock, so the
  *  lock clearly pops and is easy to track as it jumps between rocks. */
 export function drawLockRing(
   g: Phaser.GameObjects.Graphics,

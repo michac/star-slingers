@@ -1,10 +1,9 @@
-# Star Slingers — Sling-Feel Sandbox
+# Star Slingers
 
-First playable slice: two abstract sling controls (anchor dot + pull-range
-arc), pooled rockets, drifting dummy asteroids with hit counts, and per-player
-ammo. No station/shield/waves/score yet — this build exists to nail the touch
-feel. Wireframe skin; all colors/fonts live in `src/tokens.ts` and get swapped
-for the winning style variant later.
+A two-player co-op space defense for one phone laid flat between the players.
+Each seat has two-thumb controls: drag on the right to aim, hold FIRE (charge
+for a railgun) or HOME (a homing shot) on the left. The design lives in
+`plans/spec.md`; all colors/fonts live in `src/tokens.ts`.
 
 Layout and palette are ported 1:1 from
 `plans/mockups/style-wireframe.html` (canonical v3) +
@@ -17,9 +16,9 @@ npm install
 npm run dev        # serves on http://localhost:5173 (and your LAN IP)
 ```
 
-Desktop check: drag from either anchor dot (mouse = one sling at a time),
-release to fire. Asteroid numbers count down per hit; rocks pop and respawn
-off the right edge. Ammo regens ~1 per 1.5 s up to 5.
+Desktop check (mouse = one pointer, so no aiming while a button is held):
+drag sideways on a seat's right side to aim, then click FIRE or HOME to shoot.
+Ammo regens 1 per second up to 5.
 
 ## Phone testing (Pixel 6)
 
@@ -28,9 +27,9 @@ off the right edge. Ammo regens ~1 per 1.5 s up to 5.
 3. First run: Windows may prompt to allow Node through the firewall — allow it
    on **Private** networks. If the phone still can't connect, add an inbound
    allow rule for TCP 5173.
-4. Lay the phone flat: P1 plays from the top edge (their ammo readout is
-   upside-down on purpose), P2 from the bottom. Both slings must work with
-   two fingers at once, with no page scroll, zoom, or stuck slings.
+4. Lay the phone flat: P1 plays from the top edge (their controls and HUD
+   are upside-down on purpose), P2 from the bottom. Both seats must work with
+   all four thumbs at once, with no page scroll, zoom, or stuck buttons.
 
 ## Live links
 

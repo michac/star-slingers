@@ -226,7 +226,7 @@ export class Station {
   }
 
   /** Brief vertical tremble of the whole station — local, not camera shake,
-   *  so the players' slings and HUDs stay still. */
+   *  so the players' controls and HUDs stay still. */
   private worriedShake(): void {
     this.scene.tweens.killTweensOf(this.gfx); // a re-hit mid-shake restarts it
     this.gfx.setY(0);

@@ -60,7 +60,7 @@ export class Overlay {
       .setDepth(DEPTHS.overlay)
       .setVisible(false);
 
-    // Not interactive until show(), so it never swallows sling input mid-game.
+    // Not interactive until show(), so it never swallows seat input mid-game.
     this.tapZone = scene.add.zone(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT);
     this.tapZone.on('pointerdown', () => scene.scene.restart());
   }

@@ -649,6 +649,45 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **#7 controls decided: two-thumb + drag aim (2026-11-02, `controls-v2`):** Michael's solo
+  playtest on the Pixel picked the **two-thumb controls** over the old sling, and **drag aim** over
+  arc aim; lefty mirroring stays as an option. Removed the losing variants: `SlingControl`,
+  `HomingToggle`, the `SeatControl` interface, arc aim, and the `?controls`/`?aim` switches
+  (`?lefty` and `?players` remain). spec §1/§2/§5/§6 rewritten for the two-thumb controls. Design
+  change worth remembering: homing was an opt-in per-seat toggle (on for the 5yo, off for the
+  9yo); now HOME is a button both players always have. Haptics accepted at 20/25/40/20 ms. They
+  first seemed dead on the Pixel because Android's **Touch feedback** setting was off, and Chrome's
+  `navigator.vibrate` is silently ignored while it is. Four thumbs at once (co-op) is still
+  unplaytested.
+- **cv2-batch-1 (2026-11-01/02):** four issues run in parallel against `controls-v2`, one owner
+  session each, landed as squash-merged PRs. #10 (a WebKit + offline service-worker check) was
+  built (PR #13) and then **dropped**. The game has no iPhone or offline requirement, and the WebKit
+  failure it guarded can only happen offline in this service worker. #10 was closed as not planned.
+- **#6 single-player prototype slice (PR #14):** `?players=1|2` solo switch (remembered like
+  `?lefty`). Solo plays the bottom seat only: P1's controls, HUD, banner and end-card copies are not
+  built. Temporary escort rule until #7's shot-type locks: two hits, both may be the one player's.
+  `SOLO.requiredScale` dial in `src/waves.ts` ships at 1.0 for the playtest to tune. Known oddity:
+  the half-hit escort shows the cyan half to the amber solo player. Boss timing is unscaled in solo.
+  Still open in #6: the scaling model, and choosing solo with an on-screen join button for the top
+  seat instead of the URL switch.
+- **#3 haptics half (PR #12):** `navigator.vibrate` per shot fired (one call in
+  `SandboxScene.fireRocket`; railgun > homing > plain), plus one armed tick per FIRE hold when fully
+  charged with ammo. `src/haptics.ts` feature-detects (iPhone no-op) and skips until the first tap,
+  because Chrome logs a console *error* for a vibrate before any user activation, and the armed tick
+  runs from `update()`, outside a touch handler. Dials are `HAPTICS` in `src/layout.ts`. Audio is
+  still open in #3.
+- **#8 shield-web collision (PR #11):** `ShieldWeb.blocks()` now stops a rocket exactly when the
+  drawn rocket touches the drawn link, along this frame's real path. It had four faults:
+  - it added `webWidth/2` twice;
+  - it swept from `body.prev`, the body's *top-left*, which gave every rocket a phantom ~8-unit tail;
+  - it ended the sweep at `rocket.x/y`, which is still the frame-start position during
+    `scene.update` because Arcade syncs the sprite in postUpdate, so fast shots could tunnel;
+  - its reach was a fixed `max(w,h)/2 = 7`, so side-on shots were stopped ~3 units early.
+
+  It now sweeps `body.prevFrame` centre → `body.center`, with reach = the rocket's rotated
+  half-extent along each link's normal (7 nose-on, 4 side-on) + `webWidth/2`. Covered by the e2e case
+  'boss shield web blocks rockets at the drawn edge'. No retune; the net boss difficulty change is
+  small and runs both ways.
 - **#7 controls v2 prototype + asteroid health (2026-11-01, `controls-v2` branch only):** two
   parallel builds, merged with history kept. **Health/damage:** `takeHit(damage)`, an `hp` per
   `ASTEROID_KIND` (1 for both kinds), a `DAMAGE` table (normal/homing/railgun all 1), and the

@@ -16,7 +16,7 @@ import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, SPLITTER_CHILDREN, STATION } f
 export interface AsteroidSpec {
   kind: AsteroidKind;
   radius: number;
-  y: number; // drift lane, kept clear of both sling zones
+  y: number; // drift lane, kept clear of both seats' control bands
   speed: number; // px/s, right -> left
   /** Max hp override (tests / future tuning); defaults to ASTEROID_KIND[kind].hp. */
   hp?: number;
@@ -53,7 +53,7 @@ export function clearDamage(spec: AsteroidSpec): number {
 
 /** Physical lanes — position + base speed only. Toughness and size are NOT
  *  fixed here; the solver assigns them per wave. The floor (minLanes) uses
- *  the first lanes, so order them well-spread and clear of the sling zones. */
+ *  the first lanes, so order them well-spread and clear of the control bands. */
 export const LANE_SLOTS: { y: number; baseSpeed: number }[] = [
   { y: 300, baseSpeed: 40 },
   { y: 215, baseSpeed: 50 },
@@ -141,7 +141,7 @@ export const BREATHER = {
  *     └ charge fills only with all nodes live → boss FIRES (−1 shield ring)
  *   win: boss HP 0 (railguns through web gaps) · lose: shield gone when it fires
  *
- * Urgency = the charge bar racing you; co-op = needing both slings to down an
+ * Urgency = the charge bar racing you; co-op = needing both players to down an
  * escort and open a gap, then land railguns on the boss through it. A completed
  * charge shatters a ring (reuses the wave shield + regen).
  */

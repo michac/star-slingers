@@ -6,35 +6,27 @@
 export const GAME_WIDTH = 360;
 export const GAME_HEIGHT = 740;
 
-/** Sling control geometry + tuning. */
+/** Launcher (each seat's rocket origin) geometry + shot speed. Every shot,
+ *  plain, homing or railgun, leaves at `maxSpeed`. */
 export const SLING = {
-  pullRadius: 70, // mock: A70 70 range arc
-  grabRadius: 48, // touch slop around the anchor that claims a pointer
-  anchorRadius: 6, // mock: sling-anchor r=6
-  touchDotRadius: 9, // mock: sling-touch r=9
-  maxSpeed: 560, // rocket speed (px/s) at a full pull
-  minSpeed: 120, // floor so tiny pulls still launch, not dribble
-  minFirePull: 12, // pulls shorter than this cancel instead of firing
-  trajectoryGap: 14, // preview starts this far from the anchor (mock leaves a gap)
-  trajectoryMax: 280, // preview length at a full pull
+  anchorRadius: 6, // launcher base dot under the nocked rocket (mock: sling-anchor r=6)
+  maxSpeed: 560, // rocket launch speed (px/s)
+  trajectoryGap: 14, // the dotted aim line starts this far from the launcher (mock leaves a gap)
+  trajectoryMax: 280, // aim line length
 } as const;
 
 /**
- * Charged shot (B13, re-cued B35) — hold the pull **fully back** to power up a
- * **railgun**: a full charge fires a rocket that pierces straight through every
- * asteroid in its path (chipping each once) until it leaves the screen. Lives
- * beside SLING (it's a control-feel concern). Charge only accrues while the dot
- * is held past `pullThresholdFrac` of the pull radius, and RESETS to 0 the
- * moment it eases below — so a railgun is a held-full-pull skill, not a timed
- * hold. The cue is the pull arc itself (B35): the resting dashed arc goes solid
- * and fills in the charge violet from one end as a progress bar, then breathes
- * when armed (no text, orientation-neutral). All code-drawn (Graphics), no postFX.
+ * Charged shot (B13) — hold FIRE to power up a **railgun**: a full charge fires
+ * a rocket that pierces straight through every asteroid in its path (chipping
+ * each once) until it leaves the screen. Charge fills over `fullMs` of held
+ * game time. The cue is a ring round the FIRE button that sweeps in the charge
+ * violet, then breathes when armed (no text, orientation-neutral). All
+ * code-drawn (Graphics), no postFX.
  */
 export const CHARGE = {
-  fullMs: 600, // hold at full pull this long to reach full charge (pull-back time no longer counts)
-  pullThresholdFrac: 0.88, // dot must be ≥ this fraction of SLING.pullRadius back to charge
+  fullMs: 600, // hold FIRE this long to reach full charge
   // Armed "ready" pulse (sine off elapsed ms): a steady brightness breath on the
-  // full charge-color arc so the player can see the shot is armed.
+  // full charge-color ring so the player can see the shot is armed.
   pulseW: 0.012, // rad/ms (period ~520ms)
   armedPulseDepth: 0.25, // ± this fraction of the arc alpha at full charge
 } as const;
@@ -43,12 +35,12 @@ export const P1_ANCHOR = { x: 180, y: 100 } as const; // top player
 export const P2_ANCHOR = { x: 180, y: 640 } as const; // bottom player
 
 /**
- * Homing mode (B14) — the 5yo fairness lever. A per-player toggle next to the
- * sling makes that player's shots curve toward a locked target. Tuning + the
- * toggle geometry live here, beside SLING (control feel is a layout concern).
+ * Homing (B14) — the 5yo fairness lever. A shot fired from HOME curves toward
+ * the target it locked at fire. Tuning lives here, beside SLING (control feel is
+ * a layout concern).
  */
 export const HOMING = {
-  // Target selection — used both at fire AND for the aim-preview highlight.
+  // Target selection — used both at fire AND for the lock ring while HOME is held.
   // Tight on purpose: you must aim fairly close to a rock to lock/highlight it.
   coneHalfAngleDeg: 25, // the launch ray must point within this of the target
   maxRange: 520, // ignore targets farther than this along the ray
@@ -62,18 +54,13 @@ export const HOMING = {
   // Delayed + eased curve so homing reads as a deliberate "smart rocket": the
   // shot flies STRAIGHT for the arm distance (a long, obvious straight run),
   // then the turn-rate ramps 0→full over the next rampDistancePx and snaps onto
-  // the target. Distance-based (not time) so it looks the same at any pull
-  // strength. armFraction caps a shot's arm distance at this fraction of its
+  // the target. Distance-based (not time) so it looks the same at any shot
+  // speed. armFraction caps a shot's arm distance at this fraction of its
   // distance-to-target, so a closer lock still leaves runway to curve in and
   // connect (a long straight run never sails past a near target).
   armDistancePx: 140, // straight flight before any curving begins
   armFraction: 0.4, // …but never more than this share of the way to the target
   rampDistancePx: 120, // then ease the turn-rate in over this much more travel
-  // Toggle UI, mirrored per seat (P1 sits at the top edge, rotated 180).
-  // offset 125 centers it in the gap between the pull arc (anchor ± r=70) and
-  // the screen edge: P2 at x=305 (sling edge 250 ↔ screen 360), P1 mirrored at
-  // x=55 — both clear of the sling and the HUD columns (344 / 16).
-  toggle: { offsetX: 125, width: 46, height: 22, knobR: 9, hitPad: 14 },
 } as const;
 
 /** Star backdrop, exact positions from the mock's <g class="stars">. */
@@ -293,16 +280,8 @@ export const AMMO_REGEN_MS = 1000;
 // in waves.ts — that's the one file to tune the run. See spec.md §7.
 
 /**
- * Per-player HUD anchors = the mock HUD GROUP origins (rows are laid out at
- * the mock's local offsets inside one rotated container). P1's group is at
- * (344,85) rotate(180), so all its rows render upside-down for the player
- * at the top edge; P2's group is at (16,655) unrotated.
- */
-export const HUD_P1 = { x: 344, y: 85, angle: 180 } as const;
-export const HUD_P2 = { x: 16, y: 655, angle: 0 } as const;
-
-/**
- * Controls v2 (#7): two-thumb aim + fire buttons. ALL v2 geometry lives here.
+ * Controls v2 (#7): two-thumb drag aim + fire buttons. ALL control geometry
+ * lives here.
  *
  * Written in the BOTTOM seat's (P2's) frame, as screen coords for P2:
  *
@@ -310,10 +289,10 @@ export const HUD_P2 = { x: 16, y: 655, angle: 0 } as const;
  *    player's left     P2_ANCHOR        player's right
  *
  * P1 (top edge) is the same layout rotated 180° about the field centre, i.e.
- * (x, y) → (GAME_WIDTH − x, GAME_HEIGHT − y); P2_ANCHOR maps onto P1_ANCHOR, so
- * both launchers stay where the slings were. A `?lefty` seat mirrors x within
- * its own frame (x → GAME_WIDTH − x) BEFORE that rotation: pad on the player's
- * left, buttons on their right. Aim directions are not mirrored.
+ * (x, y) → (GAME_WIDTH − x, GAME_HEIGHT − y); P2_ANCHOR maps onto P1_ANCHOR. A
+ * `?lefty` seat mirrors x within its own frame (x → GAME_WIDTH − x) BEFORE that
+ * rotation: aim zone + pad on the player's left, buttons on their right. Aim
+ * directions are not mirrored.
  *
  * Aim angle (seat frame): 0° = toward the player's right, 90° = straight across
  * the field at the other player, 180° = toward the player's left.
@@ -335,13 +314,13 @@ export const CONTROLS_V2 = {
   buttonHitPad: 5,
   /** Gap between a button's edge and its charge ring. */
   chargeRingGap: 5,
-  /** Aim pad (arc mode): thumb direction from the centre = launch direction.
-   *  `deadzone` ignores a thumb resting on the centre; `knobFrac` places the
-   *  aim knob along the current aim; `hitPad` is touch slop outside `r`. */
-  pad: { x: 300, y: 678, r: 46, hitPad: 14, deadzone: 10, knobR: 9, knobFrac: 0.62 },
-  /** Drag mode: a thumb anywhere in the aim zone (seat-frame x ≥ minX, y ≥
-   *  minY: the player's right side of their band) turns the aim by sideways
-   *  motion. 0.8°/px sweeps the whole 150° clamp in ~190 units (~4cm). */
+  /** Aim pad: the aim zone's visual (a disc with a ◀ ▶ hint, the range arc
+   *  just outside, and a knob `knobFrac` of the way out along the current aim).
+   *  Touch goes by the whole `drag` zone below, not the disc. */
+  pad: { x: 300, y: 678, r: 46, knobR: 9, knobFrac: 0.62 },
+  /** Aim zone: a thumb anywhere here (seat-frame x ≥ minX, y ≥ minY: the
+   *  player's right side of their band) turns the aim by sideways motion.
+   *  0.8°/px sweeps the whole 150° clamp in ~190 units (~4cm). */
   drag: { minX: 165, minY: 540, gainDegPerPx: 0.8 },
   /** Aim clamp (seat-frame degrees) + the boot aim (straight across). */
   aim: { minDeg: 15, maxDeg: 165, startDeg: 90 },
@@ -361,9 +340,9 @@ export const CONTROLS_V2 = {
   hudLefty: { x: 116, y: 670 },
 } as const;
 
-/** Phone vibration (#3), in ms; starting values, to tune on the Pixel 6: a buzz
- *  per shot fired (controls v2 FIRE/HOME and the sling alike) and, v2 only, a
- *  tick the moment FIRE is fully charged with ammo to fire. Pulses of 15ms or less can be imperceptible on some
+/** Phone vibration (#3), in ms; values accepted on the Pixel 6: a buzz
+ *  per shot fired (FIRE or HOME) and a tick the moment FIRE is fully charged
+ *  with ammo to fire. Pulses of 15ms or less can be imperceptible on some
  *  Android motors. See src/haptics.ts. */
 export const HAPTICS = {
   shotMs: 20,
