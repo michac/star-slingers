@@ -1,7 +1,8 @@
 /**
  * Asteroid — a drifting target: a bare physics Sprite (B37: size alone
  * tells standards from splitters, so there's no label). Pops once its hp runs
- * out (1 hp for every kind today, so any hit pops it), then asks the
+ * out (1 hp for every kind today, so any hit pops it; a tougher rock shows a
+ * health bar, drawn by the scene's HealthBars from `healthBar`), then asks the
  * WaveDirector for respawn permission (the wave's finite quota); denied
  * respawns park it inactive instead. The wrapper itself is NEVER destroyed
  * or recreated — the scene's rocket→asteroid overlap collider is built once
@@ -12,7 +13,8 @@ import Phaser from 'phaser';
 import { APPROACH_X, GAME_WIDTH, SCORE, SPLITTER_CHILDREN, STATION } from '../layout';
 import { COLORS } from '../tokens';
 import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
-import { ASTEROID_CRACK_STAGES, ensureAsteroidCracks, TEX } from './textures';
+import { TEX } from './textures';
+import type { HealthBarTarget } from './HealthBars';
 
 /** A non-lethal hit flashes the rock white this long, so a shot that chips a
  *  tough rock never reads as "my shot didn't work". Counted on update()'s delta
@@ -82,6 +84,18 @@ export class Asteroid {
   /** Current hp (the e2e suite's asteroidHp() hook reads it). */
   get hp(): number {
     return this._hp;
+  }
+
+  /** Full hp for the current spec. */
+  get maxHp(): number {
+    return maxHpOf(this._spec);
+  }
+
+  /** What the health bar needs; null while out of play (parked or popping),
+   *  so a killed rock's bar goes the frame it dies. */
+  get healthBar(): HealthBarTarget | null {
+    if (!this.active || this.popping) return null;
+    return { x: this.sprite.x, y: this.sprite.y, radius: this._spec.radius, hp: this._hp, maxHp: this.maxHp };
   }
 
   /** Splitter children move fast on spawn — the e2e suite's
@@ -175,7 +189,7 @@ export class Asteroid {
   }
 
   /** A rocket hit dealing `damage`. Returns points when it kills the rock (hp
-   *  ≤ 0 → pop), else 0 and shows damage (cracks + a white flash). Scoring is
+   *  ≤ 0 → pop), else 0 and flashes white (the health bar shows what's left). Scoring is
    *  driven purely from here — consume() (station-reached) calls pop() directly
    *  and never scores. */
   takeHit(damage: number): number {
@@ -190,25 +204,17 @@ export class Asteroid {
     return this._spec.kind === 'splitter' ? SCORE.splitter : SCORE.standard;
   }
 
-  /** Full hp for the current spec, undamaged look. Multi-hp rocks make sure
-   *  their crack stages exist (generated once per radius, cached on the Game). */
+  /** Full hp for the current spec, undamaged look. */
   private resetHp(): void {
-    const maxHp = maxHpOf(this._spec);
-    this._hp = maxHp;
+    this._hp = this.maxHp;
     this.flashMs = 0;
     this.sprite.clearTint();
     this.sprite.setTexture(TEX.asteroid(this._spec.radius));
-    if (maxHp > 1) ensureAsteroidCracks(this.scene, this._spec.radius);
   }
 
-  /** Non-lethal hit feedback. Only reachable when max hp > 1, so today's
-   *  1-hp rocks look exactly as before. Cracks step up with hp lost; the hp-1
-   *  "about to break" state always shows the full crack set. */
+  /** Non-lethal hit feedback (only reachable when max hp > 1): a brief white
+   *  flash. The remaining hp is the health bar's job. */
   private showDamage(): void {
-    const maxHp = maxHpOf(this._spec);
-    const lost = maxHp - this._hp;
-    const stage = Math.min(ASTEROID_CRACK_STAGES, Math.ceil((lost * ASTEROID_CRACK_STAGES) / (maxHp - 1)));
-    this.sprite.setTexture(TEX.asteroidCracked(this._spec.radius, stage));
     this.sprite.setTintFill(COLORS.white);
     this.flashMs = HIT_FLASH_MS;
   }
@@ -244,7 +250,7 @@ export class Asteroid {
 
   private respawn(): void {
     const { radius, y, speed } = this._spec;
-    this.resetHp(); // a cracked rock that reached the station comes back whole
+    this.resetHp(); // a damaged rock that reached the station comes back whole
     this.active = true;
     this.popping = false;
     this.funnelling = false; // back to lane phase
