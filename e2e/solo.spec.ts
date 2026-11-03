@@ -2,7 +2,7 @@
  * solo.spec.ts — ?players=1: one-seat escort rule, the top seat hidden and ignored, the choice remembered.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, startBoss, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
 
 const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
 const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
@@ -17,9 +17,7 @@ test('solo: one player downs an escort with two of their own hits', async ({ pag
   // one seat fills the absent seat's lock instead of being rejected. (Two-player
   // rejection of a repeat colour is covered by the co-op boss case in boss.spec.ts.)
   await gotoGame(page, '?players=1');
-  await startBoss(page);
-  await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
-  await stepGame(page, 16, 1);
+  await enterBoss(page);
   await hitEscort(page, 0, 'p2');
   expect(await escortsAlive(page)).toBe(4); // one hit is not enough
   expect((await escortLocks(page))[0]).toBe(2);

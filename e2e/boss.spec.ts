@@ -2,7 +2,7 @@
  * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge, ?boss.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, startBoss, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, type Page } from './helpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -15,9 +15,7 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   // Deterministic B34 boss test: the complete diamond has four physical links.
   // Downing one two-player escort removes its two links for 6s, pauses charge,
   // and lets a charged shot reach the always-vulnerable command ship.
-  await startBoss(page);
-  await page.evaluate(`${SCENE}.__debug.snapBossIn()`); // finish the entrance tween instantly
-  await stepGame(page, 16, 1); // one frame so the encounter observes the entered boss
+  await enterBoss(page);
   const hpStart = await bossHp(page);
   await shot(page, 'smoke-boss-charging.png');
   expect(await bossPhase(page)).toBe('charging');
@@ -94,9 +92,7 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   // Links are re-read before each group's frame; one frame turns the web ~0.3
   // deg, moving a probe's distance to its link by <= ~0.11 (graze, 10 units
   // off-midpoint): under the 0.5 margins.
-  await startBoss(page);
-  await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
-  await stepGame(page, 16, 1);
+  await enterBoss(page);
   expect(await bossPhase(page)).toBe('charging');
 
   const probe = await page.evaluate(() => {
