@@ -133,6 +133,22 @@ test('a SPECIAL missile connects with a moving rock from a rough aim', async ({ 
   expect((await rock(page, 0)).alive).toBe(false);
 });
 
+test('a SPECIAL missile never takes a lane rock still off the right edge', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  // A fielded lane rock waiting just past the right edge, straight down the aim.
+  const L = await v2Layout(page, 2);
+  const rx = GAME_WIDTH + 20, ry = 450;
+  await fieldRock(page, { x: rx, y: ry });
+  await page.evaluate(`${SCENE}.controls[1].aimDeg = ${(Math.atan2(L.anchor.y - ry, rx - L.anchor.x) * 180) / Math.PI}`);
+  const t = await touchscreen(page);
+  await t.down(1, L.special.x, L.special.y);
+  await t.up(1);
+  const [missile] = await liveShots(page);
+  expect(missile.missile).toBe(true);
+  expect(missile.targetIsRock0).toBe(false);
+});
+
 test('a SPECIAL missile whose target dies takes the next enemy along its heading', async ({ page }) => {
   await gotoGame(page);
   await clearField(page);
@@ -199,7 +215,7 @@ test('an hp-3 rock survives two hits and pops on the third', async ({ page }) =>
   await gotoGame(page);
 
   // Asteroid health: a rock fielded with a 3-hp override takes damage from each
-  // plain shot (DAMAGE.normal = 1) but only pops — and scores — on the hit that
+  // plain round (DAMAGE.fire = 1) but only pops — and scores — on the hit that
   // takes it to 0. Each shot is stepped to its hit before the next is fired, so
   // the hit counter isolates them on the fixed-timestep clock. Its health bar
   // (#23) is absent at full hp, shows the remaining fraction off the rock's

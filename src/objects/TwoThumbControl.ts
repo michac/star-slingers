@@ -206,8 +206,9 @@ export class TwoThumbControl {
       this.armedBuzzed = true;
       buzz(HAPTICS.armedMs);
     }
-    // Out of ammo dims the nocked rocket (cheap; ammo regens on its own clock).
-    this.nockedRocket.setAlpha(canFire ? 1 : 0.35);
+    // An empty pool dims the nocked rocket: the held button's pool, else
+    // FIRE's (cheap; each pool regens on its own clock).
+    this.nockedRocket.setAlpha(this.config.canFire(this.held ?? 'fire') ? 1 : 0.35);
     const active = this.held !== null || this.aimPointer !== null;
     if (!active && !this.dirty) return;
     this.dirty = false;
@@ -378,11 +379,11 @@ export class TwoThumbControl {
     drawSolidArc(g, this.fire.x, this.fire.y, r, start, start + this.charge * Math.PI * 2);
   }
 
-  /** While SPECIAL is held: ring the enemy it would take. World space. */
+  /** While SPECIAL is held with ammo: ring the enemy it would take. World space. */
   private drawLock(): void {
     const g = this.lockGfx;
     g.clear();
-    if (this.held !== 'special') return;
+    if (this.held !== 'special' || !this.config.canFire('special')) return; // nothing would fire
     const { anchor, color } = this.config;
     const d = this.worldDir();
     const lock = this.config.specialTargetAt(anchor.x, anchor.y, d.x, d.y);

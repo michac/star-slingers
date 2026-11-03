@@ -3,7 +3,7 @@
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, stepUntil, fieldRock, touchscreen, v2Layout, liveShots, mirrored, countShots, fired, type LiveShot, type Page } from './helpers';
-import { AMMO, CONTROLS_V2, MISSILE, SLING, SPECIAL } from '../src/layout';
+import { AMMO, AMMO_REGEN_MS, CONTROLS_V2, MISSILE, SLING, SPECIAL } from '../src/layout';
 
 const aimDeg = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.aimDeg(${player})`) as Promise<number>;
 
@@ -147,21 +147,32 @@ test('v2: SPECIAL spends its own smaller pool, which regenerates on its own cloc
   const L = await v2Layout(page, 2);
   const t = await touchscreen(page);
   await countShots(page);
+  // Sit full for a while first: a regen clock that kept ticking while the pool
+  // was full would refill the first shot early (the fix: restart on spend).
+  await stepGame(page, 16, 70);
   expect(await specialAmmo(page, 2)).toBe(SPECIAL.max);
-  for (let i = 0; i < SPECIAL.max + 1; i++) await tap(page, t, L.special);
+  for (let i = 0; i < SPECIAL.max + 1; i++) await tap(page, t, L.special); // spend: on each tap's 3rd frame
   expect(await fired(page)).toBe(SPECIAL.max); // the extra tap fires nothing
   expect(await specialAmmo(page, 2)).toBe(0);
   expect(await ammo(page, 2)).toBe(AMMO.max); // FIRE's pool is untouched…
   await tap(page, t, L.fire); // …and FIRE still fires
   expect(await fired(page)).toBe(SPECIAL.max + 1);
   expect(await ammo(page, 2)).toBe(AMMO.max - 1);
-  // Each pool regens one shot per its own interval on a free-running clock:
-  // FIRE's round is back long before the first missile…
-  const first = await stepUntil(page, 's.__debug.specialAmmo(2) > 0', Math.ceil(SPECIAL.regenMs / 16) + 1);
-  expect(first.done).toBe(true);
-  expect(await specialAmmo(page, 2)).toBe(1);
-  expect(await ammo(page, 2)).toBe(AMMO.max);
-  // …and the next missile takes a full SPECIAL.regenMs more.
+  // Empty-from-full: nothing comes back before a whole interval from the
+  // spend that left full. FIRE's round, spent 0 frames ago, after AMMO_REGEN_MS…
+  const fireBack = await stepUntil(page, `s.__debug.ammo(2) === ${AMMO.max}`, 200);
+  expect(fireBack.done).toBe(true);
+  expect(fireBack.steps * 16).toBeGreaterThanOrEqual(AMMO_REGEN_MS);
+  expect(fireBack.steps * 16).toBeLessThan(AMMO_REGEN_MS + 32);
+  expect(await specialAmmo(page, 2)).toBe(0);
+  // …and the first missile, spent 9 frames (three 3-frame taps) before FIRE's
+  // round, after SPECIAL.regenMs.
+  const missileBack = await stepUntil(page, 's.__debug.specialAmmo(2) > 0', 200);
+  expect(missileBack.done).toBe(true);
+  const sinceSpend = (9 + fireBack.steps + missileBack.steps) * 16;
+  expect(sinceSpend).toBeGreaterThanOrEqual(SPECIAL.regenMs);
+  expect(sinceSpend).toBeLessThan(SPECIAL.regenMs + 32);
+  // The next missile takes a full SPECIAL.regenMs more.
   await stepGame(page, 16, Math.floor(SPECIAL.regenMs / 16) - 3);
   expect(await specialAmmo(page, 2)).toBe(1);
   await stepGame(page, 16, 6);
@@ -201,4 +212,24 @@ test('v2: the SPECIAL icon follows the seat\'s current special', async ({ page }
   // Setting the special redraws (not appends to) both icons.
   await page.evaluate(`${SCENE}.__debug.setSpecial(2, 'missile')`);
   expect(await icons()).toEqual(drawn);
+});
+
+test('v2: an empty SPECIAL pool shows no target ring and dims the nocked rocket while held', async ({ page }) => {
+  await gotoGame(page);
+  const L = await v2Layout(page, 2);
+  await fieldRock(page, { x: L.anchor.x, y: 400 }); // on the boot aim line
+  const t = await touchscreen(page);
+  const held = () =>
+    page.evaluate(`[${SCENE}.controls[1].lockGfx.commandBuffer.length, ${SCENE}.controls[1].nockedRocket.alpha]`) as Promise<number[]>;
+  // With missiles: the ring is drawn and the rocket is bright.
+  await t.down(1, L.special.x, L.special.y);
+  await stepGame(page, 16, 1);
+  const [ring, alpha] = await held();
+  expect(ring).toBeGreaterThan(0);
+  expect(alpha).toBe(1);
+  await page.evaluate(`${SCENE}.huds[1].counts.special = 0`); // pool empty (FIRE's still full)
+  await stepGame(page, 16, 1);
+  expect(await held()).toEqual([0, 0.35]);
+  await t.up(1);
+  expect(await liveShots(page)).toHaveLength(0);
 });

@@ -183,9 +183,11 @@ test('solo scales wave targets; two-player targets are untouched', () => {
 });
 
 test('break-even accuracy is over both ammo pools (#22)', () => {
-  // A seat's ceiling = FIRE rounds + SPECIAL missiles at their regen rates,
-  // one hit each: dropping the missile pool from it would raise break-even.
-  const seat = (1000 / AMMO_REGEN_MS) * DAMAGE.fire + (1000 / SPECIAL.regenMs) * DAMAGE.missile;
+  // A seat's ceiling = FIRE rounds (1/s × 1 damage) + SPECIAL missiles
+  // (1 per 3s × 1 damage) = 4/3 damage/s. Pinned as numbers, so a wrong pool,
+  // rate or damage key in the formula fails here.
+  expect([AMMO_REGEN_MS, SPECIAL.regenMs, DAMAGE.fire, DAMAGE.missile]).toEqual([1000, 3000, 1, 1]);
   const w = RUN.flatMap((r) => (r.field ? [r.field] : []))[0];
-  expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * seat), 10);
+  expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * (4 / 3)), 10);
+  expect(breakEvenAccuracy(w, 1)).toBeCloseTo(requiredDamagePerSec(w, 1) / (4 / 3), 10);
 });

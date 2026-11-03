@@ -7,7 +7,9 @@
  *
  * It owns the seat's two ammo pools: FIRE's (AMMO.max, one back per
  * AMMO_REGEN_MS) and SPECIAL's (SPECIAL.max, one back per SPECIAL.regenMs),
- * each on its own regen clock. An unlimited seat (`setUnlimitedAmmo`, the Easy
+ * each on its own regen clock. A pool's clock restarts when it drops from
+ * full, so a full pool's first shot always takes a whole interval to come
+ * back (no free refill from a clock that was already mid-tick). An unlimited seat (`setUnlimitedAmmo`, the Easy
  * seat's switch for #20) keeps both pools full: spending never drops them.
  */
 import Phaser from 'phaser';
@@ -41,6 +43,8 @@ export class PlayerHud {
   private readonly specialIcon: Phaser.GameObjects.Graphics;
   private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
   private unlimited = false;
+  /** Each pool's looping regen timer (restarted by spend() from full). */
+  private readonly regen = {} as Record<Button, Phaser.Time.TimerEvent>;
 
   constructor(scene: Phaser.Scene, private readonly cfg: PlayerHudConfig) {
     const labelStyle = { fontFamily: FONTS.body, fontSize: '11px', color: CSS.chromeMuted };
@@ -83,7 +87,7 @@ export class PlayerHud {
       .setAngle(cfg.angle);
 
     for (const pool of BUTTONS) {
-      scene.time.addEvent({
+      this.regen[pool] = scene.time.addEvent({
         delay: POOLS[pool].regenMs,
         loop: true,
         callback: () => {
@@ -111,6 +115,7 @@ export class PlayerHud {
 
   spend(pool: Button): void {
     if (this.unlimited || this.counts[pool] === 0) return;
+    if (this.counts[pool] === POOLS[pool].max) this.regen[pool].elapsed = 0; // the interval starts now
     this.counts[pool] -= 1;
     this.refresh();
   }
