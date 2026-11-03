@@ -184,6 +184,8 @@ export const escortsAlive = (page: Page) =>
 export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
   page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
 export const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
+/** How many shield-web links are up (4 = the intact diamond). */
+export const shieldLinks = (page: Page) => page.evaluate(`${SCENE}.__debug.shieldLinks()`) as Promise<number>;
 export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBoss()`);
 /** Start the boss fight ready to play: startBoss, snap the (wall-clock) entrance
  *  tween to its end, then one 16ms frame so the encounter observes the entered boss. */

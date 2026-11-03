@@ -2,7 +2,7 @@
  * solo.spec.ts — ?players=1: one-seat escort rule, the top seat hidden and ignored, the choice remembered.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, type Page } from './helpers';
 
 const players = (page: Page) => page.evaluate(`${SCENE}.__debug.players()`) as Promise<string>;
 const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
@@ -24,7 +24,7 @@ test('solo: one player downs an escort with two of their own hits', async ({ pag
   await hitEscort(page, 0, 'p2');
   await stepGame(page, 16, 1);
   expect(await escortsAlive(page)).toBe(3);
-  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(2);
+  expect(await shieldLinks(page)).toBe(2);
 });
 
 test('solo (?players=1) keeps only the bottom seat, ignores the top, and is remembered', async ({ page }) => {

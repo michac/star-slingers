@@ -2,7 +2,7 @@
  * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge, ?boss.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, type Page } from './helpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -19,7 +19,7 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   const hpStart = await bossHp(page);
   await shot(page, 'smoke-boss-charging.png');
   expect(await bossPhase(page)).toBe('charging');
-  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(4);
+  expect(await shieldLinks(page)).toBe(4);
   // A segment across the lower-left side intersects the intact web.
   expect(await page.evaluate(`${SCENE}.__debug.webBlocks(100, 400, 180, 400)`)).toBe(true);
 
@@ -34,7 +34,7 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   await hitEscort(page, 2, 'p1');
   await stepGame(page, 16, 1);
   expect(await escortsAlive(page)).toBe(3);
-  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(2);
+  expect(await shieldLinks(page)).toBe(2);
   expect(await page.evaluate(`${SCENE}.__debug.webBlocks(60, 370, 200, 370)`)).toBe(false);
 
   // Ordinary gap shots remain harmless; a railgun through the same missing
@@ -63,7 +63,7 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   expect(await escortsAlive(page)).toBe(4);
   // Only the regenerated node resets; surviving escorts retain any real hits.
   expect((await escortLocks(page))[2]).toBe(0);
-  expect(await page.evaluate(`${SCENE}.__debug.shieldLinks()`)).toBe(4);
+  expect(await shieldLinks(page)).toBe(4);
   const shieldBefore = await page.evaluate(`${SCENE}.__debug.stationShield()`);
   const fired = await stepUntil(page, `s.__debug.stationShield() < ${shieldBefore}`, 350);
   expect(fired.done).toBe(true);
