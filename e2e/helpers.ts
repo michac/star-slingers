@@ -179,13 +179,6 @@ export async function fieldRock(
 /** Fire a plain P1 rocket through the public pool (no railgun/homing tags). */
 export const fire = (page: Page, x: number, y: number, vx: number, vy: number) =>
   page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy})`);
-export const hits = (page: Page) => page.evaluate(`${SCENE}.__debug.hits()`) as Promise<number>;
-export const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
-export const splitCount = (page: Page) => page.evaluate(`${SCENE}.__debug.splitCount()`) as Promise<number>;
-export const childrenAlive = (page: Page) =>
-  page.evaluate(`${SCENE}.__debug.childrenAlive()`) as Promise<number>;
-export const bossPhase = (page: Page) => page.evaluate(`${SCENE}.__debug.bossPhase()`) as Promise<string>;
-export const bossHp = (page: Page) => page.evaluate(`${SCENE}.__debug.bossHp()`) as Promise<number>;
 export const escortsAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.escortsAlive()`) as Promise<number>;
 export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>

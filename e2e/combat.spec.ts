@@ -1,11 +1,16 @@
 /**
  * combat.spec.ts — rocket vs asteroid: boot, hits, score, homing, railgun pierce, splitters, hp.
- * Shared harness (gotoGame, the fixed-timestep steppers, the console gate):
- * ./helpers.ts.
+ * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepUntil, fieldRock, fire, hits, score, splitCount, childrenAlive } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepUntil, fieldRock, fire, type Page } from './helpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+const hits = (page: Page) => page.evaluate(`${SCENE}.__debug.hits()`) as Promise<number>;
+const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
+const splitCount = (page: Page) => page.evaluate(`${SCENE}.__debug.splitCount()`) as Promise<number>;
+const childrenAlive = (page: Page) =>
+  page.evaluate(`${SCENE}.__debug.childrenAlive()`) as Promise<number>;
 
 test('boots clean — canvas renders and score is 0', async ({ page }) => {
   await gotoGame(page);

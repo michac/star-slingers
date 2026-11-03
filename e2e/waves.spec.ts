@@ -1,7 +1,6 @@
 /**
  * waves.spec.ts — the src/waves.ts difficulty model: wave solver and solo target scaling.
- * Shared harness (gotoGame, the fixed-timestep steppers, the console gate):
- * ./helpers.ts.
+ * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect } from './helpers';
 import {

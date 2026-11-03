@@ -1,7 +1,6 @@
 /**
  * solo.spec.ts — ?players=1: one-seat escort rule, the top seat hidden and ignored, the choice remembered.
- * Shared harness (gotoGame, the fixed-timestep steppers, the console gate):
- * ./helpers.ts.
+ * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, startBoss, touchscreen, v2Layout, liveShots, type Page, type Pt } from './helpers';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';

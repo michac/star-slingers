@@ -1,11 +1,13 @@
 /**
  * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge, ?boss.
- * Shared harness (gotoGame, the fixed-timestep steppers, the console gate):
- * ./helpers.ts.
+ * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, bossPhase, bossHp, escortsAlive, hitEscort, escortLocks, startBoss } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, startBoss, type Page } from './helpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+const bossPhase = (page: Page) => page.evaluate(`${SCENE}.__debug.bossPhase()`) as Promise<string>;
+const bossHp = (page: Page) => page.evaluate(`${SCENE}.__debug.bossHp()`) as Promise<number>;
 
 test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   await gotoGame(page);

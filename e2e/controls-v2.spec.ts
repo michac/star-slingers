@@ -1,7 +1,6 @@
 /**
  * controls-v2.spec.ts — two-thumb FIRE/HOME buttons + drag aim (#7), driven by real CDP touches.
- * Shared harness (gotoGame, the fixed-timestep steppers, the console gate):
- * ./helpers.ts.
+ * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, fieldRock, touchscreen, v2Layout, liveShots, type LiveShot, type Page } from './helpers';
 import { CONTROLS_V2, SLING } from '../src/layout';

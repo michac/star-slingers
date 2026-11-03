@@ -1,7 +1,6 @@
 /**
  * haptics.spec.ts — navigator.vibrate on the v2 buttons (#3): arming tick, buzz by shot kind, silent no-ops.
- * Shared harness (gotoGame, the fixed-timestep steppers, the console gate):
- * ./helpers.ts.
+ * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, touchscreen, v2Layout, liveShots, type Page } from './helpers';
 import { HAPTICS } from '../src/layout';
