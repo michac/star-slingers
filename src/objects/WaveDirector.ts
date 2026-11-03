@@ -96,7 +96,7 @@ export class WaveDirector {
     private readonly boom: (x: number, y: number, radius: number) => void,
     /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
     private readonly celebrate: () => void,
-    /** Seats in play (?players): solo scales each wave's target (SOLO in waves.ts). */
+    /** Live seats (the join screen's lineup): solo scales each wave's target (SOLO in waves.ts). */
     private readonly players: 1 | 2
   ) {
     // One wrapper per physical lane slot, alive for the whole run, built

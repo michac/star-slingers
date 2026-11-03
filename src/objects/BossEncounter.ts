@@ -47,7 +47,7 @@ export class BossEncounter {
     private readonly failOverlay: Overlay,
     /** The boss is down and the field is clear: the run continues. */
     private readonly onDefeated: () => void,
-    /** Seats in play (?players): solo relaxes the escort co-op lock (Escort.takeHit). */
+    /** Live seats (the join screen's lineup): solo relaxes the escort co-op lock (Escort.takeHit). */
     players: 1 | 2
   ) {
     this.boss = new Boss(scene, () => this.defeated());

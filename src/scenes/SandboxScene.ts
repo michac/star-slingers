@@ -1,8 +1,8 @@
 /**
  * SandboxScene — game orchestrator. Wires together stars, the station +
- * shield, two seats of TwoThumbControls (multitouch; seat options from
- * controlsVariant.ts: ?lefty mirrors a seat, ?players=1 builds only the bottom
- * seat, P2), the rocket pool, the WaveDirector
+ * shield, a TwoThumbControl per joined seat (multitouch; the seats and their
+ * Easy/Normal come from the join screen via lineup.ts, and ?lefty in
+ * controlsVariant.ts mirrors a seat), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
  * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
  * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
@@ -10,10 +10,11 @@
  * on a hit (handleHit, handleBossHit). Everything else lives in objects/.
  */
 import Phaser from 'phaser';
-import { COLORS, CSS } from '../tokens';
-import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, P1_ANCHOR, P2_ANCHOR, SLING, STARS, STATION } from '../layout';
-import { controlsVariant, isLefty, playerCount } from '../controlsVariant';
-import { generateTextures, TEX } from '../objects/textures';
+import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, SLING, STATION } from '../layout';
+import { controlsVariant, isLefty } from '../controlsVariant';
+import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
+import { generateTextures } from '../objects/textures';
+import { drawStarfield } from '../objects/draw';
 import { TwoThumbControl, type ShotKind } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
@@ -43,25 +44,10 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   return null;
 }
 
-/** One seat's fixed wiring (P1 top edge, P2 bottom). */
-interface SeatDef {
-  player: PlayerId;
-  anchor: { x: number; y: number };
-  color: number;
-  colorCss: string;
-  edge: 'top' | 'bottom';
-  tex: string;
-}
-
 /** A seat in play: its fixed wiring plus the HUD built for it. */
 interface Seat extends SeatDef {
   hud: PlayerHud;
 }
-
-const SEAT_DEFS: readonly SeatDef[] = [
-  { player: 'p1', anchor: P1_ANCHOR, color: COLORS.p1, colorCss: CSS.p1, edge: 'top', tex: TEX.rocketP1 },
-  { player: 'p2', anchor: P2_ANCHOR, color: COLORS.p2, colorCss: CSS.p2, edge: 'bottom', tex: TEX.rocketP2 },
-];
 
 /** DEV seat lookups take the player number: 1 = P1 (top), 2 = P2 (bottom);
  *  any other number is no seat. */
@@ -71,7 +57,7 @@ const seatId = (player: number): PlayerId | undefined => (player === 1 ? 'p1' : 
 const MISSILE_CONE_TAN = Math.tan(Phaser.Math.DegToRad(MISSILE.coneHalfAngleDeg));
 
 export class SandboxScene extends Phaser.Scene {
-  /** The live seats' controls (both seats, or just P2 in solo). */
+  /** The live seats' controls (both seats, or the one joined seat in solo). */
   private controls: TwoThumbControl[] = [];
   /** HUDs, index-aligned with `controls` (each seat's two ammo pools live here). */
   private huds: PlayerHud[] = [];
@@ -92,17 +78,21 @@ export class SandboxScene extends Phaser.Scene {
     super('Sandbox');
   }
 
-  /** `data.startWave`: a Try again retry's wave (the fail card passes it);
-   *  absent on a fresh load or a win's restart, which start from the query. */
-  create(data: { startWave?: number } = {}): void {
+  /** `data.lineup`: the join screen's seats + difficulties (#20); Try again
+   *  passes it back unchanged. `data.startWave`: a Try again retry's wave (the
+   *  fail card passes it); absent on a run from the join screen, which starts
+   *  from the query. */
+  create(data: { lineup: Lineup; startWave?: number }): void {
     generateTextures(this);
-    this.drawStars();
+    drawStarfield(this);
     this.station = new Station(this); // under the asteroids/rockets
 
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
     const variant = controlsVariant();
-    const players = playerCount(variant);
+    const run = data.lineup;
+    const live = liveSeats(run);
+    const players = live.length === 1 ? 1 : 2;
     // Each HUD sits in the centre column under its launcher, between SPECIAL and
     // the aim pad (P1's rotated 180° about the field centre).
     const hudAt = (player: 'p1' | 'p2') => {
@@ -111,18 +101,19 @@ export class SandboxScene extends Phaser.Scene {
         ? { x: at.x, y: at.y, angle: 0 }
         : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
     };
-    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Solo
-    // (?players=1) builds only P2 (its HUD here, its control below), so nothing
-    // claims touches in P1's old regions.
-    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => players === 2 || d.player === 'p2').map((d) => ({
-      ...d,
-      hud: new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss, color: d.color }),
-    }));
+    // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Only joined
+    // seats are built (their HUD here, their control below), so in solo nothing
+    // claims touches in the empty seat's region. An Easy seat never runs dry.
+    const seats: readonly Seat[] = SEAT_DEFS.filter((d) => live.includes(d.player)).map((d) => {
+      const hud = new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss, color: d.color });
+      hud.setUnlimitedAmmo(run[d.player] === 'easy');
+      return { ...d, hud };
+    });
     const huds = seats.map((seat) => seat.hud);
     this.huds = huds;
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
-    // Solo draws no banner/end-card copy toward the empty top seat either.
-    const banner = new WaveBanner(this, players);
+    // Solo draws no banner/end-card copy toward the empty seat either.
+    const banner = new WaveBanner(this, live);
     // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
     // Try again retries it, so a tester can re-run one wave. Survives the
     // restart (the query string sticks). Harmless in normal play — nobody
@@ -130,15 +121,13 @@ export class SandboxScene extends Phaser.Scene {
     const queryWave = startWaveFromQuery(window.location.search);
     // Try again restarts at the lost act's first wave (AC5), but never before
     // a shortcut's wave, so a shortcut's wave retries itself until the players
-    // pass it.
-    this.failOverlay = new Overlay(this, FAIL_CONFIG, players, () => ({
-      startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)),
-    }));
-    // A win's tap starts a fresh run. It passes an explicit empty object:
-    // restart(undefined) would keep the previous restart's data (Phaser's
-    // Systems.start only replaces settings.data when given some), so a win after
-    // a Try again would restart at the retry wave.
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players, () => ({}));
+    // pass it. It keeps the lineup (#20).
+    this.failOverlay = new Overlay(this, FAIL_CONFIG, live, () =>
+      this.scene.restart({ lineup: run, startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)) })
+    );
+    // A win ends the run and goes back to the join screen for a fresh lineup
+    // (#20), which starts the next run with new data.
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, live, () => this.scene.start('Join'));
 
     // The command-ship boss (B5) creates its boss + escort sprites up front
     // (parked); the run hands it the field for wave 6.
@@ -237,8 +226,12 @@ export class SandboxScene extends Phaser.Scene {
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         healthBars: () => this.healthBars.lastDrawn,
         lefty: () => variant.lefty,
-        players: () => variant.players,
         seats: () => seats.map((seat) => seat.player),
+        // The lineup's pick for a seat: 'easy' | 'normal', or null if it didn't join.
+        difficulty: (player: number) => {
+          const id = seatId(player);
+          return id ? run[id] : undefined;
+        },
         // Seat aim (seat-frame degrees) + world-space control layout.
         aimDeg: (player: number) => this.controls[seatIndex(player)]?.aimDegrees,
         // Ammo pools (#22): FIRE's and SPECIAL's counts, the seat's current
@@ -450,12 +443,4 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets.recycle(pair.rocket);
     return false;
   };
-
-  private drawStars(): void {
-    const g = this.add.graphics();
-    g.fillStyle(COLORS.star, 1);
-    for (const star of STARS) {
-      g.fillCircle(star.x, star.y, star.r);
-    }
-  }
 }

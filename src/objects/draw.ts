@@ -1,9 +1,19 @@
 /**
- * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl).
+ * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl),
+ * plus the static starfield both scenes draw behind everything.
  * Phaser Graphics has no native dash, so dashes are walked by hand; solid arcs
  * are one stroked path.
  */
 import Phaser from 'phaser';
+import { COLORS } from '../tokens';
+import { STARS } from '../layout';
+
+/** The fixed starfield (STARS), one Graphics, drawn under everything else. */
+export function drawStarfield(scene: Phaser.Scene): void {
+  const g = scene.add.graphics();
+  g.fillStyle(COLORS.star, 1);
+  for (const star of STARS) g.fillCircle(star.x, star.y, star.r);
+}
 
 /** Solid arc (B35) as ONE stroked path — redrawn every frame while charging, so
  *  it avoids the per-segment lineBetween paths the dashed walk needs. An

@@ -10,7 +10,8 @@
  * each on its own regen clock. A pool's clock restarts when it drops from
  * full, so a full pool's first shot always takes a whole interval to come
  * back (no free refill from a clock that was already mid-tick). An unlimited seat (`setUnlimitedAmmo`, the Easy
- * seat's switch for #20) keeps both pools full: spending never drops them.
+ * seat's switch for #20) keeps both pools full: spending never drops them,
+ * and both values read ∞.
  */
 import Phaser from 'phaser';
 import { CSS, FONTS } from '../tokens';
@@ -121,13 +122,11 @@ export class PlayerHud {
   }
 
   /** The per-seat unlimited-ammo switch (#20's Easy seat): on refills both
-   *  pools and keeps them full. */
+   *  pools and keeps them full, and their values read ∞. */
   setUnlimitedAmmo(on: boolean): void {
     this.unlimited = on;
-    if (on) {
-      for (const pool of BUTTONS) this.counts[pool] = POOLS[pool].max;
-      this.refresh();
-    }
+    if (on) for (const pool of BUTTONS) this.counts[pool] = POOLS[pool].max;
+    this.refresh();
   }
 
   /** Change the special shown on the special row: redraws its icon label. */
@@ -152,7 +151,6 @@ export class PlayerHud {
   }
 
   private refresh(): void {
-    this.values.fire.setText(String(this.counts.fire));
-    this.values.special.setText(String(this.counts.special));
+    for (const pool of BUTTONS) this.values[pool].setText(this.unlimited ? '∞' : String(this.counts[pool]));
   }
 }

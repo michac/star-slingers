@@ -111,9 +111,11 @@ textures, tokens).
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
   score, FIRE damage + charged pass-through, the SPECIAL missile, splitters, hp), `waves.spec.ts` (the 10-wave `RUN` table and its
   play order, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
-  (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
-  (`?players=1`), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools) and `haptics.spec.ts`. The
-  shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
+  (co-op escort locks, shield web, `?boss`), `join.spec.ts` (the join screen: join, Easy/Normal,
+  countdown, leaving, Easy's unlimited ammo, Try again keeps the lineup, a win returns to it),
+  `solo.spec.ts` (one joined seat), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools) and
+  `haptics.spec.ts`. The shared harness is `e2e/helpers.ts`: `gotoGame` (by default it skips the
+  join screen with both seats Normal; pass a lineup, or `'join'` to stop on it), `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
   the `__debug` wrappers (e.g. `shieldLinks`), `mirrored` for the top seat and the CDP `touchscreen`.
   Its exported `test` carries the zero-console-error gate as an auto fixture, so **specs import
   `test`/`expect` from `./helpers`, never from `@playwright/test`**
@@ -130,8 +132,8 @@ textures, tokens).
   one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
   the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
   TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
-  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~44s for the
-  41 cases, ~1.4 min at `--repeat-each=3` when it was 23): headless swiftshader makes rendering pathologically slow,
+  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~25s for the
+  49 cases, ~1.2 min at `--repeat-each=3`): headless swiftshader makes rendering pathologically slow,
   so (a) the `smoke-*.png`
   eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —
   and (b) `gotoGame()` **parks the RAF loop right after boot**, because any `page.evaluate` that runs

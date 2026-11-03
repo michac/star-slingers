@@ -34,7 +34,7 @@ FIRE ammo regens 1 per second up to 5; SPECIAL's own pool regens 1 per 3 seconds
 ## Live links
 
 - [Play Star Slingers](https://michac.github.io/star-slingers/)
-- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss): the command ship, wave 6. Useful for phone testing the fight; the normal link still starts a full run. `?wave=N` jumps to any wave (1–10).
+- [Jump straight to the boss](https://michac.github.io/star-slingers/?boss): the command ship, wave 6, right after the join screen. Useful for phone testing the fight; the normal link still starts a full run. `?wave=N` jumps to any wave (1–10).
 
 ## Scripts
 
@@ -43,5 +43,5 @@ FIRE ammo regens 1 per second up to 5; SPECIAL's own pool regens 1 per 3 seconds
 - `npm run typecheck` — `tsc --noEmit` only, over `tsconfig.json` (the game) and `tsconfig.node.json`
   (Node-side: `e2e/` + the Playwright and Vite configs)
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/` with a shared `e2e/helpers.ts`
-  (auto-starts the dev server headless on :5181 and asserts combat / waves / boss / solo / controls /
+  (auto-starts the dev server headless on :5181 and asserts combat / waves / boss / join / solo / controls /
   haptics + zero console errors). First run on a new machine: `npx playwright install chromium`.

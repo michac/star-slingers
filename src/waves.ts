@@ -163,7 +163,7 @@ export function startWaveFromQuery(search: string): number {
 }
 
 /**
- * Solo (?players=1, #6 prototype slice) difficulty dial. A solo run fields the
+ * Solo (one seat joined, #6/#20) difficulty dial. A solo run fields the
  * same field waves with each target scaled: `required × requiredScale`. Shipped at
  * 1.0 (no change) — the playtest finds the real value. Ammo regen is per seat,
  * so one player already has half the team's firepower; the dev boot log's

@@ -1,18 +1,20 @@
 /**
  * WaveBanner — the between-waves announcement: a small "WAVE" label + big
- * numeral, shown once per live seat (P1's copy rotated 180°; solo shows only
- * P2's) at field center.
+ * numeral, shown once per live seat (P1's copy above centre, rotated 180°;
+ * P2's below) at field center. Solo shows only the live seat's copy.
  * Numeral-forward by design: number recognition is fine, reading isn't.
  */
 import Phaser from 'phaser';
 import { CSS, FONTS } from '../tokens';
 import { BANNER, DEPTHS } from '../layout';
+import type { PlayerId } from './Rocket';
 
 export class WaveBanner {
   private readonly container: Phaser.GameObjects.Container;
   private readonly numerals: Phaser.GameObjects.Text[];
 
-  constructor(scene: Phaser.Scene, players: 1 | 2) {
+  /** `seats`: the live seats (the lineup), one copy each. */
+  constructor(scene: Phaser.Scene, seats: readonly PlayerId[]) {
     const seat = (sign: 1 | -1, angle: 0 | 180) => {
       const group = scene.add.container(
         BANNER.center.x,
@@ -28,9 +30,8 @@ export class WaveBanner {
       return { group, numeral };
     };
 
-    const p2 = seat(1, 0); // bottom seat, below center
-    const p1 = players === 2 ? seat(-1, 180) : null; // top seat, above center, flipped
-    const copies = p1 ? [p1, p2] : [p2];
+    // P1 (top seat) above center, flipped; P2 (bottom seat) below center.
+    const copies = seats.map((p) => (p === 'p1' ? seat(-1, 180) : seat(1, 0)));
     this.numerals = copies.map((c) => c.numeral);
     this.container = scene.add
       .container(0, 0, copies.map((c) => c.group))

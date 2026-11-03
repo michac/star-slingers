@@ -35,6 +35,15 @@ export const CHARGE = {
 export const P1_ANCHOR = { x: 180, y: 100 } as const; // top player
 export const P2_ANCHOR = { x: 180, y: 640 } as const; // bottom player
 
+/** Which screen edge a seat sits at; the top seat's frame is the bottom's rotated 180°. */
+export type SeatEdge = 'top' | 'bottom';
+
+/** World ↔ seat frame for a point (the same involution both ways): the top
+ *  seat's frame is the bottom seat's rotated 180° about the field centre. */
+export function seatPoint(edge: SeatEdge, p: { x: number; y: number }): { x: number; y: number } {
+  return edge === 'top' ? { x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y } : { x: p.x, y: p.y };
+}
+
 /**
  * SPECIAL homing missile (#22) — the 5yo fairness lever, built to be hard to
  * miss from a rough aim. At launch it takes the enemy nearest its aim line
@@ -429,4 +438,31 @@ export const AMMO = {
   // regen interval is the global AMMO_REGEN_MS — deliberately not per-wave
   labelOffsetX: 0, // row label, mock local x=0
   valueOffsetX: 46, // row value, mock local x=46
+} as const;
+
+/** Join screen (#20), in the BOTTOM seat's frame; the top seat's panel is the
+ *  same layout rotated 180° about the field centre (like CONTROLS_V2). A tap
+ *  anywhere in a seat's half (y ≥ `halfY`) joins it; the seat then shows its
+ *  ring between two pick buttons, Easy (∞) on the player's left and Normal
+ *  (5 ammo pips) on their right. Tapping the ring again leaves. Once every
+ *  joined seat has picked, a `countdownMs` numeral countdown starts the run;
+ *  a join or a leave restarts it. */
+export const JOIN = {
+  halfY: GAME_HEIGHT / 2,
+  ring: { x: 180, y: 640, r: 40 },
+  easy: { x: 82, y: 640, r: 40 },
+  normal: { x: 278, y: 640, r: 40 },
+  /** Touch slop outside a button's drawn radius. */
+  hitPad: 8,
+  /** A ring tap this soon after joining doesn't leave (a double-tap, or two
+   *  fingers landing together, would otherwise join and leave at once). */
+  leaveGraceMs: 500,
+  /** The unjoined ring breathes (scale) on this period, by this much. */
+  pulseMs: 1400,
+  pulseScale: 0.12,
+  /** Alpha of a pick button that isn't the seat's pick. */
+  unpickedAlpha: 0.45,
+  countdownMs: 3000,
+  countdownAt: { x: 180, y: 520 },
+  countdownFontPx: 56,
 } as const;

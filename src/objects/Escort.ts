@@ -25,7 +25,7 @@ export class Escort {
     private readonly scene: Phaser.Scene,
     /** Fired the instant this escort is destroyed (gate + interrupt). */
     private readonly onDestroyed: () => void,
-    /** Solo (?players=1): both hits may come from the one seat (see takeHit). */
+    /** Solo (one joined seat): both hits may come from the one seat (see takeHit). */
     private readonly solo: boolean
   ) {
     this.sprite = scene.physics.add

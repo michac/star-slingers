@@ -3,13 +3,16 @@
  * again?") and victory ("You did it!") cards: calm dim, an opaque rounded
  * card (field clutter never shows through — playtest 2), a central icon
  * that reads either way up, mirrored decorative text for each live seat (never
- * load-bearing — the 5yo can't read), and tap-ANYWHERE-to-restart via an
+ * load-bearing — the 5yo can't read), and tap-ANYWHERE to go on via an
  * invisible full-field Zone (a Graphics icon isn't tappable without an
- * explicit hit area, and a full-field zone is friendlier than a target).
+ * explicit hit area, and a full-field zone is friendlier than a target). The
+ * scene picks what the tap does: Try again restarts with the same seats, a win
+ * goes back to the join screen.
  */
 import Phaser from 'phaser';
 import { COLORS, CSS, FONTS, STROKES } from '../tokens';
 import { DEPTHS, GAME_HEIGHT, GAME_WIDTH, OVERLAY, VICTORY_ICON } from '../layout';
+import type { PlayerId } from './Rocket';
 
 export interface OverlayConfig {
   /** Decorative text, shown once per live seat (P1's copy rotated 180°). */
@@ -22,15 +25,9 @@ export class Overlay {
   private readonly container: Phaser.GameObjects.Container;
   private readonly tapZone: Phaser.GameObjects.Zone;
 
-  /** `players`: solo (1) draws only the bottom seat's text copy.
-   *  `restartData`: read at the tap and handed to the restarted scene's
-   *  create() (the fail card's retry wave); omitted, the scene starts fresh. */
-  constructor(
-    scene: Phaser.Scene,
-    cfg: OverlayConfig,
-    players: 1 | 2,
-    restartData?: () => object
-  ) {
+  /** `seats`: the live seats (the lineup); each gets a text copy facing it.
+   *  `onTap`: what a tap on the shown card does. */
+  constructor(scene: Phaser.Scene, cfg: OverlayConfig, seats: readonly PlayerId[], onTap: () => void) {
     const { x: cx, y: cy } = OVERLAY.center;
     const textGap = OVERLAY.iconR + 34;
 
@@ -51,25 +48,24 @@ export class Overlay {
 
     const icon = cfg.drawIcon(scene, cx, cy);
     const textStyle = { fontFamily: FONTS.body, fontSize: '16px', color: CSS.ink };
-    const textP2 = scene.add.text(cx, cy + textGap, cfg.text, textStyle).setOrigin(0.5);
-    const textP1 =
-      players === 2
-        ? scene.add
-            .text(cx, cy - textGap, cfg.text, textStyle)
-            .setOrigin(0.5)
-            .setAngle(180) // reads right-side-up from the top edge, like P1's HUD
-        : null;
+    // P2's copy below the icon; P1's above it, rotated 180° so it reads
+    // right-side-up from the top edge, like P1's HUD.
+    const texts = seats.map((p) =>
+      p === 'p1'
+        ? scene.add.text(cx, cy - textGap, cfg.text, textStyle).setOrigin(0.5).setAngle(180)
+        : scene.add.text(cx, cy + textGap, cfg.text, textStyle).setOrigin(0.5)
+    );
 
     // Explicit depth: the WaveDirector creates asteroids after this exists,
     // so creation order alone would put them above the card.
     this.container = scene.add
-      .container(0, 0, textP1 ? [dim, card, icon, textP1, textP2] : [dim, card, icon, textP2])
+      .container(0, 0, [dim, card, icon, ...texts])
       .setDepth(DEPTHS.overlay)
       .setVisible(false);
 
     // Not interactive until show(), so it never swallows seat input mid-game.
     this.tapZone = scene.add.zone(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT);
-    this.tapZone.on('pointerdown', () => scene.scene.restart(restartData?.()));
+    this.tapZone.on('pointerdown', onTap);
   }
 
   get visible(): boolean {

@@ -1,10 +1,11 @@
 /**
  * helpers.ts — the shared harness for the e2e specs (one spec per area:
- * combat, waves, boss, solo, controls-v2, haptics). Boots the game in a
+ * combat, waves, boss, join, solo, controls-v2, haptics). Boots the game in a
  * Pixel-6-sized touch viewport, drives it with real CDP touches + direct
  * `scene.rockets.fire(...)` shots, and reads live state through the
- * `window.__game` hook (src/main.ts) and the scene's DEV `__debug` surface
- * (src/scenes/SandboxScene.ts).
+ * `window.__game` hook (src/main.ts) and the scenes' DEV `__debug` surfaces:
+ * the join screen's (src/scenes/JoinScene.ts; gotoGame starts the run through
+ * its startRun) and the game's (src/scenes/SandboxScene.ts).
  *
  * Specs import `test` and `expect` from here, not from '@playwright/test':
  * this `test` carries the zero-console-error gate, so every case fails on a
@@ -36,6 +37,7 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
+import type { Lineup } from '../src/lineup';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -60,16 +62,23 @@ export const test = base.extend<{ consoleGate: void }>({
 });
 
 export const SCENE = `window.__game.scene.keys['Sandbox']`;
+/** The join screen (#20), the scene every boot opens on. */
+export const JOIN_SCENE = `window.__game.scene.keys['Join']`;
 
-export async function gotoGame(page: Page, query = ''): Promise<void> {
+/** Boot the game. By default it skips the join screen through its DEV
+ *  startRun hook with `lineup` (a seat left out doesn't join; both Normal is
+ *  the co-op every older case assumes). `'join'` stops on the join screen
+ *  instead, for the cases that drive it with touches. Either way the RAF loop
+ *  is parked on return. */
+export async function gotoGame(page: Page, query = '', lineup: Partial<Lineup> | 'join' = { p1: 'normal', p2: 'normal' }): Promise<void> {
   // Default 'load' (not 'networkidle' — Vite HMR keeps the socket busy).
   await page.goto('/' + query);
   await page.waitForSelector('#game canvas', { timeout: 15_000 });
-  // Wait for the scene's create() to run (its DEV __debug hook is the last thing
-  // it installs) rather than a fixed sleep — returns as soon as the game is ready
-  // to drive, which is both faster and less flaky than "hope a second is enough".
+  // Wait for the join screen's create() to run (its DEV __debug hook is the last
+  // thing it installs) rather than a fixed sleep — returns as soon as the game is
+  // ready to drive, which is both faster and less flaky than "hope a second is enough".
   await page.waitForFunction(
-    () => (window as any).__game?.scene?.keys?.['Sandbox']?.__debug !== undefined,
+    () => (window as any).__game?.scene?.keys?.['Join']?.__debug !== undefined,
     undefined,
     { timeout: 15_000 }
   );
@@ -95,6 +104,16 @@ export async function gotoGame(page: Page, query = ''): Promise<void> {
       }
     };
   });
+  if (lineup !== 'join') {
+    // On the parked loop: startRun queues the scene switch, and one fixed step
+    // runs it (the scene manager's queue, then Sandbox's create() and its first
+    // update), with no render to wait on.
+    await page.evaluate((l) => {
+      const w = window as any;
+      w.__game.scene.keys['Join'].__debug.startRun(l);
+      w.__step(1);
+    }, lineup);
+  }
 }
 
 /** Eyeball-aid screenshot — OFF by default (a headless swiftshader ReadPixels
@@ -250,6 +269,7 @@ export type LiveShot = { vx: number; vy: number; charged: boolean; missile: bool
  *  carrying ONLY the lifted point: a touchMove that merely omits a finger does
  *  NOT release it (found empirically; the same shape Puppeteer's TouchHandle
  *  uses). */
+export type Touchscreen = Awaited<ReturnType<typeof touchscreen>>;
 export async function touchscreen(page: Page) {
   const cdp = await page.context().newCDPSession(page);
   const rect = await page.evaluate(({ w, h }) => {
@@ -277,6 +297,13 @@ export async function touchscreen(page: Page) {
     },
   };
 }
+
+/** The live seats' ids, in seat order (['p1', 'p2'] in co-op). */
+export const seats = (page: Page) => page.evaluate(`${SCENE}.__debug.seats()`) as Promise<string[]>;
+
+/** Is the scene with this key running ('Join' or 'Sandbox')? */
+export const sceneActive = (page: Page, key: 'Join' | 'Sandbox') =>
+  page.evaluate(`window.__game.scene.isActive('${key}')`) as Promise<boolean>;
 
 export const v2Layout = (page: Page, player: 1 | 2) =>
   page.evaluate(`${SCENE}.__debug.v2Layout(${player})`) as Promise<V2Layout>;
