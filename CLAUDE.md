@@ -68,6 +68,12 @@ textures, tokens).
   one at a time (or batched into a workflow when several are big and independent).
 - **Finishing an item includes syncing `plans/spec.md`** and appending a line to `plans/notes.md`.
   The spec must never drift from decisions again; chat-only decisions don't count as recorded.
+- **Push and deploy to wrap up an item, without asking.** This is a personal project whose only
+  user is Michael. Once an item's change is committed and verified, push the branch you're on and
+  run its deploy: `npm run deploy:preview` for a working branch such as `controls-v2`, or
+  `npm run deploy` on `main`. Still ask first before merging one branch into another (for example
+  `controls-v2` into `main`), before any force-push or remote branch deletion, and before
+  `wrangler deploy` / `wrangler versions deploy`.
 - **Docs state what's true now; only `plans/notes.md` keeps history.** When a decision changes,
   rewrite the old text in place so it says the new thing. Don't add a correction further down
   ("update: actually…", "superseded by…") and leave the stale sentence standing. A reader who stops
