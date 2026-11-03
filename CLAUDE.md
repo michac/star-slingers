@@ -103,7 +103,8 @@ textures, tokens).
   (`?players=1`), `controls-v2.spec.ts` (two-thumb buttons + drag aim) and `haptics.spec.ts`. The
   shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, the `__debug`
   wrappers and the CDP `touchscreen`. Its exported `test` carries the zero-console-error gate as an
-  auto fixture, so **specs import `test`/`expect` from `./helpers`, never from `@playwright/test`**.
+  auto fixture, so **specs import `test`/`expect` from `./helpers`, never from `@playwright/test`**
+  (`harness.spec.ts` fails the suite if one does).
   A helper used by more than one spec goes in `helpers.ts`; a new case goes in its area's spec. The
   suite auto-starts the dev server headless on :5181 and drives real touches + direct shots. First
   run on a new machine needs `npx playwright install chromium`.
