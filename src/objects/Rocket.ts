@@ -2,7 +2,7 @@
  * RocketPool — pooled arcade-physics sprites for both players' shots: FIRE
  * rounds (plain or charged) and SPECIAL homing missiles (#22). Rounds fly
  * straight (no gravity) and recycle at the world bounds or on a hit (a charged
- * round carries on past a kill, see the scene's handleHit). Missiles carry a
+ * round carries on past a kill, see the scene's spendShot). Missiles carry a
  * target and get steered toward it each frame by steer().
  */
 import Phaser from 'phaser';
@@ -80,7 +80,6 @@ export class RocketPool {
     rocket.setData('missile', false); // pooled sprite may carry a stale flag
     rocket.setData('charged', false); // pooled sprite may carry a stale flag
     rocket.setData('player', player); // B33: escorts need one hit from each seat
-    rocket.setData('hitSet', new Set()); // targets this charged round has hit (and killed)
     rocket.setData('dist', 0); // reset travelled distance for the arm/ramp curve
     rocket.setData('age', 0); // ms in flight (the missile's lifetime cap)
     rocket.setData('history', [{ x, y }] as TrailPoint[]); // fresh trail history
@@ -109,13 +108,14 @@ export class RocketPool {
   }
 
   /** Arm a missile: steer() reads these keys. The straight arming run is
-   *  capped at half the distance to a close target, so it can't sail past it. */
+   *  capped at MISSILE.armFraction of the way to a close target, so it can't
+   *  sail past it. */
   private arm(rocket: Phaser.Physics.Arcade.Sprite, target: HomingTarget | null, x: number, y: number, vx: number, vy: number): void {
     rocket.setData('missile', true);
     rocket.setData('target', target);
     rocket.setData('speed', Math.hypot(vx, vy));
     const toTarget = target ? Phaser.Math.Distance.Between(x, y, target.sprite.x, target.sprite.y) : Infinity;
-    rocket.setData('armAt', Math.min(MISSILE.armDistancePx, toTarget * 0.5));
+    rocket.setData('armAt', Math.min(MISSILE.armDistancePx, toTarget * MISSILE.armFraction));
   }
 
   /** Per-frame missile steering (#22). Each missile flies STRAIGHT for its
@@ -171,8 +171,7 @@ export class RocketPool {
     rocket.setData('history', undefined); // drop the trail so a refire starts clean
     rocket.setData('charged', false); // clear the shot-kind flags…
     rocket.setData('missile', false);
-    rocket.setData('target', null); // …and drop its target / hit refs
-    rocket.setData('hitSet', undefined);
+    rocket.setData('target', null); // …and drop its target ref
     rocket.setData('player', undefined);
   }
 

@@ -34,10 +34,10 @@ type Point = { x: number; y: number };
 export type Button = 'fire' | 'special';
 
 export interface ShotKind {
+  /** The button released: FIRE, or SPECIAL (the seat's current special). */
+  button: Button;
   /** A charged FIRE round: FIRE held to a full charge. */
   charged: boolean;
-  /** Fired from SPECIAL (the seat's current special). */
-  special: boolean;
 }
 
 export interface TwoThumbControlConfig {
@@ -182,7 +182,7 @@ export class TwoThumbControl {
     }
     if (pointer.id !== this.buttonPointer) return;
     const button = this.held;
-    const kind: ShotKind = { charged: button === 'fire' && this.charge >= 1, special: button === 'special' };
+    const charged = button === 'fire' && this.charge >= 1;
     this.buttonPointer = null;
     this.held = null;
     this.charge = 0;
@@ -191,7 +191,7 @@ export class TwoThumbControl {
     if (!button || !this.config.canFire(button)) return;
     const dir = this.worldDir();
     const { anchor } = this.config;
-    this.config.onFire(anchor.x, anchor.y, dir.x, dir.y, kind);
+    this.config.onFire(anchor.x, anchor.y, dir.x, dir.y, { button, charged });
   }
 
   update(deltaMs: number): void {

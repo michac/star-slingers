@@ -145,9 +145,10 @@ export async function stepUntil(
 }
 
 /** Field a rock directly through the public reconfigure()/spawn() path (exactly
- *  what startWave does for lane rocks), then park it STATIONARY in-field at
- *  (x,y), clear of the station — so an interaction test never has to wait for a
- *  wave rock to drift into range. Uses a lane wrapper (asteroids[slot], slots
+ *  what startWave does for lane rocks), then place it in-field at (x,y), clear
+ *  of the station — so an interaction test never has to wait for a wave rock to
+ *  drift into range. STATIONARY by default; `speed` > 0 drifts it left at that
+ *  many px/s like a lane rock. Uses a lane wrapper (asteroids[slot], slots
  *  0..3; the splitter-child pool is the tail). */
 export async function fieldRock(
   page: Page,
@@ -158,27 +159,29 @@ export async function fieldRock(
     radius = ASTEROID_KIND[kind].radius,
     slot = 0,
     hp,
-  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number }
+    speed = 0,
+  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number; speed?: number }
 ): Promise<void> {
   await page.evaluate(
-    ({ x, y, kind, radius, slot, hp }) => {
+    ({ x, y, kind, radius, slot, hp, speed }) => {
       const s = (window as any).__game.scene.keys['Sandbox'];
       const a = s.asteroids[slot]; // a lane wrapper (NOT a child)
       // hp omitted = the kind's default max hp (1 today).
-      a.reconfigure({ kind, radius, y, speed: 0, ...(hp === undefined ? {} : { hp }) }, 0);
+      a.reconfigure({ kind, radius, y, speed, ...(hp === undefined ? {} : { hp }) }, 0);
       a.spawn(); // field it (off the right edge)...
       a.sprite.setPosition(x, y); // ...then place it in-field, clear of the station
       a.sprite.body.reset(x, y);
-      a.sprite.body.setVelocity(0, 0);
+      a.sprite.body.setVelocity(-speed, 0);
     },
-    { x, y, kind, radius, slot, hp }
+    { x, y, kind, radius, slot, hp, speed }
   );
 }
 
 // --- thin wrappers over the scene's DEV __debug surface + public fields ---
-/** Fire a plain P1 rocket through the public pool (not charged, not a missile). */
-export const fire = (page: Page, x: number, y: number, vx: number, vy: number) =>
-  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy})`);
+/** Fire a P1 rocket through the public pool: plain by default, or with the
+ *  pool's shot options as a JS literal (e.g. `'{ charged: true }'`). */
+export const fire = (page: Page, x: number, y: number, vx: number, vy: number, opts = '{}') =>
+  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy}, 'p1', ${opts})`);
 /** Count every shot the pool launches from now on; read it with fired(). */
 export const countShots = (page: Page) =>
   page.evaluate(() => {

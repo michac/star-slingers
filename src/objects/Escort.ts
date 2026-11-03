@@ -13,10 +13,6 @@ import { BOSS } from '../waves';
 import { TEX } from './textures';
 import type { PlayerId } from './Rocket';
 
-/** What a hit did: completed the second lock and downed the escort, added a
- *  lock, or was turned away (a repeat colour, or not a live target). */
-export type EscortHit = 'downed' | 'locked' | 'rejected';
-
 export class Escort {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
   readonly radius = BOSS_LAYOUT.escort.radius;
@@ -81,20 +77,21 @@ export class Escort {
   /** One unique hit from each player is required. Duplicate shots are consumed
    * but leave the lock unchanged, with a small muted reject spark. Solo (a
    * temporary prototype rule until #7's shot-type locks): it still takes two
-   * hits, but a repeat from the same seat fills the other lock. */
-  takeHit(player: PlayerId): EscortHit {
-    if (!this.active || this.popping) return 'rejected';
+   * hits, but a repeat from the same seat fills the other lock. Returns true
+   * when this hit downed the escort (its second lock). */
+  takeHit(player: PlayerId): boolean {
+    if (!this.active || this.popping) return false;
     let bit = player === 'p1' ? 1 : 2;
     if (this.solo && this.contributions & bit) bit ^= 3; // credit the absent seat's lock
     if (this.contributions & bit) {
       this.rejectSpark();
-      return 'rejected';
+      return false;
     }
     this.contributions |= bit;
     if (this.contributions !== 3) {
       this.sprite.setTexture(player === 'p1' ? TEX.escortP2Lock : TEX.escortP1Lock);
       this.pulseRemainingLock(player === 'p1' ? COLORS.p2 : COLORS.p1);
-      return 'locked';
+      return false;
     }
     // Destroyed: stop being a target/orbiter NOW so the gate fires immediately,
     // then a throwaway pop tween for juice.
@@ -112,7 +109,7 @@ export class Escort {
         if (!this.active) this.sprite.setVisible(false);
       },
     });
-    return 'downed';
+    return true;
   }
 
   private pulseRemainingLock(color: number): void {

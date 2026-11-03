@@ -289,7 +289,7 @@ export function requiredDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
 
 /** One seat's sustained damage ceiling: both ammo pools at their regen rates
  *  (FIRE rounds + SPECIAL missiles), one hit each. */
-export function seatDamagePerSec(): number {
+function seatDamagePerSec(): number {
   return (1000 / AMMO_REGEN_MS) * DAMAGE.fire + (1000 / SPECIAL.regenMs) * DAMAGE.missile;
 }
 

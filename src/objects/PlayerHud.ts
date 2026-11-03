@@ -7,7 +7,7 @@
  *
  * It owns the seat's two ammo pools: FIRE's (AMMO.max, one back per
  * AMMO_REGEN_MS) and SPECIAL's (SPECIAL.max, one back per SPECIAL.regenMs),
- * each on its own regen clock. An unlimited seat (`unlimitedAmmo`, the Easy
+ * each on its own regen clock. An unlimited seat (`setUnlimitedAmmo`, the Easy
  * seat's switch for #20) keeps both pools full: spending never drops them.
  */
 import Phaser from 'phaser';
@@ -23,8 +23,6 @@ export interface PlayerHudConfig {
   colorCss: string;
   /** The seat colour as a number, for the code-drawn special icon. */
   color: number;
-  /** Both ammo pools stay full (the Easy seat, #20). Default false. */
-  unlimitedAmmo?: boolean;
 }
 
 /** Each pool's size and regen interval, keyed by the button that spends it. */
@@ -32,6 +30,7 @@ const POOLS: Record<Button, { max: number; regenMs: number }> = {
   fire: { max: AMMO.max, regenMs: AMMO_REGEN_MS },
   special: { max: SPECIAL.max, regenMs: SPECIAL.regenMs },
 };
+const BUTTONS = Object.keys(POOLS) as Button[];
 
 export class PlayerHud {
   private readonly counts: Record<Button, number> = { fire: POOLS.fire.max, special: POOLS.special.max };
@@ -41,10 +40,9 @@ export class PlayerHud {
   /** The special row's label: the current special's icon. */
   private readonly specialIcon: Phaser.GameObjects.Graphics;
   private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
-  private unlimited: boolean;
+  private unlimited = false;
 
   constructor(scene: Phaser.Scene, private readonly cfg: PlayerHudConfig) {
-    this.unlimited = cfg.unlimitedAmmo ?? false;
     const labelStyle = { fontFamily: FONTS.body, fontSize: '11px', color: CSS.chromeMuted };
     const value = (y: number, valueColor: string) =>
       scene.add
@@ -84,7 +82,7 @@ export class PlayerHud {
       ])
       .setAngle(cfg.angle);
 
-    for (const pool of Object.keys(POOLS) as Button[]) {
+    for (const pool of BUTTONS) {
       scene.time.addEvent({
         delay: POOLS[pool].regenMs,
         loop: true,
@@ -122,14 +120,9 @@ export class PlayerHud {
   setUnlimitedAmmo(on: boolean): void {
     this.unlimited = on;
     if (on) {
-      this.counts.fire = POOLS.fire.max;
-      this.counts.special = POOLS.special.max;
+      for (const pool of BUTTONS) this.counts[pool] = POOLS[pool].max;
       this.refresh();
     }
-  }
-
-  get unlimitedAmmo(): boolean {
-    return this.unlimited;
   }
 
   /** Change the special shown on the special row: redraws its icon label. */

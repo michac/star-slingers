@@ -187,7 +187,7 @@ export class SandboxScene extends Phaser.Scene {
           rocketTexture: tex,
           canFire: (button) => hud.canFire(button),
           onFire: (x, y, dirx, diry, kind) => {
-            hud.spend(kind.special ? 'special' : 'fire');
+            hud.spend(kind.button);
             this.fireShot(tex, player, x, y, dirx, diry, kind);
           },
           specialTargetAt: (ox, oy, dx, dy) => this.missileMarker(ox, oy, dx, dy),
@@ -311,11 +311,12 @@ export class SandboxScene extends Phaser.Scene {
    *  pickMissileTarget finds along the aim; with none it flies straight and
    *  keeps looking (Rocket.steer). Only FIRE charges, so a shot is never both. */
   private fireShot(tex: string, player: PlayerId, x: number, y: number, dirx: number, diry: number, kind: ShotKind): void {
-    const { charged, special } = kind;
+    const charged = kind.charged;
+    const special = kind.button === 'special';
     const speed = special ? MISSILE.speed : SLING.maxSpeed;
     const opts = special ? { missile: true, target: this.pickMissileTarget(x, y, dirx, diry) } : { charged };
     // Every seat's shot lands here, so this one buzz (#3) covers them all.
-    if (this.rockets.fire(tex, x, y, dirx * speed, diry * speed, player, opts)) shotBuzz(kind);
+    if (this.rockets.fire(tex, x, y, dirx * speed, diry * speed, player, opts)) shotBuzz({ charged, special });
   }
 
   /** Change a seat's current special (#26 upgrades): the SPECIAL button and
@@ -390,24 +391,13 @@ export class SandboxScene extends Phaser.Scene {
     if (!pair || !asteroid) return;
     const { rocket } = pair;
 
-    // Shot rules (#22). A plain FIRE round or a missile deals its damage and
-    // is spent. A charged round deals double and carries on along its line
-    // only if this hit KILLS the rock; it stops in anything it doesn't kill.
-    // Its hitSet guards the multi-frame overlap window, so a round carrying on
-    // never hits the same rock twice (a popped rock's body is off anyway).
-    // Read the shot type BEFORE recycling (recycle clears the rocket's flags).
+    // Shot rules (#22): a plain FIRE round or a missile deals its damage; a
+    // charged round deals double. Read the shot type BEFORE spendShot (recycle
+    // clears the rocket's flags).
     const charged = rocket.getData('charged') === true;
     const damage = charged ? DAMAGE.charged : rocket.getData('missile') ? DAMAGE.missile : DAMAGE.fire;
-    if (charged) {
-      const hitSet = rocket.getData('hitSet') as Set<HomingTarget>;
-      if (hitSet.has(asteroid)) return; // already hit this rock on this pass
-      hitSet.add(asteroid);
-    } else {
-      this.rockets.recycle(rocket);
-    }
-
     const pts = asteroid.takeHit(damage);
-    if (charged && pts === 0) this.rockets.recycle(rocket); // didn't kill: it stops here
+    this.spendShot(rocket, charged, pts > 0);
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
       // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
@@ -436,11 +426,16 @@ export class SandboxScene extends Phaser.Scene {
       ref.takeHit(charged);
       return;
     }
-    const hitSet = rocket.getData('hitSet') as Set<HomingTarget> | undefined;
-    if (hitSet?.has(ref)) return; // a carrying-on charged round already downed it
-    if (ref.takeHit(player) === 'downed' && charged) hitSet?.add(ref);
-    else this.rockets.recycle(rocket);
+    this.spendShot(rocket, charged, ref.takeHit(player));
   };
+
+  /** The charged round's pass-through rule (#22), for rocks and escorts alike:
+   *  it carries on along its line only past a target this hit killed; every
+   *  other hit spends the shot. A killed target turns its body off in the same
+   *  call, so the round carrying on can't overlap it again. */
+  private spendShot(rocket: Phaser.Physics.Arcade.Sprite, charged: boolean, killed: boolean): void {
+    if (!(charged && killed)) this.rockets.recycle(rocket);
+  }
 
   /** The web is checked before the boss/escort overlap callback, so its line
    * collision consumes a rocket rather than letting Arcade's sprite overlap

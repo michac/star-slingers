@@ -151,8 +151,8 @@ export class Asteroid {
     }
     if (this.child) {
       this.aliveMs += delta;
-      // Spawn grace: keep the body off briefly so an in-flight charged round (whose
-      // per-rocket hitSet predates this child) can't hit it the instant it
+      // Spawn grace: keep the body off briefly so a charged round carrying on
+      // past the kill that split its parent can't hit it the instant it
       // spawns. The aliveMs clock pauses for free behind overlays.
       const body = this.sprite.body as Phaser.Physics.Arcade.Body;
       if (!body.enable && this.aliveMs >= this.graceUntilMs) body.enable = true;

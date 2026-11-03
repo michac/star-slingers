@@ -49,7 +49,8 @@ export const MISSILE = {
   coneHalfAngleDeg: 45, // target must sit within this of the aim/heading line
   maxRange: 700, // ignore targets farther than this along the line
   ringPad: 6, // aim-preview ring sits this far outside the targeted enemy
-  armDistancePx: 40, // straight flight before any steering
+  armDistancePx: 40, // straight flight before any steering…
+  armFraction: 0.5, // …but never more than this share of the way to a launch target
   rampDistancePx: 50, // then ease the turn-rate 0→full over this much more travel
   turnRateDeg: 720, // max deg/s the heading may rotate toward the target
   lifetimeMs: 3000, // recycle a missile still flying after this long

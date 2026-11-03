@@ -4,7 +4,6 @@
  */
 import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fieldRock, fire, healthBars, touchscreen, v2Layout, liveShots, type Page } from './helpers';
 import { GAME_WIDTH, HEALTH_BAR, MISSILE } from '../src/layout';
-import { ASTEROID_KIND } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -66,8 +65,7 @@ const rock = (page: Page, slot: number) =>
   ) as Promise<{ hp: number; alive: boolean }>;
 const liveRockets = (page: Page) => page.evaluate(`${SCENE}.rockets.group.countActive(true)`) as Promise<number>;
 /** Fire a P1 FIRE round straight right along y=300, through the pool's shot options. */
-const fireRound = (page: Page, charged: boolean) =>
-  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', 170, 300, 400, 0, 'p1', { charged: ${charged} })`);
+const fireRound = (page: Page, charged: boolean) => fire(page, 170, 300, 400, 0, `{ charged: ${charged} }`);
 
 test('an uncharged FIRE round does 1 damage and stops at the first rock', async ({ page }) => {
   await gotoGame(page);
@@ -109,18 +107,8 @@ test('a SPECIAL missile connects with a moving rock from a rough aim', async ({ 
   await gotoGame(page);
   await clearField(page);
   // A rock drifting left at wave speed (lanes cruise at ~40-70 px/s).
-  const rx = 320, ry = 300, speed = 65;
-  await page.evaluate(
-    ({ rx, ry, speed, radius }) => {
-      const a = (window as any).__game.scene.keys['Sandbox'].asteroids[0];
-      a.reconfigure({ kind: 'standard', radius, y: ry, speed }, 0);
-      a.spawn();
-      a.sprite.setPosition(rx, ry);
-      a.sprite.body.reset(rx, ry);
-      a.sprite.body.setVelocityX(-speed);
-    },
-    { rx, ry, speed, radius: ASTEROID_KIND.standard.radius }
-  );
+  const rx = 320, ry = 300;
+  await fieldRock(page, { x: rx, y: ry, speed: 65 });
   // The bottom seat aims 35° off its launcher→rock line (to the rock's left).
   const L = await v2Layout(page, 2);
   const onLineDeg = (Math.atan2(L.anchor.y - ry, rx - L.anchor.x) * 180) / Math.PI;
