@@ -649,6 +649,7 @@ section's "## Prototype" markers) and the two still-concept specs keep the word.
 
 ## Build history
 
+- **#15 · Split e2e suite + type-check e2e/ (PR #16, 2026-11-02):** `e2e/sandbox.spec.ts` (22 cases) split into one spec per area: `combat` 7, `waves` 2, `boss` 3, `solo` 2, `controls-v2` 5, `haptics` 3, sharing `e2e/helpers.ts`. Its exported `test` carries the zero-console-error gate as an auto fixture (replacing the beforeEach/afterEach pair); a new `harness.spec.ts` guard fails if a spec imports `test` from `@playwright/test` and so skips the gate. Case bodies moved verbatim, proven by a TS-AST body diff with 4 expected hunks: 2 unused `hitsBefore` removed, 2 comments the move made false. `tsconfig.e2e.json` (root + `types: ["node"]`, since TS 6 loads no `@types` by default) brings `e2e/` + `playwright.config.ts` under `npm run typecheck`, and `build` now runs `typecheck`, so CI and the deploy pre-flights catch e2e type errors. Found on the way: the root tsconfig is not browser-only, because vite's types pull Node globals in through `vite.config.ts`. Suite time unchanged (`--repeat-each=3` 1.3m before, 1.4m after with the guard; 23 cases in ~27s).
 - **#7 controls decided: two-thumb + drag aim (2026-11-02, `controls-v2`):** Michael's solo
   playtest on the Pixel picked the **two-thumb controls** over the old sling, and **drag aim** over
   arc aim; lefty mirroring stays as an option. Removed the losing variants: `SlingControl`,
