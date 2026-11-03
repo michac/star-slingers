@@ -4,6 +4,7 @@
  * unlimited ammo; Try again keeps the lineup, a win goes back to the join screen.
  * Driven by real touches. Shared harness and the console gate: ./helpers.ts.
  */
+import { AMMO, SPECIAL } from '../src/layout';
 import {
   test, expect, SCENE, JOIN_SCENE, gotoGame, stepGame, touchscreen, v2Layout, liveShots, mirrored, seats, sceneActive as active,
   type Page, type Pt, type Touchscreen,
@@ -22,7 +23,10 @@ const bannerAngles = (page: Page) =>
 const failTextAngles = (page: Page) =>
   page.evaluate(`${SCENE}.failOverlay.container.list.filter((o) => o.type === 'Text').map((t) => Math.abs(t.angle))`) as Promise<number[]>;
 /** The AMMO readout text of HUD `i` (index-aligned with the live seats). */
-const ammoText = (page: Page, i: number) => page.evaluate(`${SCENE}.scoreKeeper.huds[${i}].ammoValue.text`) as Promise<string>;
+/** A seat's HUD readout for one ammo pool ('5', '0', '∞'…), by HUD index. */
+const ammoText = (page: Page, i: number, pool: 'fire' | 'special' = 'fire') =>
+  page.evaluate(`${SCENE}.huds[${i}].values.${pool}.text`) as Promise<string>;
+const specialAmmo = (page: Page, player: 1 | 2) => page.evaluate(`${SCENE}.__debug.specialAmmo(${player})`) as Promise<number>;
 
 /** One quick tap at a game point (finger 1), with a frame for the scene to read it. */
 async function tap(page: Page, t: Touchscreen, at: Pt): Promise<void> {
@@ -163,10 +167,12 @@ test('a seat leaving mid-countdown restarts it, so the leaver has time to come b
   expect(await seats(page)).toEqual(['p1', 'p2']);
 });
 
-test('an Easy seat fires past the Normal ammo cap; its readout shows ∞', async ({ page }) => {
+test('an Easy seat fires past both Normal ammo caps; its readouts show ∞', async ({ page }) => {
   await gotoGame(page, '', { p1: 'normal', p2: 'easy' });
-  expect(await ammoText(page, 0)).toBe('5');
+  expect(await ammoText(page, 0)).toBe(String(AMMO.max));
   expect(await ammoText(page, 1)).toBe('∞');
+  expect(await ammoText(page, 0, 'special')).toBe(String(SPECIAL.max));
+  expect(await ammoText(page, 1, 'special')).toBe('∞');
   const L1 = await v2Layout(page, 1);
   const L2 = await v2Layout(page, 2);
   const t = await touchscreen(page);
@@ -180,6 +186,18 @@ test('an Easy seat fires past the Normal ammo cap; its readout shows ∞', async
   expect(shots.filter((s) => s.player === 'p2')).toHaveLength(8); // Easy: never runs dry
   expect(await ammoText(page, 0)).toBe('0');
   expect(await ammoText(page, 1)).toBe('∞');
+  // The SPECIAL pool too: two more taps than a Normal seat holds, inside one
+  // special regen tick (3s).
+  for (let i = 0; i < SPECIAL.max + 2; i++) {
+    await tap(page, t, L1.special);
+    await tap(page, t, L2.special);
+  }
+  const missiles = (await liveShots(page)).filter((s) => s.missile);
+  expect(missiles.filter((s) => s.player === 'p1')).toHaveLength(SPECIAL.max); // Normal: the cap
+  expect(missiles.filter((s) => s.player === 'p2')).toHaveLength(SPECIAL.max + 2); // Easy: never runs dry
+  expect(await specialAmmo(page, 1)).toBe(0);
+  expect(await specialAmmo(page, 2)).toBe(SPECIAL.max);
+  expect(await ammoText(page, 1, 'special')).toBe('∞');
 });
 
 /** Show an end card and tap it. A zone made interactive joins the input list
