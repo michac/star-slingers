@@ -7,7 +7,7 @@
  *
  * One shared Graphics, cleared and redrawn every frame from whatever targets
  * the scene hands it: nothing is created per enemy, and a dead or parked
- * enemy simply isn't in the list next frame. Generic over HealthBarTarget so
+ * enemy is skipped from the next frame on. Generic over HealthBarTarget so
  * any enemy with hp can feed it. Shields, the boss's shield web and the
  * escorts' lock fins are not hp and never get a bar, and the boss keeps its own
  * HEALTH gauge (BossBars).
@@ -15,15 +15,15 @@
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
 import { HEALTH_BAR } from '../layout';
+import type { HomingTarget } from './HomingTarget';
 
-/** What a bar needs from an enemy: where it is, how big, how hurt. */
-export interface HealthBarTarget {
-  x: number;
-  y: number;
-  radius: number;
-  hp: number;
-  maxHp: number;
-}
+/** What a bar needs from an enemy: the HomingTarget shape (sprite, live/popping
+ *  flags, radius) plus its hp. Asteroid satisfies it as-is, so the scene hands
+ *  over its wrappers directly — nothing is copied or allocated per frame. */
+export type HealthBarTarget = HomingTarget & {
+  readonly hp: number;
+  readonly maxHp: number;
+};
 
 /** A drawn bar: its centre and remaining fraction (the e2e healthBars() hook). */
 export interface DrawnHealthBar {
@@ -34,7 +34,7 @@ export interface DrawnHealthBar {
 
 export class HealthBars {
   private readonly g: Phaser.GameObjects.Graphics;
-  private drawn: DrawnHealthBar[] = [];
+  private readonly drawn: DrawnHealthBar[] = [];
 
   constructor(scene: Phaser.Scene) {
     this.g = scene.add.graphics().setDepth(HEALTH_BAR.depth);
@@ -45,19 +45,21 @@ export class HealthBars {
     return this.drawn;
   }
 
-  /** Redraw: one bar per target that is damaged but still alive. */
-  draw(targets: Iterable<HealthBarTarget | null>): void {
+  /** Redraw: one bar per target that is damaged but still in play (a parked or
+   *  popping target is skipped, so a killed enemy's bar goes the frame it dies). */
+  draw(targets: Iterable<HealthBarTarget>): void {
     const g = this.g;
     g.clear();
-    this.drawn = [];
+    this.drawn.length = 0;
     const w = HEALTH_BAR.width;
     for (const t of targets) {
-      if (!t || t.maxHp <= 1 || t.hp <= 0 || t.hp >= t.maxHp) continue;
+      if (!t.isActive || t.isPopping || t.hp >= t.maxHp) continue;
+      const { x, y } = t.sprite;
       const frac = t.hp / t.maxHp;
       const h = Math.max(HEALTH_BAR.minHeight, t.radius * HEALTH_BAR.heightPerRadius);
-      const cx = t.x + t.radius + HEALTH_BAR.gap + w / 2;
-      const left = cx - w / 2;
-      const top = t.y - h / 2;
+      const left = x + t.radius + HEALTH_BAR.gap;
+      const cx = left + w / 2;
+      const top = y - h / 2;
       // Track.
       g.fillStyle(COLORS.lineDim, 0.35);
       g.fillRoundedRect(left, top, w, h, w / 2);
@@ -66,8 +68,8 @@ export class HealthBars {
       // Centred fill: shrinks toward the middle from both ends.
       const fh = frac * h;
       g.fillStyle(COLORS.health, 0.95);
-      g.fillRoundedRect(left, t.y - fh / 2, w, fh, Math.min(w / 2, fh / 2));
-      this.drawn.push({ x: cx, y: t.y, frac });
+      g.fillRoundedRect(left, y - fh / 2, w, fh, Math.min(w / 2, fh / 2));
+      this.drawn.push({ x: cx, y, frac });
     }
   }
 }

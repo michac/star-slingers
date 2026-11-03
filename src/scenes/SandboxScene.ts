@@ -145,7 +145,7 @@ export class SandboxScene extends Phaser.Scene {
     // to its body (registered on scene START, so it runs before this listener),
     // so a bar sits on its rock's current-frame position.
     this.healthBars = new HealthBars(this);
-    const drawHealthBars = () => this.healthBars.draw(this.asteroids.map((a) => a.healthBar));
+    const drawHealthBars = () => this.healthBars.draw(this.asteroids);
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, drawHealthBars);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, drawHealthBars));
 

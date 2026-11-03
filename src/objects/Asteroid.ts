@@ -2,7 +2,7 @@
  * Asteroid — a drifting target: a bare physics Sprite (B37: size alone
  * tells standards from splitters, so there's no label). Pops once its hp runs
  * out (1 hp for every kind today, so any hit pops it; a tougher rock shows a
- * health bar, drawn by the scene's HealthBars from `healthBar`), then asks the
+ * health bar, drawn by the scene's HealthBars from `hp`/`maxHp`), then asks the
  * WaveDirector for respawn permission (the wave's finite quota); denied
  * respawns park it inactive instead. The wrapper itself is NEVER destroyed
  * or recreated — the scene's rocket→asteroid overlap collider is built once
@@ -14,7 +14,6 @@ import { APPROACH_X, GAME_WIDTH, SCORE, SPLITTER_CHILDREN, STATION } from '../la
 import { COLORS } from '../tokens';
 import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
 import { TEX } from './textures';
-import type { HealthBarTarget } from './HealthBars';
 
 /** A non-lethal hit flashes the rock white this long, so a shot that chips a
  *  tough rock never reads as "my shot didn't work". Counted on update()'s delta
@@ -91,13 +90,6 @@ export class Asteroid {
     return maxHpOf(this._spec);
   }
 
-  /** What the health bar needs; null while out of play (parked or popping),
-   *  so a killed rock's bar goes the frame it dies. */
-  get healthBar(): HealthBarTarget | null {
-    if (!this.active || this.popping) return null;
-    return { x: this.sprite.x, y: this.sprite.y, radius: this._spec.radius, hp: this._hp, maxHp: this.maxHp };
-  }
-
   /** Splitter children move fast on spawn — the e2e suite's
    *  childrenAlive() hook counts them. */
   get isChild(): boolean {
@@ -112,7 +104,8 @@ export class Asteroid {
     this.spawnGapMax = spawnGapMax;
     this.child = false; // defensive: lane reconfigure clears any child identity
     this.aliveMs = 0;
-    this.resetHp(); // also restores the undamaged texture
+    this.resetHp();
+    this.sprite.setTexture(TEX.asteroid(spec.radius)); // the only place a wrapper's radius changes
     (this.sprite.body as Phaser.Physics.Arcade.Body).setCircle(spec.radius);
     this.park();
   }
@@ -204,12 +197,11 @@ export class Asteroid {
     return this._spec.kind === 'splitter' ? SCORE.splitter : SCORE.standard;
   }
 
-  /** Full hp for the current spec, undamaged look. */
+  /** Full hp for the current spec, no hit flash. */
   private resetHp(): void {
     this._hp = this.maxHp;
     this.flashMs = 0;
     this.sprite.clearTint();
-    this.sprite.setTexture(TEX.asteroid(this._spec.radius));
   }
 
   /** Non-lethal hit feedback (only reachable when max hp > 1): a brief white

@@ -36,6 +36,7 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
+import type { DrawnHealthBar } from '../src/objects/HealthBars';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -185,6 +186,9 @@ export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
   page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
 export const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
 export const startBoss = (page: Page) => page.evaluate(`${SCENE}.__debug.startBoss()`);
+/** The health bars (#23) drawn on the latest frame. */
+export const healthBars = (page: Page) =>
+  page.evaluate(`${SCENE}.__debug.healthBars()`) as Promise<DrawnHealthBar[]>;
 
 // ---------------------------------------------------------------------------
 // Touch helpers for the controls-v2 (#7) seats: two-thumb drag aim + fire
