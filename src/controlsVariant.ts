@@ -6,49 +6,29 @@
  * Lefty is switched in game with each seat's swap control (#21) and SAVED to
  * localStorage, so the phone remembers it across runs and reloads (the
  * installed home-screen PWA too). Every storage call is try/caught: private
- * mode or blocked storage just means no memory. Saved keys this module doesn't
- * read are ignored.
+ * mode or blocked storage just means no memory. An unrecognised saved value
+ * reads as the default (nobody mirrored).
  */
 
 export type LeftySetting = 'p1' | 'p2' | 'both' | 'none';
 
-export interface ControlsVariant {
-  lefty: LeftySetting;
-}
-
-/** Default: nobody mirrored. */
-const DEFAULTS: ControlsVariant = { lefty: 'none' };
-
-const ALLOWED: readonly LeftySetting[] = ['p1', 'p2', 'both', 'none'];
+const ALLOWED: readonly string[] = ['p1', 'p2', 'both', 'none'] satisfies readonly LeftySetting[];
 
 /** Storage key (unchanged since the old `?lefty` URL switch, so a saved choice carries over). */
 const LEFTY_KEY = 'starSlingers.lefty';
 
-function storageGet(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
+let cached: LeftySetting | null = null;
 
-function storageSet(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // No storage (private mode, blocked site data): the choice lasts this boot only.
-  }
-}
-
-let cached: ControlsVariant | null = null;
-
-/** The phone's variant, read from storage once; setSeatLefty keeps it current. */
-export function controlsVariant(): ControlsVariant {
-  if (!cached) {
-    const saved = storageGet(LEFTY_KEY);
-    cached = {
-      lefty: saved !== null && (ALLOWED as readonly string[]).includes(saved) ? (saved as LeftySetting) : DEFAULTS.lefty,
-    };
+/** The phone's lefty setting, read from storage once; setSeatLefty keeps it current. */
+export function leftySetting(): LeftySetting {
+  if (cached === null) {
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem(LEFTY_KEY);
+    } catch {
+      // No storage: the default.
+    }
+    cached = saved !== null && ALLOWED.includes(saved) ? (saved as LeftySetting) : 'none';
   }
   return cached;
 }
@@ -60,9 +40,13 @@ export function isLefty(lefty: LeftySetting, player: 'p1' | 'p2'): boolean {
 
 /** Set one seat's lefty, leaving the other seat's as it was, and save it. */
 export function setSeatLefty(player: 'p1' | 'p2', on: boolean): void {
-  const variant = controlsVariant();
-  const p1 = player === 'p1' ? on : isLefty(variant.lefty, 'p1');
-  const p2 = player === 'p2' ? on : isLefty(variant.lefty, 'p2');
-  variant.lefty = p1 && p2 ? 'both' : p1 ? 'p1' : p2 ? 'p2' : 'none';
-  storageSet(LEFTY_KEY, variant.lefty);
+  const current = leftySetting();
+  const p1 = player === 'p1' ? on : isLefty(current, 'p1');
+  const p2 = player === 'p2' ? on : isLefty(current, 'p2');
+  cached = p1 && p2 ? 'both' : p1 ? 'p1' : p2 ? 'p2' : 'none';
+  try {
+    window.localStorage.setItem(LEFTY_KEY, cached);
+  } catch {
+    // No storage (private mode, blocked site data): the choice lasts this boot only.
+  }
 }

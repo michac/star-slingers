@@ -318,17 +318,17 @@ test('v2: an empty SPECIAL pool shows no target ring and dims the nocked rocket 
   const L = await v2Layout(page, 2);
   await fieldRock(page, { x: L.anchor.x, y: 400 }); // on the boot aim line
   const t = await touchscreen(page);
-  const held = () =>
+  const ringAndRocket = () =>
     page.evaluate(`[${SCENE}.controls[1].lockGfx.commandBuffer.length, ${SCENE}.controls[1].nockedRocket.alpha]`) as Promise<number[]>;
   // With missiles: the ring is drawn and the rocket is bright.
   await t.down(1, L.special.x, L.special.y);
   await stepGame(page, 16, 1);
-  const [ring, alpha] = await held();
+  const [ring, alpha] = await ringAndRocket();
   expect(ring).toBeGreaterThan(0);
   expect(alpha).toBe(1);
   await page.evaluate(`${SCENE}.huds[1].counts.special = 0`); // pool empty (FIRE's still full)
   await stepGame(page, 16, 1);
-  expect(await held()).toEqual([0, 0.35]);
+  expect(await ringAndRocket()).toEqual([0, 0.35]);
   await t.up(1);
   expect(await liveShots(page)).toHaveLength(0);
 });
