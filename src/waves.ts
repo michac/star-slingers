@@ -7,11 +7,11 @@
  * The model (see docs/design.md §7 "Difficulty"): a wave is a TARGET — the net team
  * damage/s it should demand — and `solveWave` realizes it by advancing knobs in
  * priority order (count → speed → toughness) until the field's threat meets the
- * target. Every shot deals 1 damage today (`DAMAGE`), so damage/s == hits/s.
+ * target. Damage per shot is `DAMAGE`; every rock is 1 hp today, so damage/s == kills/s.
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, SPLITTER_CHILDREN, STATION } from './layout';
+import { AMMO_REGEN_MS, GAME_WIDTH, SHIELD_RINGS, SPECIAL, SPLITTER_CHILDREN, STATION } from './layout';
 
 export interface AsteroidSpec {
   kind: AsteroidKind;
@@ -30,13 +30,15 @@ export const ASTEROID_KIND = {
   splitter: { radius: 17, hp: 1 },
 } as const satisfies Record<AsteroidKind, { radius: number; hp: number }>;
 
-/** Damage per rocket hit, by shot type — the dial for future shot types
- *  (e.g. a railgun that hits harder). All 1 today, so every rock still pops on
- *  any hit and the solver's damage/s equals the old hits/s exactly. */
+/** Damage per rocket hit, by shot type (#22): a plain FIRE round, a charged
+ *  FIRE round (the railgun: double damage, and it carries on past a target only
+ *  if this hit kills it), and the SPECIAL homing missile. Every rock is 1 hp
+ *  today, so a charged round's second point is overkill on a rock and the
+ *  solver's per-kill damage is unchanged. */
 export const DAMAGE = {
-  normal: 1,
-  homing: 1,
-  railgun: 1,
+  fire: 1,
+  charged: 2,
+  missile: 1,
 } as const;
 
 /** A rock's max hp: its spec override, else its kind's default. */
@@ -209,8 +211,8 @@ export const BOSS = {
 
 // ---- difficulty budget + solver (see docs/design.md §7 "Difficulty") ----
 // threat = sum of clearDamage*speed/travel; leak = what shield regen forgives;
-// required = threat - leak is THE scalar (damage/s; == hits/s while DAMAGE is
-// all 1). The solver INVERTS it: given a target required, pick knobs (in
+// required = threat - leak is THE scalar (damage/s; == kills/s while every
+// rock is 1 hp). The solver INVERTS it: given a target required, pick knobs (in
 // priority order) so threat meets the target.
 // An approximation — consistency matters more than precision.
 
@@ -285,8 +287,14 @@ export function requiredDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
   return Math.max(0, threatDamagePerSec(wave, players) - leakAllowancePerSec(wave));
 }
 
-/** Fraction of the players' damage ceiling (seats × ammo rate × a normal
- *  shot's damage) that must land. */
+/** One seat's sustained damage ceiling: both ammo pools at their regen rates
+ *  (FIRE rounds + SPECIAL missiles), one hit each. */
+export function seatDamagePerSec(): number {
+  return (1000 / AMMO_REGEN_MS) * DAMAGE.fire + (1000 / SPECIAL.regenMs) * DAMAGE.missile;
+}
+
+/** Fraction of the players' damage ceiling (seats × seatDamagePerSec) that
+ *  must land. */
 export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
-  return requiredDamagePerSec(wave, players) / (players * (1000 / AMMO_REGEN_MS) * DAMAGE.normal);
+  return requiredDamagePerSec(wave, players) / (players * seatDamagePerSec());
 }

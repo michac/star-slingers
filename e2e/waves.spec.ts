@@ -4,12 +4,14 @@
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, fieldRock, stepGame, stepUntil, type Page } from './helpers';
+import { AMMO_REGEN_MS, SPECIAL } from '../src/layout';
 import {
   actStartWave,
   ASTEROID_KIND,
   breakEvenAccuracy,
   clearDamage,
   COMMAND_SHIP_WAVE,
+  DAMAGE,
   requiredDamagePerSec,
   RUN,
   SOLO,
@@ -178,4 +180,12 @@ test('solo scales wave targets; two-player targets are untouched', () => {
     expect(requiredDamagePerSec(w, 1)).toBeGreaterThan(0);
     expect(perRequired(1) / perRequired(2)).toBeCloseTo(2, 10);
   }
+});
+
+test('break-even accuracy is over both ammo pools (#22)', () => {
+  // A seat's ceiling = FIRE rounds + SPECIAL missiles at their regen rates,
+  // one hit each: dropping the missile pool from it would raise break-even.
+  const seat = (1000 / AMMO_REGEN_MS) * DAMAGE.fire + (1000 / SPECIAL.regenMs) * DAMAGE.missile;
+  const w = RUN.flatMap((r) => (r.field ? [r.field] : []))[0];
+  expect(breakEvenAccuracy(w, 2)).toBeCloseTo(requiredDamagePerSec(w, 2) / (2 * seat), 10);
 });

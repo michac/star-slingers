@@ -71,6 +71,82 @@ test('boss co-op locks, shield-web gaps + regen', async ({ page }) => {
   expect(fired.done).toBe(true);
 });
 
+test('the boss takes 1 HP from a charged round only: plain rounds and missiles do nothing', async ({ page }) => {
+  await gotoGame(page);
+  await enterBoss(page);
+  const hpStart = await bossHp(page);
+  // Down escort 2 (the left node) so a horizontal path from x=60 reaches the boss.
+  await hitEscort(page, 2, 'p2');
+  await hitEscort(page, 2, 'p1');
+  await stepGame(page, 16, 1);
+  expect(await page.evaluate(`${SCENE}.__debug.webBlocks(60, 370, 200, 370)`)).toBe(false);
+  // Each shot straight right along y=370 into the boss; the missile is held on
+  // that line (an arming run longer than the flight) so it reaches the boss.
+  const shoot = (opts: string, afterFire = '') =>
+    page.evaluate(`(() => { const r = ${SCENE}.rockets.fire('rocket-p1', 60, 370, 350, 0, 'p1', ${opts}); ${afterFire} })()`);
+  // Spent ON the boss (~16 steps away), not at the screen edge (~50).
+  const spentOnBoss = async () => {
+    const spent = await stepUntil(page, `s.rockets.group.countActive(true) === 0`, 40);
+    expect(spent.done).toBe(true);
+    expect(spent.steps).toBeLessThan(25);
+  };
+  await shoot('{}');
+  await spentOnBoss();
+  expect(await bossHp(page)).toBe(hpStart);
+  await shoot('{ missile: true, target: null }', "r.setData('armAt', 1e9);");
+  await spentOnBoss();
+  expect(await bossHp(page)).toBe(hpStart);
+  await shoot('{ charged: true }');
+  await spentOnBoss();
+  expect(await bossHp(page)).toBe(hpStart - 1); // 1 HP per charged hit, not DAMAGE.charged
+});
+
+test('a charged round that downs an escort carries on through the gap into the boss', async ({ page }) => {
+  await gotoGame(page);
+  await enterBoss(page);
+  const hpStart = await bossHp(page);
+  // Escort 2 already has P2's lock; a charged P1 round completes it.
+  await hitEscort(page, 2, 'p2');
+  expect((await escortLocks(page))[2]).toBe(2);
+  // Fire inward along the boss→escort line from just outside the escort,
+  // slow enough that the escort overlap lands before the round reaches the
+  // web's node (where its links end).
+  const result = await page.evaluate(() => {
+    const w = window as any;
+    const s = w.__game.scene.keys['Sandbox'];
+    const e = s.bossEncounter.escorts[2].sprite;
+    const b = s.bossEncounter.boss.sprite;
+    const len = Math.hypot(e.x - b.x, e.y - b.y);
+    const ux = (e.x - b.x) / len, uy = (e.y - b.y) / len;
+    const r = s.rockets.fire('rocket-p1', e.x + ux * 30, e.y + uy * 30, -ux * 250, -uy * 250, 'p1', { charged: true });
+    for (let n = 0; n < 80 && r.active; n++) w.__step();
+    return { escortsAlive: s.__debug.escortsAlive(), bossHp: s.__debug.bossHp() };
+  });
+  expect(result.escortsAlive).toBe(3);
+  expect(result.bossHp).toBe(hpStart - 1);
+});
+
+test('a charged round that only adds an escort lock stops there', async ({ page }) => {
+  await gotoGame(page);
+  await enterBoss(page);
+  const hpStart = await bossHp(page);
+  const result = await page.evaluate(() => {
+    const w = window as any;
+    const s = w.__game.scene.keys['Sandbox'];
+    const e = s.bossEncounter.escorts[2].sprite;
+    const b = s.bossEncounter.boss.sprite;
+    const len = Math.hypot(e.x - b.x, e.y - b.y);
+    const ux = (e.x - b.x) / len, uy = (e.y - b.y) / len;
+    const r = s.rockets.fire('rocket-p1', e.x + ux * 30, e.y + uy * 30, -ux * 250, -uy * 250, 'p1', { charged: true });
+    let steps = 0;
+    for (; steps < 80 && r.active; steps++) w.__step();
+    return { steps, locks: s.__debug.escortLocks()[2], bossHp: s.__debug.bossHp() };
+  });
+  expect(result.locks).toBe(1); // P1's lock added, escort still up
+  expect(result.steps).toBeLessThan(10); // spent on the escort, not flying on
+  expect(result.bossHp).toBe(hpStart);
+});
+
 test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   await gotoGame(page);
 
