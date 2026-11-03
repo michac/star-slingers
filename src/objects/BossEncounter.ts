@@ -165,8 +165,8 @@ export class BossEncounter {
   /** Take the boss, escorts, web and gauges off the field, back to idle
    *  (a wave jump away from the fight). */
   stop(): void {
-    this.clearField();
     this.phaseState = 'idle';
+    this.clearField();
   }
 
   /** DEV/test: defeat the boss now, skipping its wall-clock death tween. */
@@ -225,12 +225,13 @@ export class BossEncounter {
     this.onDefeated();
   }
 
-  /** Park the boss and every escort, empty the web, hide the gauges. */
+  /** Park the boss and every escort, empty the web, hide the gauges. Call it
+   *  after leaving 'charging', so drawBars() hides them. */
   private clearField(): void {
     this.boss.park();
     for (const e of this.escorts) e.park();
     this.web.update(0, this.escorts); // no live nodes → no links drawn
     this.timer = 0;
-    this.bars.update({ hp: 0, maxHp: BOSS.hp, chargeFrac: 0, visible: false });
+    this.drawBars();
   }
 }

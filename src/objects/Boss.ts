@@ -97,10 +97,17 @@ export class Boss {
     });
   }
 
-  /** DEV/test: defeat now, skipping the wall-clock death tween. */
+  /** A bright beam flashes boss → station when a charge fires. */
+  fireBeam(): void {
+    const g = this.scene.add.graphics().setDepth(1);
+    g.lineStyle(6, COLORS.danger, 0.9);
+    g.lineBetween(this.sprite.x, this.sprite.y, STATION.cx, STATION.cy);
+    this.scene.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
+  }
+
+  /** DEV/test: defeat now, skipping the wall-clock death tween (park() kills it). */
   forceDefeat(): void {
     if (!this.active) return;
-    this.scene.tweens.killTweensOf(this.sprite);
     this.defeated();
   }
 
@@ -119,13 +126,4 @@ export class Boss {
     this.park();
     this.onDefeated();
   }
-
-  /** A bright beam flashes boss → station when a charge fires. */
-  fireBeam(): void {
-    const g = this.scene.add.graphics().setDepth(1);
-    g.lineStyle(6, COLORS.danger, 0.9);
-    g.lineBetween(this.sprite.x, this.sprite.y, STATION.cx, STATION.cy);
-    this.scene.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
-  }
-
 }

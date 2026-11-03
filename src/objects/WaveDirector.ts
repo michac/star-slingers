@@ -15,16 +15,16 @@
  * retry) starts directly with no banner, so play begins within seconds.
  *
  * A lost run restarts via scene.restart() (the fail overlay), which rebuilds
- * this object from constants, so no reset logic lives here; `retryWave` says
- * where that restart begins.
+ * this object from constants, so no reset logic lives here; the scene picks
+ * the wave that restart begins at.
  */
 import Phaser from 'phaser';
 import { SPLITTER_CHILDREN } from '../layout';
 import {
-  actStartWave,
   asteroidsFor,
   BREATHER,
   DIFFICULTY_MODEL,
+  isWaveNumber,
   LANE_SLOTS,
   ASTEROID_KIND,
   RUN,
@@ -55,9 +55,6 @@ export const NO_INTERLUDES: RunHooks = {
 export interface RunOptions {
   /** 1-based wave the run starts at (no banner). */
   startWave: number;
-  /** Where Try again restarts after a loss. Omitted: the current act's first
-   *  wave; a `?wave`/`?boss` shortcut pins it to the shortcut's wave. */
-  retryWave?: number;
   hooks: RunHooks;
   /** Start the command-ship encounter; the scene reports back through
    *  onEncounterDefeated(). */
@@ -157,11 +154,6 @@ export class WaveDirector {
     return RUN[this.waveIndex];
   }
 
-  /** Where Try again restarts: the shortcut's wave, else this act's first. */
-  get retryWave(): number {
-    return this.run.retryWave ?? actStartWave(this.waveNumber);
-  }
-
   /** Per-frame (scene update, frozen while overlays show): the wave clears
    *  when its quota is spent AND the field has drained empty. */
   update(_delta: number): void {
@@ -183,7 +175,7 @@ export class WaveDirector {
   /** DEV/test hook: jump to wave `n` (1-based) now: empty the field, stop any
    *  boss fight, drop any pending breather, start it with no banner. */
   jumpTo(n: number): void {
-    if (!Number.isInteger(n) || n < 1 || n > RUN.length) return;
+    if (!isWaveNumber(n)) return;
     this.vanishField();
     this.run.stopEncounter();
     this.banner.hide();
@@ -229,7 +221,7 @@ export class WaveDirector {
     this.runToken += 1;
     this.waveIndex = index;
     for (const hud of this.huds) hud.setWave(this.waveNumber);
-    const { field } = RUN[index];
+    const { field } = this.wave;
     if (!field) {
       // The command ship: no asteroids; the encounter owns the field (and the
       // shield regen) until it reports the boss down.
@@ -270,7 +262,7 @@ export class WaveDirector {
     this.state = 'between';
     this.station.restoreShield(); // celebration: rings regrow one-by-one
     this.celebrate(); // B7: star-shower across the field on every wave clear
-    const ended = RUN[this.waveIndex];
+    const ended = this.wave;
     const next = this.waveIndex + 1;
     if (next >= RUN.length) {
       // Short beat so the restore cue lands, then the win.

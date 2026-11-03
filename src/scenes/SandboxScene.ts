@@ -26,7 +26,7 @@ import { BossEncounter } from '../objects/BossEncounter';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import type { HomingTarget } from '../objects/HomingTarget';
-import { COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
+import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
 import { shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
@@ -115,10 +115,15 @@ export class SandboxScene extends Phaser.Scene {
     this.scoreKeeper = new ScoreKeeper(this, huds); // shared score (B6)
     // Solo draws no banner/end-card copy toward the empty top seat either.
     const banner = new WaveBanner(this, players);
-    // Try again restarts at the director's retry wave (AC5: the lost act's
-    // first wave, or a shortcut's wave); a win's tap starts a fresh run.
+    // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
+    // Try again retries it, so a tester can re-run one wave. Survives the
+    // restart (the query string sticks). Harmless in normal play — nobody
+    // types it by accident.
+    const queryWave = startWaveFromQuery(window.location.search);
+    // Try again restarts at the shortcut's wave, else the lost act's first
+    // wave (AC5); a win's tap starts a fresh run.
     this.failOverlay = new Overlay(this, FAIL_CONFIG, players, () => ({
-      startWave: this.waveDirector.retryWave,
+      startWave: queryWave > 1 ? queryWave : actStartWave(this.waveDirector.waveNumber),
     }));
     this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players);
 
@@ -132,11 +137,6 @@ export class SandboxScene extends Phaser.Scene {
       players
     );
 
-    // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
-    // Try again retries it, so a tester can re-run one wave. Survives the
-    // restart (the query string sticks). Harmless in normal play — nobody
-    // types it by accident.
-    const queryWave = startWaveFromQuery(window.location.search);
     // The director creates the asteroid wrappers and starts the first wave live.
     this.waveDirector = new WaveDirector(
       this,
@@ -145,7 +145,6 @@ export class SandboxScene extends Phaser.Scene {
       banner,
       {
         startWave: data.startWave ?? queryWave,
-        retryWave: queryWave > 1 ? queryWave : undefined,
         hooks: NO_INTERLUDES, // #26 boss drops, #29 act transitions
         startEncounter: () => this.bossEncounter.start(),
         stopEncounter: () => this.bossEncounter.stop(),

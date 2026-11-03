@@ -22,6 +22,14 @@ import {
 
 const debug = <T>(page: Page, call: string) => page.evaluate(`${SCENE}.__debug.${call}`) as Promise<T>;
 
+/** The run's position and the fail card, read in one round-trip. */
+const runState = (page: Page) =>
+  page.evaluate(() => {
+    const s = (window as any).__game.scene.keys['Sandbox'];
+    const d = s.__debug;
+    return { wave: d.wave(), act: d.act(), kind: d.waveKind(), state: d.state(), failVisible: s.failOverlay.visible };
+  });
+
 test('the run is one table of 10 waves in 4 acts', () => {
   expect(RUN.map((w) => w.act)).toEqual([1, 1, 1, 2, 2, 2, 3, 3, 3, 4]);
   expect(RUN.map((w) => w.boss ?? w.kind)).toEqual([
@@ -82,11 +90,11 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
     return { rows, won: until(() => s.victoryOverlay.visible, 120), state: d.state(), interludes: d.interludes() };
   });
 
-  const kinds = ['asteroid', 'asteroid', 'giantAsteroid', 'ship', 'ship', 'commandShip', 'monster', 'monster', 'monsterBoss', 'finale'];
   run.rows.forEach((row: any, i: number) => {
     const n = i + 1;
-    expect(row, `wave ${n}`).toMatchObject({ wave: n, act: RUN[i].act, kind: kinds[i], won: false, cleared: true });
-    expect(row.state, `wave ${n}`).toBe(n === 6 ? 'boss' : 'live');
+    const w = RUN[i];
+    expect(row, `wave ${n}`).toMatchObject({ wave: n, act: w.act, kind: w.boss ?? w.kind, won: false, cleared: true });
+    expect(row.state, `wave ${n}`).toBe(w.field ? 'live' : 'boss');
     if (n < 10) {
       expect(row.banner.every((t: string) => t === String(n + 1)), `banner after wave ${n}: ${row.banner}`).toBe(true);
       expect(row.next, `wave ${n + 1} starts`).toBe(true);
@@ -124,18 +132,12 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   expect(await debug(page, 'wave()')).toBe(5);
   await loseRun(page);
   await tryAgain(page);
-  expect(await debug(page, 'wave()')).toBe(4);
-  expect(await debug(page, 'act()')).toBe(2);
-  expect(await debug(page, 'state()')).toBe('live');
-  expect(await page.evaluate(`${SCENE}.failOverlay.visible`)).toBe(false);
+  expect(await runState(page)).toMatchObject({ wave: 4, act: 2, state: 'live', failVisible: false });
 });
 
 test('?wave=N boots at wave N, and Try again retries that wave', async ({ page }) => {
   await gotoGame(page, '?wave=9');
-  expect(await debug(page, 'wave()')).toBe(9);
-  expect(await debug(page, 'act()')).toBe(3);
-  expect(await debug(page, 'waveKind()')).toBe('monsterBoss');
-  expect(await debug(page, 'state()')).toBe('live');
+  expect(await runState(page)).toMatchObject({ wave: 9, act: 3, kind: 'monsterBoss', state: 'live' });
   await loseRun(page);
   await tryAgain(page);
   expect(await debug(page, 'wave()')).toBe(9); // the shortcut pins the retry, not act 3's start

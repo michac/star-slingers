@@ -139,6 +139,11 @@ export const RUN: readonly RunWave[] = [
 /** The 1-based wave number of the command-ship boss (`?boss` jumps here). */
 export const COMMAND_SHIP_WAVE = RUN.findIndex((w) => w.boss === 'commandShip') + 1;
 
+/** True when `n` is a 1-based wave number of the run (1..RUN.length). */
+export function isWaveNumber(n: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= RUN.length;
+}
+
 /** The 1-based first wave of wave `n`'s act: where Try again restarts after a loss. */
 export function actStartWave(n: number): number {
   const act = RUN[n - 1].act;
@@ -151,7 +156,7 @@ export function actStartWave(n: number): number {
 export function startWaveFromQuery(search: string): number {
   const params = new URLSearchParams(search);
   const n = Number(params.get('wave'));
-  if (Number.isInteger(n) && n >= 1 && n <= RUN.length) return n;
+  if (isWaveNumber(n)) return n;
   return params.has('boss') ? COMMAND_SHIP_WAVE : 1;
 }
 
