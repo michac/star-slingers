@@ -1,0 +1,9 @@
+{
+  // The e2e suite + Playwright config run under Node (they read process.env),
+  // so they get Node's types here. The root tsconfig.json stays browser-only.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["e2e", "playwright.config.ts"]
+}

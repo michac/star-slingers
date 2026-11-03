@@ -231,7 +231,6 @@ test('one splitter hit scores and creates children', async ({ page }) => {
   // two children. Deterministic on the fixed-timestep clock.
   await fieldRock(page, { x: 250, y: 300, kind: 'splitter' });
 
-  const hitsBefore = await hits(page);
   await fire(page, 170, 300, 400, 0);
   const scored = await stepUntil(page, 's.__debug.score() >= 20', 120);
   expect(scored.done).toBe(true);
@@ -333,7 +332,6 @@ test('a splitter immediately splits into two standard children', async ({ page }
   // (exactly what startWave does) and kill it on the fixed-timestep clock. Lane
   // wrappers are asteroids[0..3]; the child pool is the tail.
   const splitBefore = await splitCount(page);
-  const hitsBefore = await hits(page);
   await fieldRock(page, { x: 260, y: 300, kind: 'splitter' });
 
   // One head-on rocket splits it immediately.
