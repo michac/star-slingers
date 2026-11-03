@@ -118,14 +118,19 @@ export class SandboxScene extends Phaser.Scene {
     // Shortcut: ?wave=N (or ?boss, the command ship) boots at that wave, and
     // Try again retries it, so a tester can re-run one wave. Survives the
     // restart (the query string sticks). Harmless in normal play — nobody
-    // types it by accident.
+    // types it by accident. Without a shortcut this is 1.
     const queryWave = startWaveFromQuery(window.location.search);
-    // Try again restarts at the shortcut's wave, else the lost act's first
-    // wave (AC5); a win's tap starts a fresh run.
+    // Try again restarts at the lost act's first wave (AC5), but never before
+    // a shortcut's wave, so a shortcut's wave retries itself until the players
+    // pass it.
     this.failOverlay = new Overlay(this, FAIL_CONFIG, players, () => ({
-      startWave: queryWave > 1 ? queryWave : actStartWave(this.waveDirector.waveNumber),
+      startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)),
     }));
-    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players);
+    // A win's tap starts a fresh run. It passes an explicit empty object:
+    // restart(undefined) would keep the previous restart's data (Phaser's
+    // Systems.start only replaces settings.data when given some), so a win after
+    // a Try again would restart at the retry wave.
+    this.victoryOverlay = new Overlay(this, VICTORY_CONFIG, players, () => ({}));
 
     // The command-ship boss (B5) creates its boss + escort sprites up front
     // (parked); the run hands it the field for wave 6.
@@ -247,7 +252,7 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets.update(delta);
     this.station.update(delta); // shield regen clock
     this.waveDirector.update(delta); // wave-clear check
-    this.bossEncounter.update(delta); // boss fight (no-op until the run clears)
+    this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent.
     this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
     this.checkStationContacts();
@@ -302,7 +307,7 @@ export class SandboxScene extends Phaser.Scene {
     const uy = diry / len;
     let best: HomingTarget | null = null;
     let bestPerp = Infinity;
-    // Asteroids during the waves, plus the escorts during the finale, so
+    // Asteroids during the field waves, plus the escorts during the boss, so
     // homing keeps working all the way through (B14 × B5). Two plain loops —
     // this runs every frame while a seat holds HOME, so no merged array.
     const consider = (cand: HomingTarget) => {

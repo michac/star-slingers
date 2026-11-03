@@ -75,6 +75,7 @@ export class Boss {
    *  headless test harness can't advance it by stepping; this snaps to the
    *  parked, entered state the tween's onComplete would otherwise reach. */
   snapEntered(): void {
+    if (!this.active) return; // parked, or mid death tween: leave that tween alone
     this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.setPosition(BOSS_LAYOUT.park.x, BOSS_LAYOUT.park.y);
     this.entering = false;

@@ -33,7 +33,7 @@ A field wave fields a **finite quota** of asteroids. Respawns stop when the quot
 
 **Try again restarts at the first wave of the act you lost in** (wave 1, 4, 7 or 10; decided by Michael). It doesn't go back to wave 1, so the 5yo never replays the whole run after one bad wave. Score starts again from 0.
 
-**Test shortcuts:** `?wave=N` boots straight into wave N (1–10), and `?boss` is the same as `?wave=6`. With either in the URL, Try again retries wave N itself, not its act's first wave, so a tester can re-run one wave.
+**Test shortcuts:** `?wave=N` boots straight into wave N (1–10), and `?boss` is the same as `?wave=6`. With either in the URL, Try again never goes back before wave N: losing in wave N retries wave N itself, not its act's first wave, so a tester can re-run one wave. Past wave N, the act-start rule applies again.
 
 **Score (B37, built 2026-08-03):** one shared, live-only number that climbs as the team pops rocks — shown on both HUDs' SCORE row. A **standard** scores 10; a **splitter** scores 20 immediately, and its two standard children score 10 each, for **40** on a complete splitter clear. A rock that **reaches the station scores nothing** (it's a loss, not a kill). A small accent-colored **`+N`** pops at each kill site and grows-and-fades in place (orientation-neutral so it reads the same from both seats; the HUD number is the canonical read). No persistent "best" across restarts — `scene.restart()` resets the score to 0. The **boss fight stays unscored** for now (its health/charge gauges carry the climax; a number on top would clutter it).
 

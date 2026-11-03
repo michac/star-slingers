@@ -3,7 +3,7 @@
  * play order, the ?wave shortcut, Try again's retry wave, the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, fieldRock, stepGame, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, fieldRock, stepGame, stepUntil, type Page } from './helpers';
 import {
   actStartWave,
   ASTEROID_KIND,
@@ -133,6 +133,15 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   await loseRun(page);
   await tryAgain(page);
   expect(await runState(page)).toMatchObject({ wave: 4, act: 2, state: 'live', failVisible: false });
+
+  // A win after that retry starts a fresh run at wave 1, not at the retry wave
+  // (Phaser keeps the last restart's data unless given new data).
+  await debug(page, 'jumpToWave(10)');
+  await debug(page, 'clearWave()');
+  expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
+  await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
+  await stepGame(page, 16, 2);
+  expect(await runState(page)).toMatchObject({ wave: 1, act: 1, state: 'live' });
 });
 
 test('?wave=N boots at wave N, and Try again retries that wave', async ({ page }) => {
@@ -141,6 +150,12 @@ test('?wave=N boots at wave N, and Try again retries that wave', async ({ page }
   await loseRun(page);
   await tryAgain(page);
   expect(await debug(page, 'wave()')).toBe(9); // the shortcut pins the retry, not act 3's start
+
+  // Past the shortcut's wave, Try again is the act's first wave again (act 4 = wave 10).
+  await debug(page, 'jumpToWave(10)');
+  await loseRun(page);
+  await tryAgain(page);
+  expect(await debug(page, 'wave()')).toBe(10);
 });
 
 test('wave solver uses only standards and three-hit splitters', () => {
