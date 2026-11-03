@@ -103,16 +103,19 @@ textures, tokens).
 ## Game commands (from the repo root)
 
 - `npm run dev` — dev server, LAN-exposed for phone testing (see `README.md` for firewall notes)
-- `npm run build` / `npm run typecheck` — `typecheck` also checks `e2e/` and `playwright.config.ts`
-  through `tsconfig.e2e.json` (the root config plus an explicit `types: ["node"]`). `build` runs
-  `typecheck` first, so CI and both deploy pre-flights check `e2e/` too.
+- `npm run build` / `npm run typecheck` — `typecheck` runs `tsconfig.json` (browser code: `src/`,
+  `prototype/`, no Node types) and `tsconfig.node.json` (root config + `types: ["node"]`: `e2e/`,
+  `playwright.config.ts`, `vite.config.ts`). `src/no-node-globals.ts` is never imported; it is the
+  guard that fails `typecheck` if Node types reach the root config. `build` runs `typecheck` first,
+  so CI and both deploy pre-flights check all of it.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
   score, homing, railgun pierce, splitters, hp), `waves.spec.ts` (the `src/waves.ts` solver and solo
   target scaling), `boss.spec.ts` (co-op escort locks, shield web, `?boss`), `solo.spec.ts`
   (`?players=1`), `controls-v2.spec.ts` (two-thumb buttons + drag aim) and `haptics.spec.ts`. The
-  shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, the `__debug`
-  wrappers and the CDP `touchscreen`. Its exported `test` carries the zero-console-error gate as an
-  auto fixture, so **specs import `test`/`expect` from `./helpers`, never from `@playwright/test`**
+  shared harness is `e2e/helpers.ts`: `gotoGame`, `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
+  the `__debug` wrappers (e.g. `shieldLinks`), `mirrored` for the top seat and the CDP `touchscreen`.
+  Its exported `test` carries the zero-console-error gate as an auto fixture, so **specs import
+  `test`/`expect` from `./helpers`, never from `@playwright/test`**
   (`harness.spec.ts` fails the suite if one does).
   A helper used by more than one spec goes in `helpers.ts`; a new case goes in its area's spec. The
   suite auto-starts the dev server headless on :5181 and drives real touches + direct shots. First
@@ -125,8 +128,9 @@ textures, tokens).
   one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
   the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
   TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
-  skipped with the `__debug.snapBossIn()` hook. **Speed** (~27s for the 23 cases, ~1.4 min at
-  `--repeat-each=3`): headless swiftshader makes rendering pathologically slow, so (a) the `smoke-*.png`
+  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~27s for the
+  23 cases, ~1.4 min at `--repeat-each=3`): headless swiftshader makes rendering pathologically slow,
+  so (a) the `smoke-*.png`
   eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —
   and (b) `gotoGame()` **parks the RAF loop right after boot**, because any `page.evaluate` that runs
   against a live render loop stalls ~0.8s on the in-flight software frame (this alone took the boss case
