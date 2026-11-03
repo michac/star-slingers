@@ -1,4 +1,7 @@
 {
+  // Browser code only: the game (src/) and the prototype shelf. No Node types
+  // here, so `process` or `Buffer` in game code fails to type-check
+  // (src/no-node-globals.ts guards that). Node-side files are in tsconfig.node.json.
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
@@ -13,5 +16,5 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "prototype", "vite.config.ts"]
+  "include": ["src", "prototype"]
 }
