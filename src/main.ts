@@ -56,7 +56,7 @@ function boot(): void {
     scene: [SandboxScene],
   });
 
-  // Debug handle for the headless e2e suite (e2e/sandbox.spec.ts) and console poking.
+  // Debug handle for the headless e2e suite (e2e/) and console poking.
   (window as unknown as { __game: Phaser.Game }).__game = game;
 }
 

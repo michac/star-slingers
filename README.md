@@ -40,7 +40,8 @@ Ammo regens 1 per second up to 5.
 
 - `npm run dev` — dev server (LAN-exposed)
 - `npm run build` — typecheck + production bundle
-- `npm run typecheck` — `tsc --noEmit` only
-- `npm test` — `@playwright/test` suite (auto-starts the dev server headless on :5181 and asserts
-  hits / score / homing / pierce / split / boss-cycle + zero console errors). First run on a new
-  machine: `npx playwright install chromium`.
+- `npm run typecheck` — `tsc --noEmit` only, over the game and (via `tsconfig.e2e.json`) `e2e/` +
+  `playwright.config.ts`
+- `npm test` — `@playwright/test` suite, one spec per area in `e2e/` with a shared `e2e/helpers.ts`
+  (auto-starts the dev server headless on :5181 and asserts combat / waves / boss / solo / controls /
+  haptics + zero console errors). First run on a new machine: `npx playwright install chromium`.
