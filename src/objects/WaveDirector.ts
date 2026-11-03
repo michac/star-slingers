@@ -1,31 +1,72 @@
 /**
- * WaveDirector — owns the run: which wave is live, its finite asteroid
- * quota, the wave-clear check, the breather (shield restore + banner), and
- * the hand-off to the final boss after the last wave. State machine:
+ * WaveDirector — owns the run: 10 waves in 4 acts, played in order from the
+ * `RUN` table (src/waves.ts). It dispatches each wave by how it plays: a wave
+ * with a `field` fields a finite asteroid quota (the solver's output) and
+ * clears once the quota is spent and the field drains; the command ship hands
+ * the field to the BossEncounter until it reports the boss down. State machine:
  *
- *   live → breather → (next wave) live … → done (boss takes over)
+ *   live | boss → between → (next wave) live | boss … → won
  *
- * Wave 1 starts directly in `live` with no banner — a banner before the
- * very first wave adds nothing, and play should start within seconds of boot.
- * A run lost mid-wave restarts via scene.restart() (the fail overlay), which
- * rebuilds this object from constants — so no reset logic lives here.
+ * Between waves (`between`): the shield restores, the star-shower plays, then
+ * the interlude hooks run in order: `bossDrop` after a boss wave (#26), then
+ * `actTransition` when the act changes (#29). Each calls `done()` when it's
+ * finished. Then the banner announces the next wave. After wave 10 the run is
+ * won. The starting wave (wave 1, a `?wave`/`?boss` shortcut, or a Try again
+ * retry) starts directly with no banner, so play begins within seconds.
+ *
+ * A lost run restarts via scene.restart() (the fail overlay), which rebuilds
+ * this object from constants, so no reset logic lives here; `retryWave` says
+ * where that restart begins.
  */
 import Phaser from 'phaser';
 import { SPLITTER_CHILDREN } from '../layout';
 import {
+  actStartWave,
   asteroidsFor,
   BREATHER,
   DIFFICULTY_MODEL,
   LANE_SLOTS,
   ASTEROID_KIND,
-  WAVES,
+  RUN,
+  type Act,
+  type RunWave,
 } from '../waves';
 import { Asteroid } from './Asteroid';
 import { Station } from './Station';
 import { PlayerHud } from './PlayerHud';
 import { WaveBanner } from './WaveBanner';
 
-type WaveState = 'live' | 'breather' | 'done';
+type WaveState = 'live' | 'boss' | 'between' | 'won';
+
+/** The between-wave seams later act issues fill in. Each must call `done()`
+ *  exactly once when it has finished (straight away by default). */
+export interface RunHooks {
+  /** A boss wave just ended (#26: the boss's upgrade pods). */
+  bossDrop(wave: RunWave, done: () => void): void;
+  /** The last wave of act `from` just ended (#29: the colony-ship flyby). */
+  actTransition(from: Act, to: Act, done: () => void): void;
+}
+
+export const NO_INTERLUDES: RunHooks = {
+  bossDrop: (_wave, done) => done(),
+  actTransition: (_from, _to, done) => done(),
+};
+
+export interface RunOptions {
+  /** 1-based wave the run starts at (no banner). */
+  startWave: number;
+  /** Where Try again restarts after a loss. Omitted: the current act's first
+   *  wave; a `?wave`/`?boss` shortcut pins it to the shortcut's wave. */
+  retryWave?: number;
+  hooks: RunHooks;
+  /** Start the command-ship encounter; the scene reports back through
+   *  onEncounterDefeated(). */
+  startEncounter: () => void;
+  /** Stop the encounter (a wave jump away from it). */
+  stopEncounter: () => void;
+  /** Wave 10 is cleared: the scene shows the victory card. */
+  onRunWon: () => void;
+}
 
 export class WaveDirector {
   /** One wrapper per lane slot PLUS the splitter-child pool, all alive for the
@@ -39,16 +80,21 @@ export class WaveDirector {
   private waveIndex = 0;
   private quotaRemaining = 0;
   private state: WaveState = 'live';
+  /** Bumped by every wave start, so a deferred callback from an earlier wave
+   *  (a breather timer, a hook's done) can't start a second wave after a jump. */
+  private runToken = 0;
   /** Cumulative split events (B30) — a deterministic signal for the e2e suite. */
   splitCount = 0;
+  /** Interludes that ran, in order ('drop:3', 'act:1-2') — the e2e suite's
+   *  signal that the hooks fire at the right seams. */
+  readonly interludes: string[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly station: Station,
     private readonly huds: PlayerHud[],
     private readonly banner: WaveBanner,
-    /** Called once the last wave clears — the scene starts the boss (B5). */
-    private readonly onRunCleared: () => void,
+    private readonly run: RunOptions,
     /** The shared asteroid burst (B29), forwarded into every Asteroid. */
     private readonly boom: (x: number, y: number, radius: number) => void,
     /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
@@ -56,15 +102,14 @@ export class WaveDirector {
     /** Seats in play (?players): solo scales each wave's target (SOLO in waves.ts). */
     private readonly players: 1 | 2
   ) {
-    const specs1 = asteroidsFor(WAVES[0], this.players);
-    // One wrapper per physical lane slot, alive for the whole run (later
-    // waves field more lanes than wave 1); slots without a wave-1 spec get a
-    // weak default and stay parked until a wave fields them.
+    // One wrapper per physical lane slot, alive for the whole run, built
+    // parked with a weak default; each field wave reconfigures the lanes it
+    // fields (startWave), and the rest stay parked.
     this.asteroids = LANE_SLOTS.map(
-      (slot, i) =>
+      (slot) =>
         new Asteroid(
           this.scene,
-          specs1[i] ?? {
+          {
             kind: 'standard',
             radius: ASTEROID_KIND.standard.radius,
             y: slot.y,
@@ -95,7 +140,7 @@ export class WaveDirector {
         )
     );
     this.asteroids.push(...this.childPool);
-    this.startWave(0);
+    this.startWave(this.run.startWave - 1);
   }
 
   get stateName(): WaveState {
@@ -107,6 +152,16 @@ export class WaveDirector {
     return this.waveIndex + 1;
   }
 
+  /** The live (or just-ended) wave's row in RUN. */
+  get wave(): RunWave {
+    return RUN[this.waveIndex];
+  }
+
+  /** Where Try again restarts: the shortcut's wave, else this act's first. */
+  get retryWave(): number {
+    return this.run.retryWave ?? actStartWave(this.waveNumber);
+  }
+
   /** Per-frame (scene update, frozen while overlays show): the wave clears
    *  when its quota is spent AND the field has drained empty. */
   update(_delta: number): void {
@@ -116,12 +171,28 @@ export class WaveDirector {
     this.onWaveCleared();
   }
 
-  /** DEV/test hook: end the current wave now (pops the field; the spent
-   *  quota + empty field then clear it through the normal path). */
+  /** DEV/test hook: end the current field wave now (empties the field at
+   *  once; the spent quota + empty field then clear it through the normal path
+   *  on the next update). */
   forceClear(): void {
     if (this.state !== 'live') return;
     this.quotaRemaining = 0;
-    this.popField();
+    this.vanishField();
+  }
+
+  /** DEV/test hook: jump to wave `n` (1-based) now: empty the field, stop any
+   *  boss fight, drop any pending breather, start it with no banner. */
+  jumpTo(n: number): void {
+    if (!Number.isInteger(n) || n < 1 || n > RUN.length) return;
+    this.vanishField();
+    this.run.stopEncounter();
+    this.banner.hide();
+    this.startWave(n - 1);
+  }
+
+  /** The command ship is down: the boss wave ends like a cleared field. */
+  onEncounterDefeated(): void {
+    if (this.state === 'boss') this.onWaveCleared();
   }
 
   /** Split a rocket-killed splitter into standard children. Standards never
@@ -155,12 +226,21 @@ export class WaveDirector {
   }
 
   private startWave(index: number): void {
+    this.runToken += 1;
     this.waveIndex = index;
-    const wave = WAVES[index];
-    const specs = asteroidsFor(wave, this.players);
-    this.quotaRemaining = wave.quota;
-    this.station.setShieldRegenMs(wave.shieldRegenMs);
     for (const hud of this.huds) hud.setWave(this.waveNumber);
+    const { field } = RUN[index];
+    if (!field) {
+      // The command ship: no asteroids; the encounter owns the field (and the
+      // shield regen) until it reports the boss down.
+      this.quotaRemaining = 0;
+      this.state = 'boss';
+      this.run.startEncounter();
+      return;
+    }
+    const specs = asteroidsFor(field, this.players);
+    this.quotaRemaining = field.quota;
+    this.station.setShieldRegenMs(field.shieldRegenMs);
     this.asteroids.forEach((asteroid, i) => {
       const spec = specs[i];
       if (!spec) return; // lane not live this wave; stays parked
@@ -173,39 +253,54 @@ export class WaveDirector {
     this.state = 'live';
   }
 
-  /** DEV/test hook: end the run now and hand off to the boss (used by
-   *  __debug.startBoss). Pops any live asteroids; state 'done' stops respawns. */
-  endRunNow(): void {
-    this.quotaRemaining = 0;
-    this.state = 'done';
-    this.popField();
+  /** Remove every rock at once (DEV/test shortcuts; never scores or splits). */
+  private vanishField(): void {
+    for (const a of this.asteroids) a.vanish();
   }
 
-  /** Pop every live asteroid (DEV/test shortcuts; never scores or splits). */
-  private popField(): void {
-    for (const a of this.asteroids) {
-      if (a.isActive && !a.isPopping) a.consume();
-    }
+  /** Wrap a deferred step so it's dropped if another wave started meanwhile. */
+  private guarded(step: () => void): () => void {
+    const token = this.runToken;
+    return () => {
+      if (token === this.runToken) step();
+    };
   }
 
   private onWaveCleared(): void {
-    this.state = 'breather';
+    this.state = 'between';
     this.station.restoreShield(); // celebration: rings regrow one-by-one
     this.celebrate(); // B7: star-shower across the field on every wave clear
-    if (this.waveIndex + 1 >= WAVES.length) {
-      // Short beat so the restore cue lands, then hand off to the final boss
-      // (B5) — this replaced the placeholder victory card.
-      this.scene.time.delayedCall(BREATHER.bannerMs / 2, () => {
-        this.state = 'done';
-        this.onRunCleared();
-      });
+    const ended = RUN[this.waveIndex];
+    const next = this.waveIndex + 1;
+    if (next >= RUN.length) {
+      // Short beat so the restore cue lands, then the win.
+      this.scene.time.delayedCall(
+        BREATHER.bannerMs / 2,
+        this.guarded(() => {
+          this.state = 'won';
+          this.run.onRunWon();
+        })
+      );
       return;
     }
-    const next = this.waveIndex + 1;
-    this.banner.show(next + 1); // announce the coming wave's number
-    this.scene.time.delayedCall(BREATHER.bannerMs, () => {
-      this.banner.hide();
-      this.startWave(next);
+    const announce = this.guarded(() => {
+      this.banner.show(next + 1); // announce the coming wave's number
+      this.scene.time.delayedCall(
+        BREATHER.bannerMs,
+        this.guarded(() => {
+          this.banner.hide();
+          this.startWave(next);
+        })
+      );
     });
+    const transition = this.guarded(() => {
+      const to = RUN[next].act;
+      if (to === ended.act) return announce();
+      this.interludes.push(`act:${ended.act}-${to}`);
+      this.run.hooks.actTransition(ended.act, to, announce);
+    });
+    if (ended.kind !== 'boss') return transition();
+    this.interludes.push(`drop:${this.waveNumber}`);
+    this.run.hooks.bossDrop(ended, transition);
   }
 }

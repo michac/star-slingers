@@ -131,7 +131,9 @@ export class Escort {
     this.scene.tweens.add({ targets: g, scale: 1.5, alpha: 0, duration: 100, onComplete: () => g.destroy() });
   }
 
-  private park(): void {
+  /** Off the field: invisible, body off (the encounter's end and its skips). */
+  park(): void {
+    this.scene.tweens.killTweensOf(this.sprite);
     this.active = false;
     this.popping = false;
     this.sprite.setVisible(false);

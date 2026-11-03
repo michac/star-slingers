@@ -154,7 +154,7 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
 
 test('?boss shortcut boots into the fight', async ({ page }) => {
   // A fresh load with ?boss must boot straight into the boss fight (phase
-  // 'charging'), skipping the waves.
+  // 'charging'), skipping waves 1-5: the command ship is wave 6.
   await gotoGame(page, '?boss');
   await page.waitForFunction(
     () => (window as any).__game?.scene.keys['Sandbox']?.__debug?.bossPhase?.() === 'charging',
@@ -162,4 +162,5 @@ test('?boss shortcut boots into the fight', async ({ page }) => {
     { timeout: 10_000 }
   );
   expect(await bossPhase(page)).toBe('charging');
+  expect(await page.evaluate(`${SCENE}.__debug.wave()`)).toBe(6);
 });

@@ -1,8 +1,11 @@
 /**
- * BossEncounter (B5) — orchestrates the finale that replaces the wave-4 victory
- * seam. Owns the Boss + 4 orbiting Escorts and a repeating, urgent CYCLE:
+ * BossEncounter (B5) — the command-ship boss, wave 6 of the run (act 2's
+ * boss). Owns the Boss + 4 orbiting Escorts and a repeating, urgent CYCLE:
  *
  *   idle → charging → won | lost
+ *
+ *   won hands back to the WaveDirector (`onDefeated`), which runs the breather
+ *   and the next wave; lost shows the fail card.
  *
  *   CHARGING: live adjacent escorts make a physical shield web. Destroying a
  *   node opens two gaps for BOSS.escortRegenMs and resets + pauses the charge;
@@ -42,11 +45,12 @@ export class BossEncounter {
     private readonly scene: Phaser.Scene,
     private readonly station: Station,
     private readonly failOverlay: Overlay,
-    private readonly victoryOverlay: Overlay,
+    /** The boss is down and the field is clear: the run continues. */
+    private readonly onDefeated: () => void,
     /** Seats in play (?players): solo relaxes the escort co-op lock (Escort.takeHit). */
     players: 1 | 2
   ) {
-    this.boss = new Boss(scene, () => this.onDefeated());
+    this.boss = new Boss(scene, () => this.defeated());
     this.bars = new BossBars(scene);
     this.escorts = Array.from(
       { length: BOSS.escortCount },
@@ -73,9 +77,9 @@ export class BossEncounter {
     return [this.boss.sprite, ...this.escorts.map((e) => e.sprite)];
   }
 
-  /** Called by the WaveDirector's run-cleared seam (after wave 4). */
+  /** Called by the WaveDirector when the command-ship wave starts. */
   start(): void {
-    if (this.phaseState !== 'idle') return;
+    if (this.phaseState === 'charging') return;
     this.station.setShieldRegenMs(BOSS.shieldRegenMs);
     this.boss.activate(); // slides in; charging holds until it has parked
     this.startCharge();
@@ -158,6 +162,18 @@ export class BossEncounter {
     return this.web.segments;
   }
 
+  /** Take the boss, escorts, web and gauges off the field, back to idle
+   *  (a wave jump away from the fight). */
+  stop(): void {
+    this.clearField();
+    this.phaseState = 'idle';
+  }
+
+  /** DEV/test: defeat the boss now, skipping its wall-clock death tween. */
+  debugDefeat(): void {
+    if (this.phaseState === 'charging') this.boss.forceDefeat();
+  }
+
   /** DEV/test: skip the boss slide-in tween (see Boss.snapEntered). */
   snapBossIn(): void {
     this.boss.snapEntered();
@@ -203,9 +219,18 @@ export class BossEncounter {
     this.timer = 0;
   }
 
-  private onDefeated(): void {
+  private defeated(): void {
     this.phaseState = 'won';
-    this.drawBars(); // hides them
-    this.victoryOverlay.show();
+    this.clearField();
+    this.onDefeated();
+  }
+
+  /** Park the boss and every escort, empty the web, hide the gauges. */
+  private clearField(): void {
+    this.boss.park();
+    for (const e of this.escorts) e.park();
+    this.web.update(0, this.escorts); // no live nodes → no links drawn
+    this.timer = 0;
+    this.bars.update({ hp: 0, maxHp: BOSS.hp, chargeFrac: 0, visible: false });
   }
 }

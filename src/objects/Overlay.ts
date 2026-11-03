@@ -22,8 +22,15 @@ export class Overlay {
   private readonly container: Phaser.GameObjects.Container;
   private readonly tapZone: Phaser.GameObjects.Zone;
 
-  /** `players`: solo (1) draws only the bottom seat's text copy. */
-  constructor(scene: Phaser.Scene, cfg: OverlayConfig, players: 1 | 2) {
+  /** `players`: solo (1) draws only the bottom seat's text copy.
+   *  `restartData`: read at the tap and handed to the restarted scene's
+   *  create() (the fail card's retry wave); omitted, the scene starts fresh. */
+  constructor(
+    scene: Phaser.Scene,
+    cfg: OverlayConfig,
+    players: 1 | 2,
+    restartData?: () => object
+  ) {
     const { x: cx, y: cy } = OVERLAY.center;
     const textGap = OVERLAY.iconR + 34;
 
@@ -62,7 +69,7 @@ export class Overlay {
 
     // Not interactive until show(), so it never swallows seat input mid-game.
     this.tapZone = scene.add.zone(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT);
-    this.tapZone.on('pointerdown', () => scene.scene.restart());
+    this.tapZone.on('pointerdown', () => scene.scene.restart(restartData?.()));
   }
 
   get visible(): boolean {

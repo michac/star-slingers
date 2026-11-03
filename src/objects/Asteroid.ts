@@ -169,6 +169,13 @@ export class Asteroid {
     }
   }
 
+  /** Remove this rock at once: no burst, no score, no respawn (the wave-skip
+   *  and clear shortcuts). Parks synchronously, unlike the pop tween. */
+  vanish(): void {
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.park();
+  }
+
   /** The station consumed this asteroid (it reached the shield). */
   consume(): void {
     this.pop();

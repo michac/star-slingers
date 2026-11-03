@@ -1,5 +1,5 @@
 /**
- * Boss (B5) — the run's finale. Slides in from the right, parks at center, and
+ * Boss (B5) — the command ship, wave 6's boss. Slides in from the right, parks at center, and
  * holds stationary. The BossEncounter drives the fight: the escorts' shield
  * web (B34) is the boss's only protection — any railgun that physically reaches
  * it through a gap chips HP — and when the charge fills the encounter calls
@@ -93,8 +93,31 @@ export class Boss {
       scale: 1.8,
       alpha: 0,
       duration: 280,
-      onComplete: () => this.onDefeated(),
+      onComplete: () => this.defeated(),
     });
+  }
+
+  /** DEV/test: defeat now, skipping the wall-clock death tween. */
+  forceDefeat(): void {
+    if (!this.active) return;
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.defeated();
+  }
+
+  /** Off the field (the encounter's skips and jumps). */
+  park(): void {
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.active = false;
+    this.entering = false;
+    this.sprite.setVisible(false);
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.stop();
+    body.enable = false;
+  }
+
+  private defeated(): void {
+    this.park();
+    this.onDefeated();
   }
 
   /** A bright beam flashes boss → station when a charge fires. */
@@ -105,12 +128,4 @@ export class Boss {
     this.scene.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
   }
 
-  private park(): void {
-    this.active = false;
-    this.entering = false;
-    this.sprite.setVisible(false);
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.stop();
-    body.enable = false;
-  }
 }
