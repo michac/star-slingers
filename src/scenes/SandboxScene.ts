@@ -175,7 +175,7 @@ export class SandboxScene extends Phaser.Scene {
       this.processBossHit
     );
 
-    // Deterministic handle for the headless e2e suite (e2e/sandbox.spec.ts).
+    // Deterministic handle for the headless e2e suite (e2e/).
     if (import.meta.env.DEV) {
       // Seat lookups take the player number (1 = top, 2 = bottom). controls is
       // index-aligned with seats; a seat absent in solo (or a number that names
