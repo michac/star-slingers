@@ -2,8 +2,9 @@
  * deploy-preview.mjs — upload the current branch as a Cloudflare Workers PREVIEW.
  *
  * Purpose: give a long-lived branch (e.g. controls-v2) its own installable URL
- * on the phone, beside the stable game. GitHub Pages stays production
- * (deploy.mjs); this never touches it. Config lives in wrangler.jsonc.
+ * on the phone, beside the stable game. Production (GitHub Pages and the
+ * Worker's own URL) comes from deploy.mjs; a preview upload never changes
+ * either. Config lives in wrangler.jsonc.
  *
  * Each branch gets a stable preview alias (its name, sanitized), so re-running
  * on the same branch updates the same URL. Every alias is its own hostname, so

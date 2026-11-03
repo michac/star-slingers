@@ -1,8 +1,8 @@
-// Cloudflare Workers (static assets only — no Worker script) for BRANCH PREVIEWS.
-// GitHub Pages stays the stable production host (deploy.mjs); this Worker exists
-// so a long-lived branch (e.g. controls-v2) gets its own installable URL. Each
-// preview alias is its own hostname, so its service worker + caches never touch
-// the stable game's.
+// Cloudflare Workers (static assets only — no Worker script). Its production URL
+// serves main, published by `npm run deploy` (deploy.mjs) alongside GitHub Pages.
+// Branch previews (deploy-preview.mjs) give a long-lived branch (e.g. controls-v2)
+// its own installable URL. Each preview alias is its own hostname, so its service
+// worker + caches never touch the stable game's.
 //
 // Shares a Cloudflare account with the card-games Worker — keep this `name`
 // distinct or a deploy overwrites that project.
