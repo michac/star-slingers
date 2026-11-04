@@ -46,8 +46,10 @@ export class ActTransition {
   }
 
   /** Start the flyby from act `from` to act `to`; `done` runs when the fleet
-   *  is back in its slots and the stars are at cruise. */
+   *  is back in its slots and the stars are at cruise. A flight already in
+   *  progress is cancelled first (fleet home, its done dropped). */
   start(from: Act, to: Act, done: () => void): void {
+    this.cancel();
     this.flights.push(`${from}-${to}`);
     this.done = done;
     this.enter('leadIn');

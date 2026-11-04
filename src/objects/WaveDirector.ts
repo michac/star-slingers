@@ -70,8 +70,9 @@ export interface RunOptions {
   startEncounter: () => void;
   /** Stop the encounter (a wave jump away from it). */
   stopEncounter: () => void;
-  /** Stop any interlude still playing (a wave jump during one); its `done`
-   *  is dropped by the run token anyway. */
+  /** Stop the interludes' own work if one is still playing (a wave jump
+   *  during it): the act transition's flyby today, and #26's pods once the
+   *  boss drop has some. Its `done` is dropped by the run token anyway. */
   stopInterludes: () => void;
   /** Wave 10 is cleared: the scene shows the victory card. */
   onRunWon: () => void;

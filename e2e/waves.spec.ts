@@ -230,11 +230,21 @@ test('shots fired during the flyby hit nothing and break nothing (#29)', async (
   // A FIRE round straight through the moving fleet's row, and a SPECIAL
   // through the seat's real shot path (its missile looks for a target).
   const at = { x: 300, y: sublaneCenterY(1) };
-  await page.evaluate(({ x, y }) => {
-    const s = (window as any).__game.scene.keys['Sandbox'];
+  const launched = await page.evaluate(({ x, y }) => {
+    const w = window as any;
+    const s = w.__game.scene.keys['Sandbox'];
     s.fireShot('rocket-p1', 'p1', x, y, -1, 0, { button: 'fire', charged: true });
     s.fireShot('rocket-p2', 'p2', x, y + 40, -1, 0, { button: 'special', charged: false });
+    w.__step(10); // into the fleet's row, mid-flight
+    const live = s.rockets.group.getChildren().filter((r: any) => r.active);
+    return {
+      shots: live.length,
+      missileTargets: live.filter((r: any) => r.getData('missile')).map((r: any) => r.getData('target')),
+      phase: s.__debug.transition().phase,
+    };
   }, at);
+  // Both shots are really in flight during the flyby, and the missile found nothing to chase.
+  expect(launched).toEqual({ shots: 2, missileTargets: [null], phase: 'out' });
   expect((await stepUntil(page, "s.__debug.wave() === 4 && s.__debug.state() === 'live'", 400)).done).toBe(true);
   expect(await debug(page, 'hits()')).toBe(hits);
   expect(await debug(page, 'fleet()')).toEqual(['shielded', 'shielded', 'shielded', 'shielded']);

@@ -155,8 +155,10 @@ export const FLEET = {
   facePoint: { x: FLEET_SHIELD.cx, y: (LANE.top + LANE.bottom) / 2 },
 } as const;
 
-/** How far past the screen edge the flyby takes the fleet (bubbles included) before it wraps. */
-const ACT_OFFSCREEN_PAD = 16;
+/** How far past the screen edge the flyby takes the fleet's bubbles before it
+ *  wraps: past their ambient glow's reach too (22px, Fleet.ts), so no glow
+ *  sliver jumps between the edges at the wrap. */
+const ACT_OFFSCREEN_PAD = 32;
 
 /**
  * The act transition (#29), played by ActTransition.ts: between acts the whole
