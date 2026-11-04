@@ -25,7 +25,7 @@ import { Escort } from './Escort';
 import { ShieldWeb } from './ShieldWeb';
 import { Fleet } from './Fleet';
 import { Overlay } from './Overlay';
-import type { HomingTarget } from './HomingTarget';
+import { specialCanHit, type HomingTarget } from './HomingTarget';
 import type { PlayerId } from './Rocket';
 
 type BossPhase = 'idle' | 'charging' | 'won' | 'lost';
@@ -119,6 +119,18 @@ export class BossEncounter {
    *  Callers filter on isActive/isPopping, so this hands back the pooled list as-is. */
   missileTargets(): readonly HomingTarget[] {
     return this.phaseState === 'charging' ? this.escorts : NO_TARGETS;
+  }
+
+  /** A detonator blast (#26) centred on (x, y): every escort a SPECIAL can
+   *  hurt whose body reaches inside `radius` takes `player`'s lock through
+   *  Escort.takeHit, the same path as a shot (handleBossHit). The boss isn't
+   *  among them: only charged FIRE rounds hurt it. */
+  blastEscorts(x: number, y: number, radius: number, player: PlayerId): void {
+    if (this.phaseState !== 'charging') return;
+    for (const e of this.escorts) {
+      if (!specialCanHit(e)) continue;
+      if (Phaser.Math.Distance.Between(x, y, e.sprite.x, e.sprite.y) <= radius + e.radius) e.takeHit(player);
+    }
   }
 
   /** DEV/test: contribute both colors to escort i (used for cycle setup). */

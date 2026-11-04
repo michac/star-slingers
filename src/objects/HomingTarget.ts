@@ -12,4 +12,14 @@ export interface HomingTarget {
   readonly isActive: boolean;
   readonly isPopping: boolean;
   readonly radius: number;
+  /** Only charged FIRE rounds hurt it (the command ship's rule; #25's giant
+   *  asteroid sets it too): see specialCanHit. */
+  readonly chargedOnly?: boolean;
+}
+
+/** THE one check for what a SPECIAL can hurt (#26): a live target that isn't
+ *  charged-only. Missiles (single and triple) only take targets that pass it,
+ *  and a detonator's blast only damages them. */
+export function specialCanHit(t: HomingTarget): boolean {
+  return t.isActive && !t.isPopping && !t.chargedOnly;
 }

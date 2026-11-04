@@ -76,6 +76,9 @@ export interface RunOptions {
   stopInterludes: () => void;
   /** Wave 10 is cleared: the scene shows the victory card. */
   onRunWon: () => void;
+  /** A wave (1-based) just started, the starting wave included (#26: the
+   *  scene snapshots each seat's specials at an act's start for Try again). */
+  onWaveStart: (wave: number) => void;
 }
 
 export class WaveDirector {
@@ -250,6 +253,7 @@ export class WaveDirector {
     this.runToken += 1;
     this.waveIndex = index;
     for (const hud of this.huds) hud.setWave(this.waveNumber);
+    this.run.onWaveStart(this.waveNumber);
     const { field } = this.wave;
     if (!field) {
       // The command ship: no asteroids; the encounter owns the field (and the

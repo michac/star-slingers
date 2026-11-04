@@ -87,6 +87,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
         d.clearWave();
       }
       row.cleared = until(() => !playing(), 3);
+      d.skipDrop(); // a boss wave's pods (#26) leave at once (no-op otherwise)
       if (n < 10) {
         // A breather is the fleet's flyby (#29) after each act's last wave, then the banner.
         const numerals = s.waveDirector.banner.numerals;
@@ -131,6 +132,7 @@ async function flyAct1To2(page: Page) {
     const d = s.__debug;
     const samples: any[] = [];
     for (let n = 0; n < 800 && !(d.wave() === 4 && d.state() === 'live'); n++) {
+      d.skipDrop(); // the giant asteroid's pods (#26) leave as soon as they're up
       w.__step();
       const banner = s.waveDirector.banner.numerals.every((t: any) => t.text === '4');
       samples.push({ ...d.transition(), banner, state: d.state() });
@@ -173,7 +175,8 @@ test('a fleet still being rebuilt finishes before it takes off (#29)', async ({ 
   await debug(page, 'jumpToWave(3)');
   await loseShips(page, 0, 1, 2); // three rebuilds, staggered past the lead-in
   await debug(page, 'clearWave()');
-  const { done, steps } = await stepUntil(page, "s.__debug.transition().phase === 'out'", 300);
+  // skipDrop: the boss's pods (#26) leave as soon as they're up.
+  const { done, steps } = await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'out')", 300);
   expect(done).toBe(true);
   // The last ship reappears 2 staggers after the clear, then its bubble settles in.
   expect(steps * 16).toBeGreaterThanOrEqual(2 * BREATHER.shipRestoreStaggerMs + REGROW.durationMs);
@@ -184,7 +187,7 @@ test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
   await debug(page, 'clearWave()');
-  expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 50", 300)).done).toBe(true);
+  expect((await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 50)", 300)).done).toBe(true);
   await debug(page, 'skipTransition()');
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
   // Skipping counts as finishing: the banner and wave 4 follow.
@@ -195,7 +198,7 @@ test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page
   await debug(page, 'snapBossIn()');
   await stepGame(page, 16, 1);
   await debug(page, 'defeatBoss()');
-  expect((await stepUntil(page, "s.__debug.transition().phase === 'in'", 400)).done).toBe(true);
+  expect((await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'in')", 400)).done).toBe(true);
   await debug(page, 'jumpToWave(2)');
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
   await stepGame(page, 16, 400);
@@ -225,7 +228,7 @@ test('shots fired during the flyby hit nothing and break nothing (#29)', async (
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
   await debug(page, 'clearWave()');
-  expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 100", 300)).done).toBe(true);
+  expect((await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 100)", 300)).done).toBe(true);
   const hits = await debug<number>(page, 'hits()');
   // A FIRE round straight through the moving fleet's row, and a SPECIAL
   // through the seat's real shot path (its missile looks for a target).
