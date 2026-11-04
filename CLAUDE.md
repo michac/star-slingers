@@ -110,7 +110,7 @@ textures, tokens).
   so CI and both deploy pre-flights check all of it.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
   score, FIRE damage + charged pass-through, the SPECIAL missile, splitters, hp), `waves.spec.ts` (the 10-wave `RUN` table and its
-  play order, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
+  play order, the act-transition flyby, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
   (co-op escort locks, shield web, `?boss`), `join.spec.ts` (the join screen: join, Easy/Normal,
   countdown, leaving, Easy's unlimited ammo, Try again keeps the lineup, a win returns to it),
   `fleet.spec.ts` (the colony fleet: sublane contact, harmless pass, all-four-lost fail, shield regen + rebuild,
