@@ -15,6 +15,12 @@
  *  - Aim: sideways motion anywhere in the aim zone (CONTROLS_V2.drag) turns the
  *    aim, clamped to CONTROLS_V2.aim; it persists between shots. The aim pad is
  *    the zone's visual: a knob along the current aim inside the range arc.
+ *  - Lefty swap (#21): a small ⇄ above FIRE (CONTROLS_V2.swap). Held for
+ *    `holdMs` (a ring fills round it), it mirrors the seat (toggleLefty) and tells
+ *    the scene (onLeftyChange); an earlier release, or sliding off it, cancels. It claims only a
+ *    pointer that goes down inside its own circle, which overlaps neither
+ *    button nor the aim zone, so it never takes their pointers. The hold runs
+ *    on update(delta), so the e2e fixed timestep drives it.
  *
  * Everything the seat draws (buttons, pad, launcher, trajectory) lives in ONE
  * container in the bottom seat's frame (layout CONTROLS_V2's coordinates), which
@@ -25,12 +31,13 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, SLING } from '../layout';
+import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, seatPoint, SLING, type SeatEdge } from '../layout';
 import { buzz } from '../haptics';
 import { drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
 import { DEFAULT_SPECIAL, SPECIALS, type SpecialKind } from './specials';
 
 type Point = { x: number; y: number };
+type Circle = Point & { r: number };
 export type Button = 'fire' | 'special';
 
 export interface ShotKind {
@@ -45,9 +52,11 @@ export interface TwoThumbControlConfig {
   anchor: Point;
   color: number;
   /** Which screen edge this player sits at; 'top' rotates the layout 180°. */
-  edge: 'top' | 'bottom';
-  /** Mirror the seat: aim zone on the player's left, buttons on their right. */
+  edge: SeatEdge;
+  /** Start mirrored: aim zone on the player's left, buttons on their right. */
   lefty: boolean;
+  /** The seat's swap control mirrored it (#21); `lefty` is the new setting. */
+  onLeftyChange: (lefty: boolean) => void;
   rocketTexture: string;
   /** Does this button's ammo pool have a shot left? */
   canFire: (button: Button) => boolean;
@@ -58,6 +67,11 @@ export interface TwoThumbControlConfig {
 }
 
 const DEG = Math.PI / 180;
+/** Charge/hold ring stroke: a touch bolder than the base stroke, the rings are small. */
+const RING_WIDTH = STROKES.chargeArc.width + 1.5;
+
+/** Does a point fall inside a circle grown by `pad` (a control's hit area)? */
+const hits = (p: Point, c: Circle, pad: number): boolean => Math.hypot(p.x - c.x, p.y - c.y) <= c.r + pad;
 
 export class TwoThumbControl {
   private readonly staticGfx: Phaser.GameObjects.Graphics;
@@ -68,11 +82,13 @@ export class TwoThumbControl {
   private readonly lockGfx: Phaser.GameObjects.Graphics;
   private readonly nockedRocket: Phaser.GameObjects.Image;
 
-  // Seat-frame geometry (lefty already applied).
+  // Seat-frame geometry (lefty applied by layOut).
   private readonly launcher: Point;
-  private readonly fire: { x: number; y: number; r: number };
-  private readonly specialBtn: { x: number; y: number; r: number };
-  private readonly pad: Point;
+  private lefty: boolean;
+  private fire!: Circle;
+  private specialBtn!: Circle;
+  private pad!: Point;
+  private swap!: Circle;
 
   /** The seat's current special: what SPECIAL fires and which icon it shows. */
   private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
@@ -90,15 +106,15 @@ export class TwoThumbControl {
   private armedBuzzed = false;
   /** Free-running ms clock for the armed pulse. */
   private elapsed = 0;
+  /** The pointer holding the swap control, and how long it has held (ms). */
+  private swapPointer: number | null = null;
+  private swapHeldMs = 0;
   /** Set when the resting picture changed and needs one more redraw. */
   private dirty = true;
 
   constructor(scene: Phaser.Scene, private readonly config: TwoThumbControlConfig) {
-    const { fire, special, pad } = CONTROLS_V2;
-    const mirror = <T extends Point>(p: T): T => (config.lefty ? { ...p, x: GAME_WIDTH - p.x } : { ...p });
-    this.fire = mirror(fire);
-    this.specialBtn = mirror(special);
-    this.pad = mirror(pad);
+    this.lefty = config.lefty;
+    this.layOut();
     this.launcher = this.toSeat(config.anchor);
 
     // Seat-frame container (identity for the bottom seat): the outer one pivots
@@ -138,12 +154,13 @@ export class TwoThumbControl {
   }
 
   /** World-space centres + radii of this seat's controls. */
-  worldLayout(): { anchor: Point; fire: Point & { r: number }; special: Point & { r: number }; pad: Point & { r: number } } {
+  worldLayout(): { anchor: Point; fire: Circle; special: Circle; pad: Circle; swap: Circle } {
     return {
       anchor: { ...this.config.anchor },
       fire: { ...this.toSeat(this.fire), r: this.fire.r },
       special: { ...this.toSeat(this.specialBtn), r: this.specialBtn.r },
       pad: { ...this.toSeat(this.pad), r: CONTROLS_V2.pad.r },
+      swap: { ...this.toSeat(this.swap), r: this.swap.r },
     };
   }
 
@@ -151,6 +168,13 @@ export class TwoThumbControl {
 
   handleDown(pointer: Phaser.Input.Pointer): void {
     const p = this.toSeat(pointer);
+    if (hits(p, this.swap, CONTROLS_V2.swap.hitPad)) {
+      if (this.swapPointer !== null) return;
+      this.swapPointer = pointer.id;
+      this.swapHeldMs = 0;
+      this.dirty = true;
+      return;
+    }
     const button = this.buttonAt(p);
     if (button) {
       // One button at a time: a second press on either button is ignored.
@@ -169,6 +193,15 @@ export class TwoThumbControl {
   }
 
   handleMove(pointer: Phaser.Input.Pointer): void {
+    if (pointer.id === this.swapPointer) {
+      // Sliding off the swap cancels its hold (a thumb that landed on it by
+      // accident and slid away mustn't flip the seat).
+      if (!hits(this.toSeat(pointer), this.swap, CONTROLS_V2.swap.hitPad)) {
+        this.swapPointer = null;
+        this.dirty = true;
+      }
+      return;
+    }
     if (pointer.id !== this.aimPointer) return; // a held button ignores sliding
     const p = this.toSeat(pointer);
     this.setAim(this.aimDeg - (p.x - this.dragLastX) * CONTROLS_V2.drag.gainDegPerPx);
@@ -176,6 +209,10 @@ export class TwoThumbControl {
   }
 
   handleUp(pointer: Phaser.Input.Pointer): void {
+    if (pointer.id === this.swapPointer) {
+      this.swapPointer = null; // released early: no swap
+      this.dirty = true;
+    }
     if (pointer.id === this.aimPointer) {
       this.aimPointer = null;
       this.dirty = true;
@@ -183,11 +220,7 @@ export class TwoThumbControl {
     if (pointer.id !== this.buttonPointer) return;
     const button = this.held;
     const charged = button === 'fire' && this.charge >= 1;
-    this.buttonPointer = null;
-    this.held = null;
-    this.charge = 0;
-    this.dirty = true;
-    this.lockGfx.clear();
+    this.dropButton();
     if (!button || !this.config.canFire(button)) return;
     const dir = this.worldDir();
     const { anchor } = this.config;
@@ -196,6 +229,10 @@ export class TwoThumbControl {
 
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
+    if (this.swapPointer !== null) {
+      this.swapHeldMs += deltaMs;
+      if (this.swapHeldMs >= CONTROLS_V2.swap.holdMs) this.toggleLefty();
+    }
     if (this.held === 'fire') this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
     const canFire = this.config.canFire('fire');
     // An empty special pool dims the SPECIAL icon (it regens on its own clock).
@@ -209,7 +246,7 @@ export class TwoThumbControl {
     // An empty pool dims the nocked rocket: the held button's pool, else
     // FIRE's (cheap; each pool regens on its own clock).
     this.nockedRocket.setAlpha(this.config.canFire(this.held ?? 'fire') ? 1 : 0.35);
-    const active = this.held !== null || this.aimPointer !== null;
+    const active = this.held !== null || this.aimPointer !== null || this.swapPointer !== null;
     if (!active && !this.dirty) return;
     this.dirty = false;
     this.drawDynamic();
@@ -220,7 +257,41 @@ export class TwoThumbControl {
 
   /** World ↔ seat frame (the same involution both ways). */
   private toSeat(p: Point): Point {
-    return this.config.edge === 'top' ? { x: GAME_WIDTH - p.x, y: GAME_HEIGHT - p.y } : { x: p.x, y: p.y };
+    return seatPoint(this.config.edge, p);
+  }
+
+  /** Seat-frame controls from CONTROLS_V2, mirrored (x → GAME_WIDTH − x) for a lefty seat. */
+  private layOut(): void {
+    const mirror = <T extends Point>(p: T): T => (this.lefty ? { ...p, x: GAME_WIDTH - p.x } : { ...p });
+    const { fire, special, pad, swap } = CONTROLS_V2;
+    this.fire = mirror(fire);
+    this.specialBtn = mirror(special);
+    this.pad = mirror(pad);
+    this.swap = mirror(swap);
+  }
+
+  /** The swap's hold completed: mirror (or un-mirror) the seat now, and tell
+   *  the scene. Buttons, pad, aim zone and swap move to the other side; a held
+   *  button is dropped without firing and the aim thumb let go (their regions
+   *  moved); the aim angle stays. */
+  private toggleLefty(): void {
+    this.lefty = !this.lefty;
+    this.layOut();
+    this.dropButton();
+    this.aimPointer = null;
+    this.swapPointer = null;
+    this.drawStatic();
+    this.setSpecial(this.currentSpecial);
+    this.config.onLeftyChange(this.lefty);
+  }
+
+  /** Let go of the held button (no shot) and clear its charge and target ring. */
+  private dropButton(): void {
+    this.buttonPointer = null;
+    this.held = null;
+    this.charge = 0;
+    this.dirty = true;
+    this.lockGfx.clear();
   }
 
   /** Launch direction in the seat frame (y down). */
@@ -240,11 +311,7 @@ export class TwoThumbControl {
 
   /** Which button (if any) a seat-frame point presses; nearest wins an overlap. */
   private buttonAt(p: Point): Button | null {
-    const pad = CONTROLS_V2.buttonHitPad;
-    const score = (b: { x: number; y: number; r: number }) => {
-      const d = Math.hypot(p.x - b.x, p.y - b.y);
-      return d <= b.r + pad ? d / b.r : Infinity;
-    };
+    const score = (b: Circle) => (hits(p, b, CONTROLS_V2.buttonHitPad) ? Math.hypot(p.x - b.x, p.y - b.y) / b.r : Infinity);
     const f = score(this.fire);
     const s = score(this.specialBtn);
     if (f === Infinity && s === Infinity) return null;
@@ -255,13 +322,14 @@ export class TwoThumbControl {
   private inAimRegion(p: Point): boolean {
     const { minX, minY } = CONTROLS_V2.drag;
     if (p.y < minY) return false;
-    return this.config.lefty ? p.x <= GAME_WIDTH - minX : p.x >= minX;
+    return this.lefty ? p.x <= GAME_WIDTH - minX : p.x >= minX;
   }
 
-  /** Buttons + pad base, drawn once in the seat frame. */
+  /** Buttons, pad base and swap, drawn in the seat frame (again on a swap). */
   private drawStatic(): void {
     const { color } = this.config;
     const g = this.staticGfx;
+    g.clear();
 
     // Launcher base dot (the nocked rocket sits on it).
     g.fillStyle(color, 0.6);
@@ -290,6 +358,27 @@ export class TwoThumbControl {
     g.fillStyle(color, 0.45);
     g.fillTriangle(this.pad.x - s, this.pad.y, this.pad.x - s + h * 1.4, this.pad.y - h, this.pad.x - s + h * 1.4, this.pad.y + h);
     g.fillTriangle(this.pad.x + s, this.pad.y, this.pad.x + s - h * 1.4, this.pad.y - h, this.pad.x + s - h * 1.4, this.pad.y + h);
+
+    this.drawSwap(g);
+  }
+
+  /** Swap control: a dim ring round ⇄ (an arrow right over an arrow left). */
+  private drawSwap(g: Phaser.GameObjects.Graphics): void {
+    const { color } = this.config;
+    const { x, y, r } = this.swap;
+    g.fillStyle(color, 0.08);
+    g.fillCircle(x, y, r);
+    g.lineStyle(1.5, color, 0.5);
+    g.strokeCircle(x, y, r);
+    const half = r * 0.5; // arrow half-length
+    const dy = r * 0.28; // each arrow's offset from the centre line
+    const head = r * 0.26;
+    g.lineStyle(2, color, 0.8);
+    g.fillStyle(color, 0.8);
+    g.lineBetween(x - half, y - dy, x + half - head, y - dy);
+    g.fillTriangle(x + half, y - dy, x + half - head, y - dy - head * 0.8, x + half - head, y - dy + head * 0.8);
+    g.lineBetween(x + half, y + dy, x - half + head, y + dy);
+    g.fillTriangle(x - half, y + dy, x - half + head, y + dy - head * 0.8, x - half + head, y + dy + head * 0.8);
   }
 
   private drawButtonBase(g: Phaser.GameObjects.Graphics, b: { x: number; y: number; r: number }): void {
@@ -322,6 +411,13 @@ export class TwoThumbControl {
     g.clear();
     const dir = this.seatDir();
     const active = this.held !== null || this.aimPointer !== null;
+
+    // Swap hold: a ring fills clockwise round the ⇄ (the charge-ring look).
+    if (this.swapPointer !== null) {
+      g.fillStyle(color, 0.25);
+      g.fillCircle(this.swap.x, this.swap.y, this.swap.r);
+      this.drawSweep(this.swap, this.swapHeldMs / CONTROLS_V2.swap.holdMs, STROKES.chargeArc.alpha);
+    }
 
     // Fixed-length dotted trajectory; dim at rest, bright while in use.
     const traj = STROKES.trajectory;
@@ -363,20 +459,23 @@ export class TwoThumbControl {
   /** Charge visuals on the FIRE button: a solid player-colour ring, with
    *  the charge violet sweeping clockwise from the top; breathes when armed. */
   private drawChargeRing(): void {
-    const g = this.dynamicGfx;
     const ring = STROKES.chargeArc;
-    const r = this.fire.r + CONTROLS_V2.chargeRingGap;
-    const start = -Math.PI / 2;
-    const width = ring.width + 1.5; // a touch bolder than the base stroke: the ring is small
-    g.lineStyle(width, this.config.color, ring.alpha);
-    g.strokeCircle(this.fire.x, this.fire.y, r);
+    this.dynamicGfx.lineStyle(RING_WIDTH, this.config.color, ring.alpha);
+    this.dynamicGfx.strokeCircle(this.fire.x, this.fire.y, this.fire.r + CONTROLS_V2.chargeRingGap);
     let alpha: number = ring.alpha;
     if (this.charge >= 1) {
       const pulse = Math.sin(this.elapsed * CHARGE.pulseW);
       alpha = Phaser.Math.Clamp(ring.alpha * (1 + CHARGE.armedPulseDepth * pulse), 0, 1);
     }
-    g.lineStyle(width, COLORS.charge, alpha);
-    drawSolidArc(g, this.fire.x, this.fire.y, r, start, start + this.charge * Math.PI * 2);
+    this.drawSweep(this.fire, this.charge, alpha);
+  }
+
+  /** The charge violet sweeping clockwise from the top round a control, `frac`
+   *  (0→1) of the way: FIRE's charge and the swap's hold. */
+  private drawSweep(c: Circle, frac: number, alpha: number): void {
+    const start = -Math.PI / 2;
+    this.dynamicGfx.lineStyle(RING_WIDTH, COLORS.charge, alpha);
+    drawSolidArc(this.dynamicGfx, c.x, c.y, c.r + CONTROLS_V2.chargeRingGap, start, start + Math.min(1, frac) * Math.PI * 2);
   }
 
   /** While SPECIAL is held with ammo: ring the enemy it would take. World space. */

@@ -1,8 +1,8 @@
 /**
  * SandboxScene — game orchestrator. Wires together stars, the station +
  * shield, a TwoThumbControl per joined seat (multitouch; the seats and their
- * Easy/Normal come from the join screen via lineup.ts, and ?lefty in
- * controlsVariant.ts mirrors a seat), the rocket pool, the WaveDirector
+ * Easy/Normal come from the join screen via lineup.ts; each seat's lefty swap
+ * mirrors it and is remembered in controlsVariant.ts), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
  * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
  * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
@@ -10,8 +10,8 @@
  * on a hit (handleHit, handleBossHit). Everything else lives in objects/.
  */
 import Phaser from 'phaser';
-import { CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, MISSILE, SLING, STATION } from '../layout';
-import { controlsVariant, isLefty } from '../controlsVariant';
+import { CONTROLS_V2, GAME_WIDTH, MISSILE, seatPoint, SLING, STATION, type SeatEdge } from '../layout';
+import { isLefty, leftySetting, setSeatLefty } from '../controlsVariant';
 import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
 import { generateTextures } from '../objects/textures';
 import { drawStarfield } from '../objects/draw';
@@ -89,23 +89,21 @@ export class SandboxScene extends Phaser.Scene {
 
     this.rockets = new RocketPool(this);
     this.explosions = new Explosions(this); // one shared burst system (B29)
-    const variant = controlsVariant();
     const run = data.lineup;
     const live = liveSeats(run);
     const players = live.length === 1 ? 1 : 2;
     // Each HUD sits in the centre column under its launcher, between SPECIAL and
-    // the aim pad (P1's rotated 180° about the field centre).
-    const hudAt = (player: 'p1' | 'p2') => {
-      const at = isLefty(variant.lefty, player) ? CONTROLS_V2.hudLefty : CONTROLS_V2.hud;
-      return player === 'p2'
-        ? { x: at.x, y: at.y, angle: 0 }
-        : { x: GAME_WIDTH - at.x, y: GAME_HEIGHT - at.y, angle: 180 };
-    };
+    // the aim pad (P1's rotated 180° about the field centre); a lefty seat's
+    // shifts to clear its mirrored buttons.
+    const hudAt = (edge: SeatEdge, lefty: boolean) => ({
+      ...seatPoint(edge, lefty ? CONTROLS_V2.hudLefty : CONTROLS_V2.hud),
+      angle: edge === 'top' ? 180 : 0,
+    });
     // Per-seat wiring: P1 sits at the top edge, P2 at the bottom. Only joined
     // seats are built (their HUD here, their control below), so in solo nothing
     // claims touches in the empty seat's region. An Easy seat never runs dry.
     const seats: readonly Seat[] = SEAT_DEFS.filter((d) => live.includes(d.player)).map((d) => {
-      const hud = new PlayerHud(this, { ...hudAt(d.player), colorCss: d.colorCss, color: d.color });
+      const hud = new PlayerHud(this, { ...hudAt(d.edge, isLefty(leftySetting(), d.player)), colorCss: d.colorCss, color: d.color });
       hud.setUnlimitedAmmo(run[d.player] === 'easy');
       return { ...d, hud };
     });
@@ -172,7 +170,13 @@ export class SandboxScene extends Phaser.Scene {
           anchor,
           color,
           edge,
-          lefty: isLefty(variant.lefty, player),
+          lefty: isLefty(leftySetting(), player),
+          // The swap (#21) mirrored this seat: remember it, move its HUD.
+          onLeftyChange: (lefty) => {
+            setSeatLefty(player, lefty);
+            const at = hudAt(edge, lefty);
+            hud.setPosition(at.x, at.y);
+          },
           rocketTexture: tex,
           canFire: (button) => hud.canFire(button),
           onFire: (x, y, dirx, diry, kind) => {
@@ -225,7 +229,9 @@ export class SandboxScene extends Phaser.Scene {
         splitCount: () => this.waveDirector.splitCount,
         asteroidHp: (slot: number) => this.asteroids[slot]?.hp,
         healthBars: () => this.healthBars.lastDrawn,
-        lefty: () => variant.lefty,
+        // The phone's lefty setting (kept current by the seats' swaps, #21).
+        lefty: () => leftySetting(),
+        hudPos: (player: number) => hud(player)?.position,
         seats: () => seats.map((seat) => seat.player),
         // The lineup's pick for a seat: 'easy' | 'normal', or null if it didn't join.
         difficulty: (player: number) => {
