@@ -6,8 +6,8 @@
  *   idle → leadIn → out → in → idle (done)
  *
  * leadIn waits ACT_TRANSITION.leadInMs AND until restoreAll's staggered
- * rebuild has shown every ship, so the whole fleet takes off with every shield
- * up. `out` flies it right, speeding up, until its bubbles are past the right
+ * rebuild has shown every ship and its regrow cue has settled, so the whole
+ * fleet takes off with every shield up. `out` flies it right, speeding up, until its bubbles are past the right
  * edge; it wraps to just off the left edge, and `in` eases it back into its
  * slots. The starfield rushes with it: its speed scale climbs to starRush
  * over `out` and settles back to cruise over `in`.

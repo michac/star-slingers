@@ -5,10 +5,11 @@
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, loseShips, failVisible, type Page } from './helpers';
-import { ACT_TRANSITION, AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
+import { ACT_TRANSITION, AMMO_REGEN_MS, FLEET, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
   ASTEROID_KIND,
+  BREATHER,
   breakEvenAccuracy,
   clearDamage,
   COMMAND_SHIP_WAVE,
@@ -165,6 +166,18 @@ test('between acts the fleet flies across, the stars rush, then it is back in pl
   const dialsMs = ACT_TRANSITION.leadInMs + ACT_TRANSITION.outMs + ACT_TRANSITION.inMs;
   expect(flybyMs).toBeGreaterThanOrEqual(dialsMs - 32);
   expect(flybyMs).toBeLessThanOrEqual(dialsMs + 64);
+});
+
+test('a fleet still being rebuilt finishes before it takes off (#29)', async ({ page }) => {
+  await gotoGame(page);
+  await debug(page, 'jumpToWave(3)');
+  await loseShips(page, 0, 1, 2); // three rebuilds, staggered past the lead-in
+  await debug(page, 'clearWave()');
+  const { done, steps } = await stepUntil(page, "s.__debug.transition().phase === 'out'", 300);
+  expect(done).toBe(true);
+  // The last ship reappears 2 staggers after the clear, then its bubble settles in.
+  expect(steps * 16).toBeGreaterThanOrEqual(2 * BREATHER.shipRestoreStaggerMs + REGROW.durationMs);
+  expect(await debug(page, 'fleet()')).toEqual(['shielded', 'shielded', 'shielded', 'shielded']);
 });
 
 test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page }) => {

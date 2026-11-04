@@ -84,6 +84,9 @@ export class Fleet {
   /** How far the whole fleet is shifted right of its slots (the act
    *  transition's flyby, #29); 0 in play. */
   private offset = 0;
+  /** Fleet clock time when the last restored ship's regrow cue ends; its
+   *  bubble copy is drawn where the ship was, so the flyby waits for it. */
+  private settledAtMs = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -116,9 +119,10 @@ export class Fleet {
     return this.ships.map((ship) => ship.state);
   }
 
-  /** True while restoreAll's staggered reveal still has ships to show. */
+  /** True while restoreAll's staggered reveal still has ships to show, or
+   *  the last one's regrow cue is still settling in. */
   get restoring(): boolean {
-    return this.ships.some((ship) => ship.revealAtMs !== null);
+    return this.elapsed < this.settledAtMs || this.ships.some((ship) => ship.revealAtMs !== null);
   }
 
   /** The fleet's current shift right of its slots (px). */
@@ -232,6 +236,7 @@ export class Fleet {
    *  the bubble settles back in. */
   private reveal(ship: Ship): void {
     ship.revealAtMs = null;
+    this.settledAtMs = Math.max(this.settledAtMs, this.elapsed + REGROW.durationMs);
     if (!ship.image.visible) {
       ship.lostImage.setVisible(false);
       ship.image.setVisible(true).setAlpha(0);
