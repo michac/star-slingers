@@ -8,12 +8,13 @@
  *   live | boss → between → (next wave) live | boss … → won
  *
  * Between waves (`between`): the fleet is restored (lost ships rebuilt, every
- * shield back), the star-shower plays, then
- * the interlude hooks run in order: `bossDrop` after a boss wave (#26), then
- * `actTransition` when the act changes (#29: the fleet's flyby). Each calls
- * `done()` when it's finished, so the flyby starts only once the drop is over. Then the banner announces the next wave. After wave 10 the run is
- * won. The starting wave (wave 1, a `?wave`/`?boss` shortcut, or a Try again
- * retry) starts directly with no banner, so play begins within seconds.
+ * shield back), the star-shower plays, then the interlude hooks run in order:
+ * `bossDrop` after a boss wave (#26), then `actTransition` when the act
+ * changes (#29: the fleet's flyby). Each calls `done()` when it's finished, so
+ * the flyby starts only once the drop is over. Then the banner announces the
+ * next wave. After wave 10 the run is won. The starting wave (wave 1, a
+ * `?wave`/`?boss` shortcut, or a Try again retry) starts directly with no
+ * banner, so play begins within seconds.
  *
  * Spawns: every (re)spawn draws its y from a shuffle bag over the 4 sublanes
  * (pickY), so each sublane gets an equal share of a wave's rocks whichever

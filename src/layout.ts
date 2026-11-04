@@ -76,8 +76,8 @@ export const SPECIAL = {
  * everything, ported from the v6 mock. Each layer is one tiling texture
  * (`TEX.starLayer`) scrolled by Starfield.ts. `speed` is px/s at
  * `speedScale` 1; the act transition (#29, ACT_TRANSITION.starRush) raises
- * the scale at run time via Starfield.setSpeedScale. Counts are per 360px of width (the tile is wider,
- * so it scales them up).
+ * the scale at run time via Starfield.setSpeedScale. Counts are per 360px of
+ * width (the tile is wider, so it scales them up).
  */
 export const STARFIELD = {
   speedScale: 1,
@@ -155,11 +155,13 @@ export const FLEET = {
   facePoint: { x: FLEET_SHIELD.cx, y: (LANE.top + LANE.bottom) / 2 },
 } as const;
 
+/** How far past the screen edge the flyby takes the fleet (bubbles included) before it wraps. */
+const ACT_OFFSCREEN_PAD = 16;
+
 /**
- * The act transition (#29): between acts the whole fleet flies off the right
- * edge, comes back in from the left and eases into its slots, while the
- * starfield rushes. Driven per frame by ActTransition.ts (not tweens), so the
- * e2e suite's stepped clock runs it. Total ≈ leadInMs + outMs + inMs.
+ * The act transition (#29), played by ActTransition.ts: between acts the whole
+ * fleet flies off the right edge, comes back in from the left and eases into
+ * its slots, while the starfield rushes. Total ≈ leadInMs + outMs + inMs.
  */
 export const ACT_TRANSITION = {
   /** Minimum pause before take-off (it also waits for restored ships to show). */
@@ -170,16 +172,10 @@ export const ACT_TRANSITION = {
   inMs: 1300,
   /** Peak star speed (Starfield speed scale), reached at the wrap. */
   starRush: 6,
-  /** How far past the screen edge the fleet (bubbles included) goes before it wraps. */
-  offscreenPad: 16,
   /** Fleet x offset where the out leg ends: its bubbles' left edge past the right edge. */
-  get exitX(): number {
-    return GAME_WIDTH - (FLEET_SHIELD.cx - FLEET_SHIELD.rx) + this.offscreenPad;
-  },
-  /** Fleet x offset where the in leg starts: its bubbles' right edge before the left edge. */
-  get entryX(): number {
-    return -(FLEET_SHIELD.cx + FLEET_SHIELD.rx) - this.offscreenPad;
-  },
+  exitX: GAME_WIDTH - (FLEET_SHIELD.cx - FLEET_SHIELD.rx) + ACT_OFFSCREEN_PAD,
+  /** Fleet x offset where the in leg starts: its bubbles' front past the left edge. */
+  entryX: -FLEET.bubbleFrontX - ACT_OFFSCREEN_PAD,
 } as const;
 
 /** Worried-shake tween on a fleet ship when its shield pops. */

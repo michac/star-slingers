@@ -25,6 +25,8 @@ import type { Starfield } from './Starfield';
 export type TransitionPhase = 'idle' | 'leadIn' | 'out' | 'in';
 
 const { In: easeIn, Out: easeOut } = Phaser.Math.Easing.Quadratic;
+const { Linear: lerp } = Phaser.Math;
+const CRUISE = STARFIELD.speedScale;
 
 export class ActTransition {
   private phaseState: TransitionPhase = 'idle';
@@ -61,8 +63,8 @@ export class ActTransition {
         return;
       case 'out': {
         const p = Math.min(1, this.elapsed / T.outMs);
-        this.fleet.setOffsetX(T.exitX * easeIn(p));
-        this.starfield.setSpeedScale(STARFIELD.speedScale + (T.starRush - STARFIELD.speedScale) * p);
+        this.fleet.setOffsetX(lerp(0, T.exitX, easeIn(p)));
+        this.starfield.setSpeedScale(lerp(CRUISE, T.starRush, p));
         if (p >= 1) {
           // Wrap: off the right edge, straight to just off the left one.
           this.enter('in');
@@ -73,8 +75,8 @@ export class ActTransition {
       case 'in': {
         const p = Math.min(1, this.elapsed / T.inMs);
         const e = easeOut(p);
-        this.fleet.setOffsetX(T.entryX * (1 - e));
-        this.starfield.setSpeedScale(T.starRush + (STARFIELD.speedScale - T.starRush) * e);
+        this.fleet.setOffsetX(lerp(T.entryX, 0, e));
+        this.starfield.setSpeedScale(lerp(T.starRush, CRUISE, e));
         if (p >= 1) this.finish();
         return;
       }
@@ -90,7 +92,7 @@ export class ActTransition {
    *  the stars return to cruise, and done never runs. */
   cancel(): void {
     this.done = null;
-    this.reset();
+    this.finish();
   }
 
   private enter(phase: TransitionPhase): void {
@@ -98,16 +100,13 @@ export class ActTransition {
     this.elapsed = 0;
   }
 
+  /** Back to idle with the fleet home and the stars at cruise, then run done (if any). */
   private finish(): void {
     const done = this.done;
     this.done = null;
-    this.reset();
-    done?.();
-  }
-
-  private reset(): void {
     this.enter('idle');
     this.fleet.setOffsetX(0);
-    this.starfield.setSpeedScale(STARFIELD.speedScale);
+    this.starfield.setSpeedScale(CRUISE);
+    done?.();
   }
 }

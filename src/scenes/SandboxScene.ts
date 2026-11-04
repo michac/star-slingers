@@ -4,11 +4,12 @@
  * Easy/Normal come from the join screen via lineup.ts; each seat's lefty swap
  * mirrors it and is remembered in controlsVariant.ts), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
- * encounter, the between-acts fleet flyby (#29), per-player HUDs, the wave banner, damaged enemies' health bars,
- * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
- * rounds and SPECIAL missiles (fireShot, pickMissileTarget) and what each does
- * on a hit (handleHit, handleBossHit), and what an enemy reaching the fleet
- * does (checkFleetContacts). Everything else lives in objects/.
+ * encounter, the between-acts fleet flyby (#29), per-player HUDs, the wave
+ * banner, damaged enemies' health bars, and the fail/victory overlays. It
+ * also owns the shot rules (#22): FIRE rounds and SPECIAL missiles (fireShot,
+ * pickMissileTarget) and what each does on a hit (handleHit, handleBossHit),
+ * and what an enemy reaching the fleet does (checkFleetContacts). Everything
+ * else lives in objects/.
  */
 import Phaser from 'phaser';
 import { CONTROLS_V2, GAME_WIDTH, MISSILE, seatPoint, SLING, sublaneOf, type SeatEdge } from '../layout';
