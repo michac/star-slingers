@@ -10,8 +10,8 @@
  * Between waves (`between`): the fleet is restored (lost ships rebuilt, every
  * shield back), the star-shower plays, then
  * the interlude hooks run in order: `bossDrop` after a boss wave (#26), then
- * `actTransition` when the act changes (#29). Each calls `done()` when it's
- * finished. Then the banner announces the next wave. After wave 10 the run is
+ * `actTransition` when the act changes (#29: the fleet's flyby). Each calls
+ * `done()` when it's finished, so the flyby starts only once the drop is over. Then the banner announces the next wave. After wave 10 the run is
  * won. The starting wave (wave 1, a `?wave`/`?boss` shortcut, or a Try again
  * retry) starts directly with no banner, so play begins within seconds.
  *
@@ -47,9 +47,11 @@ type WaveState = 'live' | 'boss' | 'between' | 'won';
 /** The between-wave seams later act issues fill in. Each must call `done()`
  *  exactly once when it has finished (straight away by default). */
 export interface RunHooks {
-  /** A boss wave just ended (#26: the boss's upgrade pods). */
+  /** A boss wave just ended (#26: the boss's upgrade pods). Call `done` only
+   *  once every pod is collected or gone: the act transition runs after it. */
   bossDrop(wave: RunWave, done: () => void): void;
-  /** The last wave of act `from` just ended (#29: the colony-ship flyby). */
+  /** The last wave of act `from` just ended (#29: the colony-ship flyby,
+   *  ActTransition.ts). Never runs after the last act: the run is won instead. */
   actTransition(from: Act, to: Act, done: () => void): void;
 }
 
@@ -67,6 +69,9 @@ export interface RunOptions {
   startEncounter: () => void;
   /** Stop the encounter (a wave jump away from it). */
   stopEncounter: () => void;
+  /** Stop any interlude still playing (a wave jump during one); its `done`
+   *  is dropped by the run token anyway. */
+  stopInterludes: () => void;
   /** Wave 10 is cleared: the scene shows the victory card. */
   onRunWon: () => void;
 }
@@ -187,6 +192,7 @@ export class WaveDirector {
     if (!isWaveNumber(n)) return;
     this.vanishField();
     this.run.stopEncounter();
+    this.run.stopInterludes();
     this.banner.hide();
     this.startWave(n - 1);
   }

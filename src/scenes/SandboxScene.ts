@@ -4,7 +4,7 @@
  * Easy/Normal come from the join screen via lineup.ts; each seat's lefty swap
  * mirrors it and is remembered in controlsVariant.ts), the rocket pool, the WaveDirector
  * (which owns the asteroids and the 10-wave run), the command-ship boss
- * encounter, per-player HUDs, the wave banner, damaged enemies' health bars,
+ * encounter, the between-acts fleet flyby (#29), per-player HUDs, the wave banner, damaged enemies' health bars,
  * and the fail/victory overlays. It also owns the shot rules (#22): FIRE
  * rounds and SPECIAL missiles (fireShot, pickMissileTarget) and what each does
  * on a hit (handleHit, handleBossHit), and what an enemy reaching the fleet
@@ -28,6 +28,7 @@ import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
 import { NO_INTERLUDES, WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
+import { ActTransition } from '../objects/ActTransition';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import { HealthBars } from '../objects/HealthBars';
@@ -71,6 +72,7 @@ export class SandboxScene extends Phaser.Scene {
   private scoreKeeper!: ScoreKeeper;
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
+  private actTransition!: ActTransition;
   private healthBars!: HealthBars;
   private failOverlay!: Overlay;
   private victoryOverlay!: Overlay;
@@ -143,6 +145,9 @@ export class SandboxScene extends Phaser.Scene {
       players
     );
 
+    // Between acts the fleet flies across (#29), on the scene's update clock.
+    this.actTransition = new ActTransition(this.fleet, this.starfield);
+
     // The director creates the asteroid wrappers and starts the first wave live.
     this.waveDirector = new WaveDirector(
       this,
@@ -151,9 +156,13 @@ export class SandboxScene extends Phaser.Scene {
       banner,
       {
         startWave: data.startWave ?? queryWave,
-        hooks: NO_INTERLUDES, // #26 boss drops, #29 act transitions
+        hooks: {
+          ...NO_INTERLUDES, // #26 boss drops
+          actTransition: (from, to, done) => this.actTransition.start(from, to, done),
+        },
         startEncounter: () => this.bossEncounter.start(),
         stopEncounter: () => this.bossEncounter.stop(),
+        stopInterludes: () => this.actTransition.cancel(),
         onRunWon: () => this.victoryOverlay.show(),
       },
       (x, y, r) => this.explosions.boom(x, y, r),
@@ -272,6 +281,15 @@ export class SandboxScene extends Phaser.Scene {
         // The fleet, top to bottom: 'shielded' | 'exposed' | 'lost' per ship (#19).
         fleet: () => this.fleet.states(),
         starOffsets: () => this.starfield.offsets,
+        // The act transition (#29): its phase, the fleet's shift, the star
+        // speed scale, and every flyby so far ('1-2', …).
+        transition: () => ({
+          phase: this.actTransition.phase,
+          offsetX: this.fleet.offsetX,
+          starScale: this.starfield.speedScaleNow,
+          flights: [...this.actTransition.flights],
+        }),
+        skipTransition: () => this.actTransition.skip(),
       };
     }
   }
@@ -288,6 +306,7 @@ export class SandboxScene extends Phaser.Scene {
     this.rockets.update(delta);
     this.fleet.update(delta); // bubble pulse + each ship's shield regen
     this.waveDirector.update(delta); // wave-clear check
+    this.actTransition.update(delta); // the between-acts flyby (idle otherwise)
     this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent.
     this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));

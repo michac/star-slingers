@@ -1,10 +1,11 @@
 /**
  * waves.spec.ts — the run and the src/waves.ts difficulty model: the 10-wave RUN table and its
- * play order, the ?wave shortcut, Try again's retry wave, the wave solver and solo target scaling.
+ * play order, the act transition's fleet flyby (#29), the ?wave shortcut, Try again's retry wave,
+ * the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, loseShips, failVisible, type Page } from './helpers';
-import { AMMO_REGEN_MS, FLEET, SPECIAL, sublaneCenterY } from '../src/layout';
+import { ACT_TRANSITION, AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
   ASTEROID_KIND,
@@ -85,11 +86,16 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
         d.clearWave();
       }
       row.cleared = until(() => !playing(), 3);
-      row.banner = s.waveDirector.banner.numerals.map((t: any) => t.text);
-      if (n < 10) row.next = until(() => d.wave() === n + 1 && playing(), 300);
+      if (n < 10) {
+        // A breather is the fleet's flyby (#29) after each act's last wave, then the banner.
+        const numerals = s.waveDirector.banner.numerals;
+        row.banner = until(() => numerals.every((t: any) => t.text === String(n + 1)), 300);
+        row.next = until(() => d.wave() === n + 1 && playing(), 300);
+      }
       rows.push(row);
     }
-    return { rows, won: until(() => s.victoryOverlay.visible, 120), state: d.state(), interludes: d.interludes() };
+    const won = until(() => s.victoryOverlay.visible, 120);
+    return { rows, won, state: d.state(), interludes: d.interludes(), transition: d.transition() };
   });
 
   run.rows.forEach((row: any, i: number) => {
@@ -98,7 +104,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
     expect(row, `wave ${n}`).toMatchObject({ wave: n, act: w.act, kind: w.boss ?? w.kind, won: false, cleared: true });
     expect(row.state, `wave ${n}`).toBe(w.field ? 'live' : 'boss');
     if (n < 10) {
-      expect(row.banner.every((t: string) => t === String(n + 1)), `banner after wave ${n}: ${row.banner}`).toBe(true);
+      expect(row.banner, `banner announces wave ${n + 1}`).toBe(true);
       expect(row.next, `wave ${n + 1} starts`).toBe(true);
     }
   });
@@ -108,6 +114,118 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
   expect(run.interludes).toEqual(['drop:3', 'act:1-2', 'drop:6', 'act:2-3', 'drop:9', 'act:3-4']);
   expect(run.won).toBe(true);
   expect(run.state).toBe('won');
+  // The fleet flew across once per act change, and not after the finale (#29).
+  expect(run.transition).toEqual({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale, flights: ['1-2', '2-3', '3-4'] });
+});
+
+/** Clear wave 3 (act 1's last wave) and sample the flyby (#29) every fixed
+ *  step until wave 4 is live: the transition's phase, fleet offset and star
+ *  speed, whether the banner shows, and the run's state. */
+async function flyAct1To2(page: Page) {
+  await debug(page, 'jumpToWave(3)');
+  await debug(page, 'clearWave()');
+  return page.evaluate(() => {
+    const w = window as any;
+    const s = w.__game.scene.keys['Sandbox'];
+    const d = s.__debug;
+    const samples: any[] = [];
+    for (let n = 0; n < 800 && !(d.wave() === 4 && d.state() === 'live'); n++) {
+      w.__step();
+      const banner = s.waveDirector.banner.numerals.every((t: any) => t.text === '4');
+      samples.push({ ...d.transition(), banner, state: d.state() });
+    }
+    return { samples, wave: d.wave(), state: d.state() };
+  });
+}
+
+test('between acts the fleet flies across, the stars rush, then it is back in place (#29)', async ({ page }) => {
+  await gotoGame(page);
+  const { samples, wave, state } = await flyAct1To2(page);
+  expect({ wave, state }).toEqual({ wave: 4, state: 'live' });
+
+  const flying = samples.filter((s) => s.phase === 'out' || s.phase === 'in');
+  const out = samples.filter((s) => s.phase === 'out');
+  const back = samples.filter((s) => s.phase === 'in');
+  // Left to right: the out leg only moves right, and leaves the screen.
+  for (let i = 1; i < out.length; i++) expect(out[i].offsetX).toBeGreaterThanOrEqual(out[i - 1].offsetX);
+  expect(Math.max(...out.map((s) => s.offsetX))).toBeGreaterThan(GAME_WIDTH);
+  // Then it comes in from the left, still moving right, and settles in its slot.
+  expect(back[0].offsetX).toBeLessThan(0);
+  for (let i = 1; i < back.length; i++) expect(back[i].offsetX).toBeGreaterThanOrEqual(back[i - 1].offsetX);
+  // The stars rush mid-flight and settle back to cruise.
+  expect(Math.max(...flying.map((s) => s.starScale))).toBeGreaterThan(ACT_TRANSITION.starRush * 0.9);
+  const last = samples[samples.length - 1];
+  expect(last).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale, flights: ['1-2'] });
+  // Nothing else happens meanwhile: the run stays between waves, no banner yet.
+  expect(samples.filter((s) => s.phase !== 'idle').every((s) => s.state === 'between' && !s.banner)).toBe(true);
+  expect(samples.some((s) => s.banner)).toBe(true); // the banner follows the flyby
+  // It doesn't drag on: the flyby lasts about its dials (the lead-in also waits
+  // for the rebuilt ships to show, which takes less than that here).
+  const flybyMs = samples.filter((s) => s.phase !== 'idle').length * 16;
+  const dialsMs = ACT_TRANSITION.leadInMs + ACT_TRANSITION.outMs + ACT_TRANSITION.inMs;
+  expect(flybyMs).toBeGreaterThanOrEqual(dialsMs - 32);
+  expect(flybyMs).toBeLessThanOrEqual(dialsMs + 64);
+});
+
+test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page }) => {
+  await gotoGame(page);
+  await debug(page, 'jumpToWave(3)');
+  await debug(page, 'clearWave()');
+  expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 50", 300)).done).toBe(true);
+  await debug(page, 'skipTransition()');
+  expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
+  // Skipping counts as finishing: the banner and wave 4 follow.
+  expect((await stepUntil(page, "s.__debug.wave() === 4 && s.__debug.state() === 'live'", 300)).done).toBe(true);
+
+  // A jump mid-flight snaps the fleet home and drops the rest of the breather.
+  await debug(page, 'jumpToWave(6)'); // the command ship: act 2's last wave
+  await debug(page, 'snapBossIn()');
+  await stepGame(page, 16, 1);
+  await debug(page, 'defeatBoss()');
+  expect((await stepUntil(page, "s.__debug.transition().phase === 'in'", 400)).done).toBe(true);
+  await debug(page, 'jumpToWave(2)');
+  expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
+  await stepGame(page, 16, 400);
+  expect(await runState(page)).toMatchObject({ wave: 2, state: 'live' });
+});
+
+test('the flyby waits for the boss drop to finish (#29 AC3)', async ({ page }) => {
+  await gotoGame(page);
+  // Hold the boss-drop seam open, as #26's pods will until they're collected or gone.
+  await page.evaluate(() => {
+    const w = window as any;
+    const hooks = w.__game.scene.keys['Sandbox'].waveDirector.run.hooks;
+    hooks.bossDrop = (_wave: unknown, done: () => void) => {
+      w.__releaseDrop = done;
+    };
+  });
+  await debug(page, 'jumpToWave(3)');
+  await debug(page, 'clearWave()');
+  await stepGame(page, 16, 300);
+  expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, flights: [] });
+  expect(await debug(page, 'state()')).toBe('between');
+  await page.evaluate(() => (window as any).__releaseDrop());
+  expect(await debug(page, 'transition()')).toMatchObject({ phase: 'leadIn', flights: ['1-2'] });
+});
+
+test('shots fired during the flyby hit nothing and break nothing (#29)', async ({ page }) => {
+  await gotoGame(page);
+  await debug(page, 'jumpToWave(3)');
+  await debug(page, 'clearWave()');
+  expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 100", 300)).done).toBe(true);
+  const hits = await debug<number>(page, 'hits()');
+  // A FIRE round straight through the moving fleet's row, and a SPECIAL
+  // through the seat's real shot path (its missile looks for a target).
+  const at = { x: 300, y: sublaneCenterY(1) };
+  await page.evaluate(({ x, y }) => {
+    const s = (window as any).__game.scene.keys['Sandbox'];
+    s.fireShot('rocket-p1', 'p1', x, y, -1, 0, { button: 'fire', charged: true });
+    s.fireShot('rocket-p2', 'p2', x, y + 40, -1, 0, { button: 'special', charged: false });
+  }, at);
+  expect((await stepUntil(page, "s.__debug.wave() === 4 && s.__debug.state() === 'live'", 400)).done).toBe(true);
+  expect(await debug(page, 'hits()')).toBe(hits);
+  expect(await debug(page, 'fleet()')).toEqual(['shielded', 'shielded', 'shielded', 'shielded']);
+  expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, flights: ['1-2'] });
 });
 
 /** Lose the current wave through the real fleet-contact path: lose ships 1-3
@@ -134,6 +252,8 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   await loseRun(page);
   await tryAgain(page);
   expect(await runState(page)).toMatchObject({ wave: 4, act: 2, state: 'live', failVisible: false });
+  // Restarting at an act's first wave doesn't replay the flyby into it (#29).
+  expect(await debug(page, 'transition()')).toEqual({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale, flights: [] });
 
   // A win after that retry goes back to the join screen (#20), and the next run
   // starts fresh at wave 1, not at the retry wave (Phaser keeps the last
