@@ -36,10 +36,15 @@ export class Starfield {
     });
   }
 
-  /** The speed dial for later work (#29's act transitions): 1 is the steady
+  /** The speed dial (the act transition's rush, #29): 1 is the steady
    *  cruise, 0 stops the stars, above 1 is a rush. */
   setSpeedScale(scale: number): void {
     this.speedScale = scale;
+  }
+
+  /** The current speed scale (1 = cruise). */
+  get speedScaleNow(): number {
+    return this.speedScale;
   }
 
   /** Each layer's scroll offset in px (the e2e suite reads it). */
