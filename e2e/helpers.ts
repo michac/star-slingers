@@ -35,7 +35,7 @@
  * not one per frame.
  */
 import { test as base, expect, type Page } from '@playwright/test';
-import { ASTEROID_KIND } from '../src/waves';
+import { ASTEROID_KIND, type AsteroidKind } from '../src/waves';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
 import type { Lineup } from '../src/lineup';
 import type { ShipState } from '../src/objects/Fleet';
@@ -181,7 +181,7 @@ export async function fieldRock(
     slot = 0,
     hp,
     speed = 0,
-  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number; speed?: number }
+  }: { x: number; y: number; kind?: AsteroidKind; radius?: number; slot?: number; hp?: number; speed?: number }
 ): Promise<void> {
   await page.evaluate(
     ({ x, y, kind, radius, slot, hp, speed }) => {

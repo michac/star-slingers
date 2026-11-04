@@ -7,11 +7,13 @@ import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUnt
 import { AMMO_REGEN_MS, FLEET, SPECIAL, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
+  asteroidsFor,
   ASTEROID_KIND,
   breakEvenAccuracy,
   clearDamage,
   COMMAND_SHIP_WAVE,
   DAMAGE,
+  maxHpOf,
   requiredDamagePerSec,
   RUN,
   SOLO,
@@ -169,6 +171,34 @@ test('wave solver uses only standards and three-hit splitters', () => {
   expect(specs.every((spec) => spec.radius === ASTEROID_KIND[spec.kind].radius)).toBe(true);
   const cost = specs.reduce((sum, spec) => sum + clearDamage(spec), 0);
   expect(cost).toBeGreaterThan(specs.length); // a splitter contributes 3, not 2
+});
+
+test('act 1 brings one new rock per wave: wave 1 standards only, wave 2 adds two-hit rocks, no splitters', () => {
+  for (const players of [1, 2] as const) {
+    const w1 = asteroidsFor(RUN[0].field!, players);
+    expect(w1.every((spec) => spec.kind === 'standard' && maxHpOf(spec) === 1), `wave 1 (${players}p)`).toBe(true);
+    const w2 = asteroidsFor(RUN[1].field!, players);
+    expect(w2.some((spec) => spec.kind === 'tough' && maxHpOf(spec) === 2), `wave 2 (${players}p)`).toBe(true);
+    expect(w2.every((spec) => spec.kind === 'standard' || spec.kind === 'tough'), `wave 2 (${players}p)`).toBe(true);
+    expect(w2.some((spec) => spec.kind === 'standard'), `wave 2 keeps some standards (${players}p)`).toBe(true);
+  }
+  // A two-hit rock costs its 2 hp of clear damage in the solver's threat.
+  expect(clearDamage({ kind: 'tough', radius: ASTEROID_KIND.tough.radius, speed: 1 })).toBe(2);
+  // The lever is per wave: the same target with the default lever still reaches for splitters.
+  expect(solveWave(0.6, 0).some((spec) => spec.kind === 'splitter')).toBe(true);
+});
+
+test('booted waves field the hp mix: wave 1 all 1-hp standards, wave 2 some 2-hp tough rocks', async ({ page }) => {
+  const fielded = () =>
+    page.evaluate(`${SCENE}.asteroids.filter((a) => a.isActive && !a.isChild).map((a) => [a.spec.kind, a.maxHp])`) as Promise<[string, number][]>;
+  await gotoGame(page, '?wave=1');
+  const w1 = await fielded();
+  expect(w1.length).toBeGreaterThan(0);
+  expect(w1.every(([kind, hp]) => kind === 'standard' && hp === 1)).toBe(true);
+  await debug(page, 'jumpToWave(2)');
+  const w2 = await fielded();
+  expect(w2.some(([kind, hp]) => kind === 'tough' && hp === 2)).toBe(true);
+  expect(w2.every(([kind]) => kind !== 'splitter')).toBe(true);
 });
 
 test('solo scales wave targets; two-player targets are untouched', () => {

@@ -31,6 +31,10 @@ export const COLORS = {
   hullFill: 0x123056, // solid stand-in for the #neon-hull radial (#16306a→#0b1130)
   hullWindow: 0xbffcff, // .hull-window
   rockFill: 0x2a0e3e, // .rock interior (wireframe rock was stroke-only)
+  // The two-hit rock (#25): a denser interior and a deeper magenta rim, so it
+  // reads as tough before it's hit (no reading needed).
+  rockToughFill: 0x4a1660,
+  rockToughRim: 0xc2186e,
   crater: 0xff7ab3, // .crater
   star: 0xbfefff, // .star (bright cyan-white, was lineDim)
 
@@ -70,6 +74,8 @@ export const STROKES = {
   chargeArc: { width: 2, alpha: 0.95 }, // B35: FIRE's solid charge ring (base + charge fill)
   trajectory: { width: 2, alpha: 0.85, dash: 2, gap: 7 }, // .trajectory
   rock: { width: 2.5 }, // .rock
+  rockTough: { width: 4 }, // the two-hit rock's heavier rim (#25)
+  rockGiant: { width: 5 }, // the giant asteroid's rim (#25)
   crater: { width: 1.5 }, // .crater
   // Solid (not dashed) shield rings: 3 nested dashed circles read as noise.
   // The locked shield-pulse reference draws its rings with this.

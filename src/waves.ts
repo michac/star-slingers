@@ -7,7 +7,8 @@
  * The model (see docs/design.md §7 "Difficulty"): a wave is a TARGET — the net team
  * damage/s it should demand — and `solveWave` realizes it by advancing knobs in
  * priority order (count → speed → toughness) until the field's threat meets the
- * target. Damage per shot is `DAMAGE`; every rock is 1 hp today, so damage/s == kills/s.
+ * target. Damage per shot is `DAMAGE`; a rock's clear damage counts its hp (a
+ * two-hit rock costs 2), so the target is damage/s, not kills/s.
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
@@ -21,19 +22,21 @@ export interface AsteroidSpec {
   hp?: number;
 }
 
-/** Both kinds pop on one point of damage today. A splitter then adds two
- * standard children, so clearing it completely takes 3 damage (clearDamage). */
-export type AsteroidKind = 'standard' | 'splitter';
+/** A standard pops on one point of damage. A tough rock (#25) takes two: it's
+ * a little bigger and drawn in a darker, denser shade so it reads as tough
+ * before it's hit. A splitter pops on one, then adds two standard children,
+ * so clearing it completely takes 3 damage (clearDamage). */
+export type AsteroidKind = 'standard' | 'tough' | 'splitter';
 export const ASTEROID_KIND = {
   standard: { radius: 13, hp: 1 },
+  tough: { radius: 15, hp: 2 },
   splitter: { radius: 17, hp: 1 },
 } as const satisfies Record<AsteroidKind, { radius: number; hp: number }>;
 
 /** Damage per rocket hit, by shot type (#22): a plain FIRE round, a charged
  *  FIRE round (the railgun: double damage, and it carries on past a target only
- *  if this hit kills it), and the SPECIAL homing missile. Every rock is 1 hp
- *  today, so a charged round's second point is overkill on a rock and the
- *  solver's per-kill damage is unchanged. */
+ *  if this hit kills it), and the SPECIAL homing missile. A charged round pops
+ *  a two-hit rock at once; on a one-hit rock its second point is overkill. */
 export const DAMAGE = {
   fire: 1,
   charged: 2,
@@ -45,8 +48,8 @@ export function maxHpOf(spec: AsteroidSpec): number {
   return spec.hp ?? ASTEROID_KIND[spec.kind].hp;
 }
 
-/** Total damage to clear a rock completely — a splitter includes the hp of the
- *  standard children it releases (1 + 2 × 1 = 3 today). */
+/** Total damage to clear a rock completely: its hp, plus for a splitter the hp
+ *  of the standard children it releases (1 + 2 × 1 = 3). A tough rock is 2. */
 export function clearDamage(spec: AsteroidSpec): number {
   const children = spec.kind === 'splitter' ? SPLITTER_CHILDREN.count * ASTEROID_KIND.standard.hp : 0;
   return maxHpOf(spec) + children;
@@ -86,6 +89,10 @@ export interface WaveConfig {
   required: number; // target net damage/s players must land (see docs/design.md §7)
   quota: number; // total asteroids this wave fields, then respawns stop
   shieldRegenMs: number; // a fleet ship's shield regrows after this long unhit; 0 = off
+  /** The toughest rock the solver may field: its last lever swaps standards
+   *  for this kind. Default 'splitter'; 'standard' turns the lever off (#25:
+   *  act 1 brings in one new idea per wave). */
+  topKind?: AsteroidKind;
 }
 
 /** The run's four acts: 1 asteroids, 2 ships, 3 space monsters, 4 the finale. */
@@ -101,8 +108,9 @@ export type WaveKind = 'asteroid' | 'ship' | 'monster' | 'boss' | 'finale';
 export type BossId = 'giantAsteroid' | 'commandShip' | 'monsterBoss';
 
 /** One wave of the run. A wave with a `field` is played by the difficulty
- *  solver (an asteroid field today); the command ship has none and is played
- *  by the BossEncounter with the BOSS dials. */
+ *  solver (an asteroid field today); a boss with none is played by its own
+ *  encounter (the giant asteroid by GiantAsteroid with the GIANT dials, the
+ *  command ship by the BossEncounter with the BOSS dials). */
 export interface RunWave {
   act: Act;
   kind: WaveKind;
@@ -117,18 +125,20 @@ export interface RunWave {
  * for the run lives here so each act's issue retunes it in one place.
  *
  * Targets: each act eases back a step from the last one's peak, then climbs.
- * The act-1 targets are the calibrated ones from Playtest 3 / B37 (W1 one
- * splitter → W2/W3 two; the 5yo's cushion is homing, not speed: if W1 plays
- * too steep, soften its target toward ~0.25). The rest are placeholders,
- * revisable in playtest. Tune by the dev boot log (target vs achieved + tier).
+ * Act 1 (#25) brings in one new idea per wave: W1 is standards only (its
+ * calibrated 0.30 target saturates at four standards ×0.85, ≈0.29), W2 adds
+ * two-hit rocks (no splitters), W3 is the giant asteroid (GIANT below). The
+ * 5yo's cushion is homing, not speed: if W1 plays too steep, soften its target
+ * toward ~0.25. The rest are placeholders, revisable in playtest. Tune by the
+ * dev boot log (target vs achieved + tier).
  *
  * The finale is a long, dense, forgiving wave to blast with every upgrade:
  * its target solves to all four streams as splitters at max speed, with a big
  * quota and a quick shield regen.
  */
 export const RUN: readonly RunWave[] = [
-  { act: 1, kind: 'asteroid', field: { required: 0.3, quota: 8, shieldRegenMs: 10000 } },
-  { act: 1, kind: 'asteroid', field: { required: 0.45, quota: 10, shieldRegenMs: 11000 } },
+  { act: 1, kind: 'asteroid', field: { required: 0.3, quota: 8, shieldRegenMs: 10000, topKind: 'standard' } },
+  { act: 1, kind: 'asteroid', field: { required: 0.45, quota: 10, shieldRegenMs: 11000, topKind: 'tough' } },
   { act: 1, kind: 'boss', boss: 'giantAsteroid', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
   { act: 2, kind: 'ship', placeholder: true, field: { required: 0.45, quota: 10, shieldRegenMs: 11000 } },
   { act: 2, kind: 'ship', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
@@ -189,6 +199,23 @@ export const BREATHER = {
 } as const;
 
 /**
+ * Giant-asteroid boss (#25) BALANCE dials — wave 3, act 1's boss (geometry is
+ * GIANT_LAYOUT in layout.ts). It comes alone and drifts straight at the fleet;
+ * reaching it loses the whole fleet. Only charged FIRE rounds hurt it: in solo
+ * every charged hit is one point; with two seats one seat's charged hit lights
+ * a ring in its colour for `pairWindowMs`, and the OTHER seat's charged hit
+ * inside it is the point. Plain rounds and missiles spark off. At 0 hp it
+ * bursts into `burstCount` one-hit rocks, and the wave clears once they're gone.
+ */
+export const GIANT = {
+  hp: 5, // paired (two-player) or single (solo) charged hits
+  pairWindowMs: 1000, // how long one seat's lock ring waits for the other seat
+  travelMs: 30000, // its leading edge's trip from the right edge to the fleet's bubble front
+  burstCount: 6, // one-hit rocks it bursts into
+  shieldRegenMs: 13000, // regen during the wave (its burst rocks can pop shields)
+} as const;
+
+/**
  * Command-ship boss (B5) BALANCE dials — wave 6, act 2's boss (geometry is in layout.ts).
  * One continuous CHARGING phase (B34 shield web):
  *
@@ -214,8 +241,7 @@ export const BOSS = {
 
 // ---- difficulty budget + solver (see docs/design.md §7 "Difficulty") ----
 // threat = sum of clearDamage*speed/travel; leak = what shield regen forgives;
-// required = threat - leak is THE scalar (damage/s; == kills/s while every
-// rock is 1 hp). The solver INVERTS it: given a target required, pick knobs (in
+// required = threat - leak is THE scalar (damage/s). The solver INVERTS it: given a target required, pick knobs (in
 // priority order) so threat meets the target.
 // An approximation — consistency matters more than precision.
 
@@ -239,11 +265,12 @@ function threatOf(specs: AsteroidSpec[]): number {
  * advancing knobs in priority order until threat reaches `required + leak`:
  *   1. (count)     streams minStreams -> maxStreams, weak + slow
  *   2. (speed)     speedScale minSpeedScale -> maxSpeedScale
- *   3. (splitters) replace standard rocks with splitters (slot order)
+ *   3. (toughness) replace standard rocks with `topKind` (slot order): a
+ *      splitter by default, a two-hit rock in act 1's wave 2, none in wave 1
  * Greedy/discrete: stops at the first step that meets the target, or when
  * fully saturated (target unreachable — caller's dev log shows the gap).
  */
-export function solveWave(required: number, leak: number): AsteroidSpec[] {
+export function solveWave(required: number, leak: number, topKind: AsteroidKind = 'splitter'): AsteroidSpec[] {
   const M = DIFFICULTY_MODEL;
   const target = required + leak;
   let streams: number = M.minStreams;
@@ -263,16 +290,16 @@ export function solveWave(required: number, leak: number): AsteroidSpec[] {
   while (!met() && speedScale < M.maxSpeedScale) {
     speedScale = Math.min(M.maxSpeedScale, speedScale + M.speedStep);
   }
-  // Last lever: replace standards with splitters, in slot order.
-  for (let i = 0; i < streams && !met(); i++) {
-    kinds[i] = 'splitter';
+  // Last lever: replace standards with the wave's toughest kind, in slot order.
+  for (let i = 0; i < streams && topKind !== 'standard' && !met(); i++) {
+    kinds[i] = topKind;
   }
   return build();
 }
 
 /** The asteroid field a wave fields — solved from its (player-count) target. */
 export function asteroidsFor(wave: WaveConfig, players: 1 | 2): AsteroidSpec[] {
-  return solveWave(waveTarget(wave, players), leakAllowancePerSec(wave));
+  return solveWave(waveTarget(wave, players), leakAllowancePerSec(wave), wave.topKind);
 }
 
 /** Accurate damage/s a wave actually demands (post-solve). */
