@@ -221,7 +221,7 @@ export const BOSS = {
 
 /** Average spawn -> shield-contact travel distance: from the mean spawn x to a
  *  fleet ship's bubble front (the rock's radius cancels). */
-const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - (FLEET.shield.cx + FLEET.shield.rx);
+const TRAVEL_DIST = GAME_WIDTH + DIFFICULTY_MODEL.spawnGapMax / 2 - FLEET.bubbleFrontX;
 
 /**
  * Gross accurate damage/s a concrete field demands, sustained.

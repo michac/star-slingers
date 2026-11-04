@@ -351,7 +351,7 @@ export class SandboxScene extends Phaser.Scene {
     const consider = (cand: HomingTarget) => {
       if (!cand.isActive || cand.isPopping) return;
       const s = cand.sprite;
-      // A lane rock is fielded (active) just off the right edge before it
+      // A stream rock is fielded (active) just off the right edge before it
       // drifts in: never take one the players can't see yet.
       if (s.x - cand.radius >= GAME_WIDTH) return;
       const dx = s.x - ox;

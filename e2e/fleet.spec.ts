@@ -3,34 +3,28 @@
  * rock hits only its own sublane's ship (shield first, then the ship), a lost
  * ship's sublane lets rocks pass harmlessly, losing all four ships (and only
  * all four) fails the run, shields regrow and the breather rebuilds, rocks fly
- * straight (no funnel) and spawn evenly across the sublanes, splitter children
+ * straight left and spawn evenly across the sublanes, splitter children
  * stay in the lane, and the stars scroll on the stepped clock.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, stepUntil, fieldRock, fire, fleetStates, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, stepUntil, fieldRock, fire, fleetStates, loseShips, score, failVisible, clearField, type Page } from './helpers';
 import { FLEET, LANE, SPLITTER_CHILDREN, STARFIELD, SUBLANE_H, sublaneCenterY, sublaneOf } from '../src/layout';
 import { ASTEROID_KIND, RUN } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const R = ASTEROID_KIND.standard.radius;
-const BUBBLE_FRONT = FLEET.shield.cx + FLEET.shield.rx;
 
 /** Take every rock but stream 0's off the field (no score), so a case owns the
  *  field. The wave's quota is untouched, so the wave doesn't clear. */
 const clearOthers = (page: Page) =>
   page.evaluate(`${SCENE}.asteroids.forEach((a, i) => { if (i !== 0 && a.isActive) a.vanish(); })`);
-const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
-const failVisible = (page: Page) => page.evaluate(`${SCENE}.failOverlay.visible`) as Promise<boolean>;
 /** Stream 0's rock: where it is and whether it's been consumed (the pop tween is
  *  wall-clock, so under stepping a consumed rock stays isPopping). */
 const rock0 = (page: Page) =>
   page.evaluate(
     `(() => { const a = ${SCENE}.asteroids[0]; return { x: a.sprite.x, y: a.sprite.y, popping: a.isPopping }; })()`
   ) as Promise<{ x: number; y: number; popping: boolean }>;
-/** Lose ship i through the fleet's own API (shield, then ship). */
-const loseShip = (page: Page, i: number) =>
-  page.evaluate(`(() => { const f = ${SCENE}.fleet; while (f.isLive(${i})) f.onEnemyReached(${i}); })()`);
 
 test('a rock hits only its own sublane\'s ship: the shield at the bubble, then the ship at the hull', async ({ page }) => {
   await gotoGame(page);
@@ -45,7 +39,7 @@ test('a rock hits only its own sublane\'s ship: the shield at the bubble, then t
   expect(await fleetStates(page)).toEqual(['shielded', 'shielded', 'exposed', 'shielded']);
   // Stopped at the bubble's front, not deeper at the hull.
   const first = await rock0(page);
-  expect(first.x - R).toBeLessThanOrEqual(BUBBLE_FRONT);
+  expect(first.x - R).toBeLessThanOrEqual(FLEET.bubbleFrontX);
   expect(first.x - R).toBeGreaterThan(FLEET.noseX);
 
   await fieldRock(page, { x: 150, y, speed: 200 });
@@ -60,7 +54,7 @@ test('a rock hits only its own sublane\'s ship: the shield at the bubble, then t
 test('a rock in a lost ship\'s sublane flies past: no damage, no score, no fail', async ({ page }) => {
   await gotoGame(page);
   await clearOthers(page);
-  await loseShip(page, 1);
+  await loseShips(page, 1);
   await fieldRock(page, { x: 120, y: sublaneCenterY(1), speed: 300 });
   // It crosses the fleet's line and leaves off the left edge, where the wave's
   // quota respawns it at the right edge. A consumed rock would stay popping
@@ -76,7 +70,7 @@ test('a rock in a lost ship\'s sublane flies past: no damage, no score, no fail'
 test('losing three ships plays on; losing the fourth shows Try again', async ({ page }) => {
   await gotoGame(page);
   await clearOthers(page);
-  for (const i of [0, 1, 2]) await loseShip(page, i);
+  await loseShips(page, 0, 1, 2);
   await stepGame(page, 16, 2);
   expect(await fleetStates(page)).toEqual(['lost', 'lost', 'lost', 'shielded']);
   expect(await failVisible(page)).toBe(false);
@@ -92,10 +86,10 @@ test('losing three ships plays on; losing the fourth shows Try again', async ({ 
 test('a popped shield regrows after the wave\'s quiet stretch; the breather rebuilds lost ships', async ({ page }) => {
   await gotoGame(page);
   // An empty field for the whole quiet stretch (the quota stays, so the wave doesn't clear).
-  await page.evaluate(`for (const a of ${SCENE}.asteroids) if (a.isActive) a.vanish()`);
+  await clearField(page);
   const regenMs = RUN[0].field!.shieldRegenMs;
   await page.evaluate(`${SCENE}.fleet.onEnemyReached(0)`);
-  await loseShip(page, 3);
+  await loseShips(page, 3);
   await stepGame(page, 16, Math.floor((regenMs - 200) / 16));
   expect(await fleetStates(page)).toEqual(['exposed', 'shielded', 'shielded', 'lost']);
   await stepGame(page, 16, 25);
@@ -110,11 +104,10 @@ test('a popped shield regrows after the wave\'s quiet stretch; the breather rebu
   expect(await page.evaluate(`${SCENE}.fleet.ships[3].image.visible`)).toBe(true);
 });
 
-test('rocks drift straight left to their ship: no funnel', async ({ page }) => {
+test('rocks drift straight left to their ship', async ({ page }) => {
   await gotoGame(page);
   await clearOthers(page);
-  // Off-centre in ship 0's sublane; the old funnel re-aimed rocks at the field
-  // centre once they crossed x=150.
+  // Off-centre in ship 0's sublane: it keeps that y and vy = 0 all the way in.
   const y = sublaneCenterY(0) + 25;
   await fieldRock(page, { x: 330, y, speed: 150 });
   const run = await stepUntil(

@@ -2,7 +2,7 @@
  * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge, ?boss.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, healthBars, fleetStates, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, healthBars, fleetStates, loseShips, failVisible, type Page } from './helpers';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -82,13 +82,13 @@ test('the boss beam hits the top-most live ship, and the beam that takes the las
   await beam(); // the top ship is gone: the next one down takes it
   expect(await fleetStates(page)).toEqual(['lost', 'exposed', 'shielded', 'shielded']);
 
-  await page.evaluate(`(() => { const f = ${SCENE}.fleet; for (const i of [1, 2]) while (f.isLive(i)) f.onEnemyReached(i); })()`);
+  await loseShips(page, 1, 2);
   await beam();
   expect(await bossPhase(page)).toBe('charging');
   await beam();
   expect(await fleetStates(page)).toEqual(['lost', 'lost', 'lost', 'lost']);
   expect(await bossPhase(page)).toBe('lost');
-  expect(await page.evaluate(`${SCENE}.failOverlay.visible`)).toBe(true);
+  expect(await failVisible(page)).toBe(true);
 });
 
 test('the boss takes 1 HP from a charged round only: plain rounds and missiles do nothing', async ({ page }) => {

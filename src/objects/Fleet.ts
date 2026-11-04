@@ -11,7 +11,7 @@
  * restoreAll() rebuilds every lost ship and returns every shield. All four lost
  * is the fleet lost: the scene shows "Try again?".
  *
- * The bubbles carry the station's shield look (SHIELD_FX): a colour-brightness
+ * The bubbles carry the locked shield look (SHIELD_FX): a colour-brightness
  * pulse that flows down the fleet, one shared ambient glow, a flare-then-fade
  * pop and a settle-in regrow. State changes are immediate; restoreAll's
  * staggered reveal is counted on update()'s delta, so the logic stays in
@@ -20,7 +20,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { FLEET, LANE, SHAKE, SHATTER, SHIELD_FX, sublaneCenterY } from '../layout';
+import { FLEET, LANE, REGROW, SHAKE, SHIELD_FX, sublaneCenterY } from '../layout';
 import { BREATHER } from '../waves';
 import { FLEET_TEX, TEX } from './textures';
 
@@ -37,6 +37,9 @@ interface Ship {
   /** restoreAll's staggered reveal: the fleet clock (ms) when this ship's
    *  restored hull/bubble appears, or null when nothing is pending. */
   revealAtMs: number | null;
+  /** The bubble's outline points in world space, built once: the per-frame
+   *  stroke/fill reuse them instead of re-tessellating an ellipse each frame. */
+  readonly bubble: Phaser.Geom.Point[];
   readonly image: Phaser.GameObjects.Image;
   readonly lostImage: Phaser.GameObjects.Image;
 }
@@ -61,6 +64,8 @@ function dim(color: number, f: number): number {
 
 const BUBBLE_W = FLEET.shield.rx * 2;
 const BUBBLE_H = FLEET.shield.ry * 2;
+/** Points per bubble outline: Graphics.strokeEllipse's default smoothness. */
+const BUBBLE_POINTS = 32;
 
 export class Fleet {
   private readonly ships: Ship[];
@@ -69,6 +74,9 @@ export class Fleet {
   /** Bloom shapes behind the ships, carrying the one shared glow FX. */
   private readonly glowDisc: Phaser.GameObjects.Graphics;
   private readonly ambientGlow?: Phaser.FX.Glow;
+  /** Which ships' bubbles glowDisc holds (bit i = ship i), so it's refilled
+   *  only when that set changes; -1 forces the first fill. */
+  private glowMask = -1;
   /** The fleet clock: drives the pulse and restoreAll's staggered reveal. */
   private elapsed = 0;
   /** Per-wave knob; the WaveDirector (or the boss) sets it at each wave start. */
@@ -91,6 +99,7 @@ export class Fleet {
         state: 'shielded' as ShipState,
         msSinceHit: 0,
         revealAtMs: null,
+        bubble: new Phaser.Geom.Ellipse(FLEET.shield.cx, cy, BUBBLE_W, BUBBLE_H).getPoints(BUBBLE_POINTS),
         image: scene.add.image(0, cy, TEX.fleetShip).setOrigin(...origin),
         lostImage: scene.add.image(0, cy, TEX.fleetShipLost).setOrigin(...origin).setVisible(false),
       };
@@ -107,10 +116,6 @@ export class Fleet {
     return this.ships[i]?.state !== 'lost';
   }
 
-  get liveCount(): number {
-    return this.ships.filter((ship) => ship.state !== 'lost').length;
-  }
-
   /** The top-most live ship's index (the boss beam's placeholder target until
    *  #27 decides the rule), or -1 if the whole fleet is lost. */
   topMostLive(): number {
@@ -120,7 +125,7 @@ export class Fleet {
   /** The x an enemy in ship i's sublane stops at: the bubble's front while
    *  the shield is up, else the hull's nose. */
   contactX(i: number): number {
-    return this.ships[i].state === 'shielded' ? FLEET.shield.cx + FLEET.shield.rx : FLEET.noseX;
+    return this.ships[i].state === 'shielded' ? FLEET.bubbleFrontX : FLEET.noseX;
   }
 
   /** The middle of ship i (the boss beam's end point). */
@@ -145,9 +150,9 @@ export class Fleet {
       this.scene.tweens.killTweensOf(ship.image);
       ship.image.setVisible(false);
       ship.lostImage.setVisible(true);
-      this.boom(FLEET.shield.cx, ship.cy, FLEET.noseX / 2);
+      this.boom(FLEET.shield.cx, ship.cy, FLEET.lostBoomR);
     }
-    return this.liveCount === 0 ? 'fleetLost' : 'shipLost';
+    return this.ships.every((s) => s.state === 'lost') ? 'fleetLost' : 'shipLost';
   }
 
   setShieldRegenMs(ms: number): void {
@@ -198,7 +203,7 @@ export class Fleet {
     if (!ship.image.visible) {
       ship.lostImage.setVisible(false);
       ship.image.setVisible(true).setAlpha(0);
-      this.scene.tweens.add({ targets: ship.image, alpha: 1, duration: SHATTER.durationMs });
+      this.scene.tweens.add({ targets: ship.image, alpha: 1, duration: REGROW.durationMs });
     }
     this.regrowBubble(ship);
   }
@@ -216,24 +221,31 @@ export class Fleet {
       if (!this.showsBubble(ship)) return;
       const f = SHIELD_FX.pulseLo + brightness(this.elapsed, i) * (1 - SHIELD_FX.pulseLo);
       g.lineStyle(STROKES.bubble.width, dim(COLORS.shieldOuter, f), 1);
-      g.strokeEllipse(FLEET.shield.cx, ship.cy, BUBBLE_W, BUBBLE_H);
+      g.strokePoints(ship.bubble, true);
     });
   }
 
   /** One ambient bloom under every live bubble, breathing on the top bubble's
-   *  pulse. Hidden when no shield is up (or postFX is unavailable headless). */
+   *  pulse. Hidden when no shield is up (or postFX is unavailable headless).
+   *  The bloom shapes are refilled only when the set of shown bubbles changes;
+   *  the breathing is just the glow's strength. */
   private drawAmbientGlow(): void {
     const g = this.glowDisc;
-    g.clear();
-    const lit = this.ships.findIndex((ship) => this.showsBubble(ship));
-    if (lit < 0 || !this.ambientGlow) {
+    if (!this.ambientGlow) {
       g.setVisible(false);
       return;
     }
-    g.fillStyle(COLORS.sceneBg, 1);
-    for (const ship of this.ships) {
-      if (this.showsBubble(ship)) g.fillEllipse(FLEET.shield.cx, ship.cy, BUBBLE_W, BUBBLE_H);
+    const mask = this.ships.reduce((m, ship, i) => (this.showsBubble(ship) ? m | (1 << i) : m), 0);
+    if (mask === 0) {
+      g.setVisible(false);
+      return;
     }
+    if (mask !== this.glowMask) {
+      this.glowMask = mask;
+      g.clear().fillStyle(COLORS.sceneBg, 1);
+      for (const ship of this.ships) if (this.showsBubble(ship)) g.fillPoints(ship.bubble, true);
+    }
+    const lit = this.ships.findIndex((ship) => this.showsBubble(ship)); // the top-most shown bubble
     this.ambientGlow.outerStrength = 1.5 + brightness(this.elapsed, lit) * 3;
     g.setVisible(true);
   }
@@ -271,16 +283,16 @@ export class Fleet {
     });
   }
 
-  /** Reverse of popBubble: a copy settles in (scale SHATTER.scaleTo → 1,
+  /** Reverse of popBubble: a copy settles in (scale REGROW.scaleFrom → 1,
    *  alpha 0 → full) over the bubble that's drawn again from now on. */
   private regrowBubble(ship: Ship): void {
     const g = this.bubbleCopy(ship, STROKES.bubble.alpha);
-    g.setScale(SHATTER.scaleTo).setAlpha(0);
+    g.setScale(REGROW.scaleFrom).setAlpha(0);
     this.scene.tweens.add({
       targets: g,
       scale: 1,
       alpha: 1,
-      duration: SHATTER.durationMs,
+      duration: REGROW.durationMs,
       onComplete: () => g.destroy(),
     });
   }

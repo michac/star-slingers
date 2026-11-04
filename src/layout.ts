@@ -113,6 +113,10 @@ export function sublaneOf(y: number): number {
   return Math.max(0, Math.min(LANE.sublanes - 1, i));
 }
 
+/** A fleet ship's shield bubble: an ellipse centred on the hull (local x).
+ *  ry stays under SUBLANE_H / 2, so neighbouring bubbles never touch. */
+const FLEET_SHIELD = { cx: 22, rx: 31, ry: 36 } as const;
+
 /**
  * The colony fleet (#19): one ship per sublane at the left edge, nose right,
  * ported from the v6 mock (plans/mockups/layout-colony-ship.html). Points are
@@ -142,17 +146,22 @@ export const FLEET = {
   pod: { x: 14, r: 5 }, // habitat pod
   bridge: { x: 30, r: 2.6 },
   noseX: 40, // hull front: the contact line once the shield is popped
-  shield: { cx: 22, rx: 31, ry: 36 }, // bubble front x = 53; ry < SUBLANE_H / 2
+  shield: FLEET_SHIELD,
+  /** The bubble's front: the contact line while the shield is up. */
+  bubbleFrontX: FLEET_SHIELD.cx + FLEET_SHIELD.rx,
+  /** Burst radius where a ship is lost. */
+  lostBoomR: 20,
   /** Where the boss and escorts face: the fleet's middle. */
-  facePoint: { x: 22, y: (LANE.top + LANE.bottom) / 2 },
+  facePoint: { x: FLEET_SHIELD.cx, y: (LANE.top + LANE.bottom) / 2 },
 } as const;
 
 /** Worried-shake tween on a fleet ship when its shield pops. */
 export const SHAKE = { amplitude: 3, durationMs: 60, repeats: 2 } as const;
 
 /** The shield REGROW cue: a copy of the bubble settles in from this scale
- *  (the pop cue is the SHIELD_FX flare-then-fade below). */
-export const SHATTER = { scaleTo: 1.25, durationMs: 200 } as const;
+ *  (the pop cue is the SHIELD_FX flare-then-fade below). A rebuilt hull fades
+ *  in over the same duration. */
+export const REGROW = { scaleFrom: 1.25, durationMs: 200 } as const;
 
 /**
  * Shield FX (B22 glow + B23 pulse), from the locked prototype
@@ -298,7 +307,7 @@ export const VICTORY_ICON = {
  * while battling. 4 escorts slowly orbit it at a radius kept OUTSIDE the boss
  * so the whole boss stays visible. Balance dials (HP, charge rate) live in
  * waves.ts; this block is positions/sizes only. (`park.x` is tunable
- * left-of-center; the orbit must clear the fleet's bubbles at x≤53.)
+ * left-of-center; the orbit must clear the fleet's bubbles at x ≤ FLEET.bubbleFrontX.)
  */
 export const BOSS_LAYOUT = {
   park: { x: 180, y: 370 }, // center; both seats reach it
@@ -356,7 +365,7 @@ export const AMMO_REGEN_MS = 1000;
  * the launcher at (180,640)): the line passes 2px outside SPECIAL and ~20px above
  * the pad; FIRE/SPECIAL centres are 74 apart (gap 11); SPECIAL's right edge is 145
  * and the pad's left edge 254, which bracket the HUD column (x 150..~250 with a
- * 4-digit score). Controls stay below y≈625, well under the lanes (y≤480).
+ * 4-digit score). Controls stay below y≈625, under the enemy lane (y ≤ LANE.bottom = 540).
  * Sized for small thumbs; exact numbers are for tuning on the phone.
  */
 export const CONTROLS_V2 = {

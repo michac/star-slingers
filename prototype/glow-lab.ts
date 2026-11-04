@@ -14,19 +14,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, CSS, FONTS, STROKES } from '../src/tokens';
-
-/** The station geometry this prototype was built on. The game's station is
- *  now the colony fleet (#19, src/objects/Fleet.ts), so the values live here. */
-const STATION = {
-  cx: -10,
-  cy: 370,
-  hullR: 24,
-  windows: [
-    { x: 5, y: 361, r: 2.5 },
-    { x: 3, y: 383, r: 2 },
-  ],
-} as const;
-const SHIELD_RINGS = [46, 39, 32] as const;
+import { SHIELD_RINGS, STATION } from './reference/station-geometry';
 
 const W = 360;
 const H = 720;

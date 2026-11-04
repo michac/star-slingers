@@ -28,10 +28,23 @@ export const TEX = {
 } as const;
 
 /** Where a ship's local origin (left wall, sublane centre) sits inside the
- *  fleet-ship textures, and their size: the flame reaches x = -6, the hull
- *  x = 40 and y = ±16, plus room for the stroke. Fleet sets the image origin
- *  from these, so the image's position IS the ship's local origin. */
-export const FLEET_TEX = { ox: 8, oy: 18, width: 50, height: 36 } as const;
+ *  fleet-ship textures, and their size: the bounding box of the hull and the
+ *  flame, plus room for the hull stroke. Fleet sets the image origin from
+ *  these, so the image's position IS the ship's local origin. */
+export const FLEET_TEX = (() => {
+  const pts = [...FLEET.hull, ...FLEET.flame];
+  const xs = pts.map(([x]) => x);
+  const ys = pts.map(([, y]) => y);
+  const pad = STROKES.hull.width;
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return {
+    ox: pad - minX,
+    oy: pad - minY,
+    width: Math.max(...xs) - minX + pad * 2,
+    height: Math.max(...ys) - minY + pad * 2,
+  };
+})();
 
 /** Rocket diamond from the mock: M0,-9 L4,2 L0,5 L-4,2 Z (nose at -y). */
 const ROCKET_POINTS = [

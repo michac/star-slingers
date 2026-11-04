@@ -38,6 +38,7 @@ import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
 import type { Lineup } from '../src/lineup';
+import type { ShipState } from '../src/objects/Fleet';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -222,8 +223,17 @@ export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
   page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
 export const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
 /** The fleet (#19), top to bottom: 'shielded' | 'exposed' | 'lost' per ship. */
-export type ShipState = 'shielded' | 'exposed' | 'lost';
 export const fleetStates = (page: Page) => page.evaluate(`${SCENE}.__debug.fleet()`) as Promise<ShipState[]>;
+/** Lose each listed ship through the fleet's own API (shield, then ship). */
+export const loseShips = (page: Page, ...ships: number[]) =>
+  page.evaluate(
+    `(() => { const f = ${SCENE}.fleet; for (const i of ${JSON.stringify(ships)}) while (f.isLive(i)) f.onEnemyReached(i); })()`
+  );
+export const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
+export const failVisible = (page: Page) => page.evaluate(`${SCENE}.failOverlay.visible`) as Promise<boolean>;
+/** Take every rock off the field at once (no score), so a case owns the field. */
+export const clearField = (page: Page) =>
+  page.evaluate(`for (const a of ${SCENE}.asteroids) if (a.isActive) a.vanish()`);
 /** How many shield-web links are up (4 = the intact diamond). */
 export const shieldLinks = (page: Page) => page.evaluate(`${SCENE}.__debug.shieldLinks()`) as Promise<number>;
 /** Raw boss start: the boss is left mid slide-in (the tween never advances under

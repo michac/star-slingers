@@ -3,8 +3,8 @@
  * play order, the ?wave shortcut, Try again's retry wave, the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, type Page } from './helpers';
-import { AMMO_REGEN_MS, SPECIAL, sublaneCenterY } from '../src/layout';
+import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, loseShips, failVisible, type Page } from './helpers';
+import { AMMO_REGEN_MS, FLEET, SPECIAL, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
   ASTEROID_KIND,
@@ -114,14 +114,11 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
  *  and pop ship 0's shield, then field a rock at ship 0's bare hull and step
  *  it into contact. */
 async function loseRun(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const fleet = (window as any).__game.scene.keys['Sandbox'].fleet;
-    for (const ship of [1, 2, 3]) while (fleet.isLive(ship)) fleet.onEnemyReached(ship);
-    fleet.onEnemyReached(0);
-  });
-  await fieldRock(page, { x: 40, y: sublaneCenterY(0) });
+  await loseShips(page, 1, 2, 3);
+  await page.evaluate(`${SCENE}.fleet.onEnemyReached(0)`);
+  await fieldRock(page, { x: FLEET.noseX, y: sublaneCenterY(0) });
   await stepGame(page, 16, 2);
-  expect(await page.evaluate(`${SCENE}.failOverlay.visible`)).toBe(true);
+  expect(await failVisible(page)).toBe(true);
 }
 
 /** Tap the fail card (its full-field zone) and step the scene restart through. */

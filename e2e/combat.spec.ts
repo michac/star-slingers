@@ -2,13 +2,12 @@
  * combat.spec.ts — rocket vs asteroid: boot, hits, score, FIRE damage + charged pass-through, the SPECIAL missile, splitters, hp.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fieldRock, fire, healthBars, touchscreen, v2Layout, liveShots, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, score, clearField, shot, stepGame, stepUntil, fieldRock, fire, healthBars, touchscreen, v2Layout, liveShots, type Page } from './helpers';
 import { GAME_WIDTH, HEALTH_BAR, MISSILE } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const hits = (page: Page) => page.evaluate(`${SCENE}.__debug.hits()`) as Promise<number>;
-const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
 const splitCount = (page: Page) => page.evaluate(`${SCENE}.__debug.splitCount()`) as Promise<number>;
 const childrenAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.childrenAlive()`) as Promise<number>;
@@ -54,10 +53,7 @@ test('one splitter hit scores and creates children', async ({ page }) => {
 
 // ---- shot rules (#22): FIRE rounds (plain / charged) and the SPECIAL missile ----
 
-/** Take every rock off the field at once (no score), so a case owns the field. */
-const clearField = (page: Page) =>
-  page.evaluate(`for (const a of ${SCENE}.asteroids) if (a.isActive) a.vanish()`);
-/** A lane rock's state: hp left, and alive = fielded and not popping (the pop
+/** A stream rock's state: hp left, and alive = fielded and not popping (the pop
  *  tween is wall-clock, so under stepping a killed rock stays isPopping). */
 const rock = (page: Page, slot: number) =>
   page.evaluate(
@@ -106,7 +102,7 @@ test('a charged FIRE round does 2 damage and stops in a rock it does not kill', 
 test('a SPECIAL missile connects with a moving rock from a rough aim', async ({ page }) => {
   await gotoGame(page);
   await clearField(page);
-  // A rock drifting left at wave speed (lanes cruise at ~40-70 px/s).
+  // A rock drifting left at wave speed (streams cruise at ~40-70 px/s).
   const rx = 320, ry = 300;
   await fieldRock(page, { x: rx, y: ry, speed: 65 });
   // The bottom seat aims 35° off its launcher→rock line (to the rock's left).
@@ -133,10 +129,10 @@ test('a SPECIAL missile connects with a moving rock from a rough aim', async ({ 
   expect((await rock(page, 0)).alive).toBe(false);
 });
 
-test('a SPECIAL missile never takes a lane rock still off the right edge', async ({ page }) => {
+test('a SPECIAL missile never takes a stream rock still off the right edge', async ({ page }) => {
   await gotoGame(page);
   await clearField(page);
-  // A fielded lane rock waiting just past the right edge, straight down the aim.
+  // A fielded stream rock waiting just past the right edge, straight down the aim.
   const L = await v2Layout(page, 2);
   const rx = GAME_WIDTH + 20, ry = 450;
   await fieldRock(page, { x: rx, y: ry });
