@@ -75,9 +75,9 @@ export const SPECIAL = {
  * Starfield (#19): three parallax layers streaming right to left behind
  * everything, ported from the v6 mock. Each layer is one tiling texture
  * (`TEX.starLayer`) scrolled by Starfield.ts. `speed` is px/s at
- * `speedScale` 1; #29 (act transitions) changes the scale at run time via
- * Starfield.setSpeedScale. Counts are per 360px of width (the tile is wider,
- * so it scales them up).
+ * `speedScale` 1; the act transition (#29, ACT_TRANSITION.starRush) raises
+ * the scale at run time via Starfield.setSpeedScale. Counts are per 360px of
+ * width (the tile is wider, so it scales them up).
  */
 export const STARFIELD = {
   speedScale: 1,
@@ -153,6 +153,31 @@ export const FLEET = {
   lostBoomR: 20,
   /** Where the boss and escorts face: the fleet's middle. */
   facePoint: { x: FLEET_SHIELD.cx, y: (LANE.top + LANE.bottom) / 2 },
+} as const;
+
+/** How far past the screen edge the flyby takes the fleet's bubbles before it
+ *  wraps: past their ambient glow's reach too (22px, Fleet.ts), so no glow
+ *  sliver jumps between the edges at the wrap. */
+const ACT_OFFSCREEN_PAD = 32;
+
+/**
+ * The act transition (#29), played by ActTransition.ts: between acts the whole
+ * fleet flies off the right edge, comes back in from the left and eases into
+ * its slots, while the starfield rushes. Total ≈ leadInMs + outMs + inMs.
+ */
+export const ACT_TRANSITION = {
+  /** Minimum pause before take-off (it also waits for restored ships to show). */
+  leadInMs: 700,
+  /** Slot → off the right edge, speeding up. */
+  outMs: 1300,
+  /** Off the left edge → back in the slot, slowing down. */
+  inMs: 1300,
+  /** Peak star speed (Starfield speed scale), reached at the wrap. */
+  starRush: 6,
+  /** Fleet x offset where the out leg ends: its bubbles' left edge past the right edge. */
+  exitX: GAME_WIDTH - (FLEET_SHIELD.cx - FLEET_SHIELD.rx) + ACT_OFFSCREEN_PAD,
+  /** Fleet x offset where the in leg starts: its bubbles' front past the left edge. */
+  entryX: -FLEET.bubbleFrontX - ACT_OFFSCREEN_PAD,
 } as const;
 
 /** Worried-shake tween on a fleet ship when its shield pops. */

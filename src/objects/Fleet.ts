@@ -81,6 +81,12 @@ export class Fleet {
   private elapsed = 0;
   /** Per-wave knob; the WaveDirector (or the boss) sets it at each wave start. */
   private shieldRegenMs = 0;
+  /** How far the whole fleet is shifted right of its slots (the act
+   *  transition's flyby, #29); 0 in play. */
+  private offset = 0;
+  /** Fleet clock time when the last restored ship's regrow cue ends; its
+   *  bubble copy is drawn where the ship was, so the flyby waits for it. */
+  private settledAtMs = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -111,6 +117,32 @@ export class Fleet {
   /** Every ship's state, top to bottom (the e2e suite reads it). */
   states(): ShipState[] {
     return this.ships.map((ship) => ship.state);
+  }
+
+  /** True while restoreAll's staggered reveal still has ships to show, or
+   *  the last one's regrow cue is still settling in. */
+  get restoring(): boolean {
+    return this.elapsed < this.settledAtMs || this.ships.some((ship) => ship.revealAtMs !== null);
+  }
+
+  /** The fleet's current shift right of its slots (px). */
+  get offsetX(): number {
+    return this.offset;
+  }
+
+  /** Shift the whole fleet dx px right of its slots (#29's flyby; negative
+   *  is left): hulls, wrecks, bubbles and their glow move together. The
+   *  bubble outlines are world points drawn at Graphics x 0, so moving the
+   *  Graphics moves them. Gameplay geometry (contactX, shipPoint) stays at the
+   *  slots: the flyby only runs between waves, with the field empty. */
+  setOffsetX(dx: number): void {
+    this.offset = dx;
+    for (const ship of this.ships) {
+      ship.image.setX(dx);
+      ship.lostImage.setX(dx);
+    }
+    this.bubbles.setX(dx);
+    this.glowDisc.setX(dx);
   }
 
   isLive(i: number): boolean {
@@ -204,6 +236,7 @@ export class Fleet {
    *  the bubble settles back in. */
   private reveal(ship: Ship): void {
     ship.revealAtMs = null;
+    this.settledAtMs = Math.max(this.settledAtMs, this.elapsed + REGROW.durationMs);
     if (!ship.image.visible) {
       ship.lostImage.setVisible(false);
       ship.image.setVisible(true).setAlpha(0);
@@ -257,7 +290,7 @@ export class Fleet {
   /** A throwaway copy of the bubble drawn at local (0,0), so a scale tween
    *  grows it around the ship. */
   private bubbleCopy(ship: Ship, alpha: number): Phaser.GameObjects.Graphics {
-    const g = this.scene.add.graphics({ x: FLEET.shield.cx, y: ship.cy });
+    const g = this.scene.add.graphics({ x: FLEET.shield.cx + this.offset, y: ship.cy });
     g.lineStyle(STROKES.bubble.width, COLORS.shieldOuter, alpha);
     g.strokeEllipse(0, 0, BUBBLE_W, BUBBLE_H);
     return g;
