@@ -1,6 +1,6 @@
 /**
  * helpers.ts — the shared harness for the e2e specs (one spec per area:
- * combat, waves, boss, join, solo, controls-v2, haptics). Boots the game in a
+ * combat, waves, boss, fleet, join, solo, controls-v2, haptics). Boots the game in a
  * Pixel-6-sized touch viewport, drives it with real CDP touches + direct
  * `scene.rockets.fire(...)` shots, and reads live state through the
  * `window.__game` hook (src/main.ts) and the scenes' DEV `__debug` surfaces:
@@ -38,6 +38,7 @@ import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
 import type { Lineup } from '../src/lineup';
+import type { ShipState } from '../src/objects/Fleet';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -164,11 +165,12 @@ export async function stepUntil(
 }
 
 /** Field a rock directly through the public reconfigure()/spawn() path (exactly
- *  what startWave does for lane rocks), then place it in-field at (x,y), clear
- *  of the station — so an interaction test never has to wait for a wave rock to
+ *  what startWave does for wave rocks), then place it in-field at (x,y), clear
+ *  of the fleet — so an interaction test never has to wait for a wave rock to
  *  drift into range. STATIONARY by default; `speed` > 0 drifts it left at that
- *  many px/s like a lane rock. Uses a lane wrapper (asteroids[slot], slots
- *  0..3; the splitter-child pool is the tail). */
+ *  many px/s like a wave rock. Uses a stream wrapper (asteroids[slot], slots
+ *  0..3; the splitter-child pool is the tail). Its sublane is the one `y` is
+ *  in (sublaneCenterY(i) for ship i). */
 export async function fieldRock(
   page: Page,
   {
@@ -184,11 +186,11 @@ export async function fieldRock(
   await page.evaluate(
     ({ x, y, kind, radius, slot, hp, speed }) => {
       const s = (window as any).__game.scene.keys['Sandbox'];
-      const a = s.asteroids[slot]; // a lane wrapper (NOT a child)
+      const a = s.asteroids[slot]; // a stream wrapper (NOT a child)
       // hp omitted = the kind's default max hp (1 today).
-      a.reconfigure({ kind, radius, y, speed, ...(hp === undefined ? {} : { hp }) }, 0);
-      a.spawn(); // field it (off the right edge)...
-      a.sprite.setPosition(x, y); // ...then place it in-field, clear of the station
+      a.reconfigure({ kind, radius, speed, ...(hp === undefined ? {} : { hp }) }, 0);
+      a.spawn(); // field it (off the right edge, at a bag-drawn y)...
+      a.sprite.setPosition(x, y); // ...then place it in-field at (x,y)
       a.sprite.body.reset(x, y);
       a.sprite.body.setVelocity(-speed, 0);
     },
@@ -220,6 +222,18 @@ export const escortsAlive = (page: Page) =>
 export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>
   page.evaluate(`${SCENE}.__debug.hitEscort(${i}, '${player}')`);
 export const escortLocks = (page: Page) => page.evaluate(`${SCENE}.__debug.escortLocks()`) as Promise<number[]>;
+/** The fleet (#19), top to bottom: 'shielded' | 'exposed' | 'lost' per ship. */
+export const fleetStates = (page: Page) => page.evaluate(`${SCENE}.__debug.fleet()`) as Promise<ShipState[]>;
+/** Lose each listed ship through the fleet's own API (shield, then ship). */
+export const loseShips = (page: Page, ...ships: number[]) =>
+  page.evaluate(
+    `(() => { const f = ${SCENE}.fleet; for (const i of ${JSON.stringify(ships)}) while (f.isLive(i)) f.onEnemyReached(i); })()`
+  );
+export const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
+export const failVisible = (page: Page) => page.evaluate(`${SCENE}.failOverlay.visible`) as Promise<boolean>;
+/** Take every rock off the field at once (no score), so a case owns the field. */
+export const clearField = (page: Page) =>
+  page.evaluate(`for (const a of ${SCENE}.asteroids) if (a.isActive) a.vanish()`);
 /** How many shield-web links are up (4 = the intact diamond). */
 export const shieldLinks = (page: Page) => page.evaluate(`${SCENE}.__debug.shieldLinks()`) as Promise<number>;
 /** Raw boss start: the boss is left mid slide-in (the tween never advances under

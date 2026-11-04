@@ -2,7 +2,7 @@
 
 > **What this is.** A holding pen for UI/visual decisions reached while prototyping
 > on the shelf (`star-slingers/prototype/`), so we can apply them to the game in
-> **one focused pass** instead of churning `Station.ts` et al. piecemeal.
+> **one focused pass** instead of churning the game objects piecemeal.
 >
 > **The approach (in flight).** We're building each effect as a prototype on the
 > shelf, iterating on the phone, then **locking** the agreed one into
@@ -39,10 +39,10 @@ outermost remaining ring; a destroyed ring **flares then fades**.
 - **Perf first.** No DPI rendering, glow `quality` stays **0.3**. We tried sharper
   (DPR render + quality 0.6) — it lagged the Pixel 6. Smoothness yields to framerate.
 
-**Build target — `src/objects/Station.ts`:** split the rings out of the hull
-`Graphics` into their own per-frame layer; drive color brightness from the sine
-(flow offset by ring index); add the ambient `postFX.addGlow` recolored/resized to
-the outer ring; replace `shatterRing` with the flare-then-fade. Ties off
+**Build target — `src/objects/Fleet.ts`** (the station's rings until #19): the shields
+draw in their own per-frame layer; color brightness follows the sine (flow offset per
+ship); one ambient `postFX.addGlow` blooms under the live bubbles; a popped bubble
+flares then fades. Ties off
 **B22** (glow) + **B23** (pulse); the destroy-flare is the shield cousin of **B29**.
 
 ---
@@ -136,8 +136,8 @@ tints from `tokens.ts`. Final density/fall tuning wants a Pixel 6 pass. (Haptics
 ## Boss command ship + shield web (B34) — `done` (2026-08-05) ✅
 
 The boss no longer adds another ring-on-ring target. It is the escorts' larger,
-station-facing command-ship silhouette, surrounded by a fixed-radius rotating diamond of four
-station-facing escorts. Each live adjacent pair draws one neon **shield-web** link; a destroyed
+fleet-facing command-ship silhouette, surrounded by a fixed-radius rotating diamond of four
+fleet-facing escorts. Each live adjacent pair draws one neon **shield-web** link; a destroyed
 escort removes its two links for a literal shoot-through gap, then regenerates after 6 seconds
 with both co-op lock fins restored. The charge timer resets on a kill and **pauses** while any
 node is down. The boss has no shield decoration or exposed phase: a charged railgun that travels

@@ -1,6 +1,10 @@
 /**
  * Asteroid — a drifting target: a bare physics Sprite (B37: size alone
- * tells standards from splitters, so there's no label). Pops once its hp runs
+ * tells standards from splitters, so there's no label). It drifts straight
+ * left inside the enemy lane, at a y the WaveDirector's sublane bag picks on
+ * every (re)spawn; the scene's fleet-contact check decides what reaching the
+ * left edge does, and a rock that gets past (a lost ship's sublane) just
+ * leaves the field like any other left exit. Pops once its hp runs
  * out (1 hp for every kind today, so any hit pops it; a tougher rock shows a
  * health bar, drawn by the scene's HealthBars from `hp`/`maxHp`), then asks the
  * WaveDirector for respawn permission (the wave's finite quota); denied
@@ -10,7 +14,7 @@
  * Between waves the director reconfigure()s the same wrappers in place.
  */
 import Phaser from 'phaser';
-import { APPROACH_X, GAME_WIDTH, SCORE, SPLITTER_CHILDREN, STATION } from '../layout';
+import { GAME_WIDTH, LANE, SCORE, SPLITTER_CHILDREN } from '../layout';
 import { COLORS } from '../tokens';
 import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
 import { TEX } from './textures';
@@ -26,15 +30,16 @@ export class Asteroid {
   private spawnGapMax: number;
   private popping = false;
   private active = false;
-  /** True once the final-approach turn toward the station has happened. */
-  private funnelling = false;
-  /** Splitter child: a one-shot standard rock, not a lane rock. */
+  /** Splitter child: a one-shot standard rock, not a stream rock. */
   private child = false;
   /** Child lifetime clock — pauses for free behind overlays (update is
    *  frozen then). A hard cap guarantees the wave clears. */
   private aliveMs = 0;
   /** Child spawn grace: body stays off until aliveMs passes this. */
   private graceUntilMs = 0;
+  /** Child still in its scatter burst (it turns straight left after
+   *  SPLITTER_CHILDREN.scatterMs). */
+  private scattering = false;
   /** Current hp; reset to the spec's max on every (re)field. */
   private _hp = 1;
   /** Remaining white hit-flash time (non-lethal hits only). */
@@ -46,12 +51,14 @@ export class Asteroid {
     spawnGapMax: number,
     /** Asks the wave for quota: true = respawn granted (and spent). */
     private readonly onWantRespawn: () => boolean,
+    /** The y for a fresh spawn of a rock this size (the director's sublane bag). */
+    private readonly pickY: (radius: number) => number,
     /** Fires the shared burst (B29) at a pop position. */
     private readonly boom: (x: number, y: number, radius: number) => void
   ) {
     this._spec = spec;
     this.spawnGapMax = spawnGapMax;
-    this.sprite = scene.physics.add.sprite(0, spec.y, TEX.asteroid(spec.radius));
+    this.sprite = scene.physics.add.sprite(0, 0, TEX.asteroid(spec.radius));
     this.sprite.setData('ref', this); // collision callback reaches the wrapper
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
@@ -70,7 +77,7 @@ export class Asteroid {
     return this._spec.radius;
   }
 
-  /** Mid-pop asteroids are out of play (no station contact, no rocket hits). */
+  /** Mid-pop asteroids are out of play (no fleet contact, no rocket hits). */
   get isPopping(): boolean {
     return this.popping;
   }
@@ -96,13 +103,13 @@ export class Asteroid {
     return this.child;
   }
 
-  /** Swap this wrapper to a new wave's lane values (texture, body, tuning),
+  /** Swap this wrapper to a new wave's stream values (texture, body, tuning),
    *  parked — the director spawn()s it against the new wave's quota. */
   reconfigure(spec: AsteroidSpec, spawnGapMax: number): void {
     this.scene.tweens.killTweensOf(this.sprite); // a mid-pop tween would respawn it
     this._spec = spec;
     this.spawnGapMax = spawnGapMax;
-    this.child = false; // defensive: lane reconfigure clears any child identity
+    this.child = false; // defensive: a stream reconfigure clears any child identity
     this.aliveMs = 0;
     this.resetHp();
     this.sprite.setTexture(TEX.asteroid(spec.radius)); // radius may change here; spawnChild needs no swap (child wrappers are built at the child radius)
@@ -119,20 +126,19 @@ export class Asteroid {
   /** Field this wrapper as a scatter CHILD at (x,y) with velocity
    *  (vx,vy) — a one-shot standard rock. Sibling to spawn(): same wrapper, but
    *  positioned in-field with a scatter burst rather than off the right edge,
-   *  and its onWantRespawn returns false so pop/exit/expire just parks it. The
-   *  funnel re-aim (update) later snaps it from the fast launchSpeed scatter to
-   *  the calmer childSpeed toward the station. */
+   *  and its onWantRespawn returns false so pop/exit/expire just parks it.
+   *  After SPLITTER_CHILDREN.scatterMs (update) it turns from the fast
+   *  launchSpeed scatter to straight left at the calmer childSpeed. */
   spawnChild(x: number, y: number, vx: number, vy: number): void {
     this._spec = {
       kind: 'standard',
       radius: ASTEROID_KIND.standard.radius,
-      y, // unused for children (never respawns off the right edge), kept honest
-      speed: SPLITTER_CHILDREN.childSpeed, // the funnel re-aim cruises in at this calmer speed
+      speed: SPLITTER_CHILDREN.childSpeed, // the straight-left cruise after the scatter
     };
     this.child = true;
     this.active = true;
     this.popping = false;
-    this.funnelling = false;
+    this.scattering = true;
     this.aliveMs = 0;
     this.graceUntilMs = SPLITTER_CHILDREN.spawnGraceMs;
     this.resetHp();
@@ -158,22 +164,32 @@ export class Asteroid {
       if (!body.enable && this.aliveMs >= this.graceUntilMs) body.enable = true;
       // Hard lifetime cap: a child counts toward field-empty, so this
       // guarantees the wave can always clear even if one never reaches the
-      // station or an edge. Parks (onWantRespawn is false).
+      // fleet or an edge. Parks (onWantRespawn is false).
       if (this.aliveMs >= SPLITTER_CHILDREN.lifetimeMs) {
         this.respawnOrPark();
         return;
       }
+      if (this.scattering) this.scatter(body);
     }
-    // Funnel: one-time velocity re-aim at the station on final approach.
-    // A straight-line redirect (single kink), not a curve — upgrade to
-    // per-frame Angle.RotateTo steering only if the kink reads badly.
-    if (!this.funnelling && this.sprite.x <= APPROACH_X) {
-      this.funnelling = true;
-      this.scene.physics.moveTo(this.sprite, STATION.cx, STATION.cy, this._spec.speed);
-    }
+    // Past the left edge: the fleet-contact check didn't stop it (its
+    // sublane's ship is lost), so it leaves harmlessly — no damage, no score.
     if (this.sprite.x < -this._spec.radius) {
-      this.respawnOrPark(); // safety net; station contact catches funnelled ones first
+      this.respawnOrPark();
     }
+  }
+
+  /** A child's scatter burst: it may not drift out of the enemy lane, and once
+   *  the burst is over it turns straight left at its cruise speed. */
+  private scatter(body: Phaser.Physics.Arcade.Body): void {
+    if (this.aliveMs >= SPLITTER_CHILDREN.scatterMs) {
+      this.scattering = false;
+      body.setVelocity(-this._spec.speed, 0);
+      return;
+    }
+    const r = this._spec.radius;
+    const { y } = this.sprite;
+    const vy = body.velocity.y;
+    if ((vy < 0 && y - r <= LANE.top) || (vy > 0 && y + r >= LANE.bottom)) body.setVelocityY(0);
   }
 
   /** Remove this rock at once: no burst, no score, no respawn (the wave-skip
@@ -183,14 +199,14 @@ export class Asteroid {
     this.park();
   }
 
-  /** The station consumed this asteroid (it reached the shield). */
+  /** A fleet ship consumed this asteroid (it reached the ship's bubble or hull). */
   consume(): void {
     this.pop();
   }
 
   /** A rocket hit dealing `damage`. Returns points when it kills the rock (hp
    *  ≤ 0 → pop), else 0 and flashes white (the health bar shows what's left). Scoring is
-   *  driven purely from here — consume() (station-reached) calls pop() directly
+   *  driven purely from here — consume() (fleet-reached) calls pop() directly
    *  and never scores. */
   takeHit(damage: number): number {
     if (this.popping || !this.active) return 0;
@@ -248,12 +264,12 @@ export class Asteroid {
   }
 
   private respawn(): void {
-    const { radius, y, speed } = this._spec;
-    this.resetHp(); // a damaged rock that reached the station comes back whole
+    const { radius, speed } = this._spec;
+    this.resetHp(); // a damaged rock that reached the fleet comes back whole
     this.active = true;
     this.popping = false;
-    this.funnelling = false; // back to lane phase
     const x = GAME_WIDTH + radius + Phaser.Math.Between(0, this.spawnGapMax);
+    const y = this.pickY(radius);
     this.sprite.setVisible(true).setScale(1).setAlpha(1).setPosition(x, y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y);
@@ -266,7 +282,7 @@ export class Asteroid {
   private park(): void {
     this.active = false;
     this.popping = false;
-    this.funnelling = false;
+    this.scattering = false;
     this.child = false; // a parked wrapper is a plain free slot again
     this.aliveMs = 0;
     this.graceUntilMs = 0;

@@ -2,7 +2,7 @@
 
 A two-player phone game for Michael + his kids (5yo and 9yo), built for a Pixel 6 laid flat
 between players, arcade-table style. **Star Slingers** is a co-op slingshot space defense:
-both players man a shared station and fling rockets at incoming waves.
+both players guard a colony fleet and fling rockets at incoming waves.
 
 This repo is the game and its design record — nothing else.
 
@@ -15,14 +15,14 @@ This repo is the game and its design record — nothing else.
 | `docs/notes.md` | History: playtests, layout lineage (v0→v5), decisions-with-reasons, and the archived B1–B40 backlog |
 | `docs/tech-stack.md` | Tech decisions (Phaser 3 + TS + Vite) and mock conventions |
 | `plans/polish-pass.md` | **Visual/UI decisions from prototyping** — staged to apply to the game in one pass |
-| `plans/mockups/layout-edge-wireframe.html` | Canonical layout mock (**v5**: compact edge station + funnel) |
+| `plans/mockups/layout-colony-ship.html` | Canonical layout mock (**v6**: colony fleet + enemy lane) |
 | `src/` | The game source |
 
 ## Code shape (`src/`)
 
 - `tokens.ts` — **every color & font comes from here.** Don't hardcode; restyle = edit this file.
 - `layout.ts` — geometry/positions/sizes · `waves.ts` — wave & difficulty tuning (the dials).
-- `objects/` — one class per game thing (Station, Asteroid, TwoThumbControl, …) · `scenes/` — the
+- `objects/` — one class per game thing (Fleet, Asteroid, TwoThumbControl, …) · `scenes/` — the
   orchestrating scene · `main.ts` — Phaser bootstrap.
 - Art is **code-drawn** (procedural textures in `objects/textures.ts`), not loaded asset files.
 
@@ -113,7 +113,8 @@ textures, tokens).
   play order, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
   (co-op escort locks, shield web, `?boss`), `join.spec.ts` (the join screen: join, Easy/Normal,
   countdown, leaving, Easy's unlimited ammo, Try again keeps the lineup, a win returns to it),
-  `solo.spec.ts` (one joined seat), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools) and
+  `fleet.spec.ts` (the colony fleet: sublane contact, harmless pass, all-four-lost fail, shield regen + rebuild,
+  sublane spawn spread, splitter children in the lane, the starfield), `solo.spec.ts` (one joined seat), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools) and
   `haptics.spec.ts`. The shared harness is `e2e/helpers.ts`: `gotoGame` (by default it skips the
   join screen with both seats Normal; pass a lineup, or `'join'` to stop on it), `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
   the `__debug` wrappers (e.g. `shieldLinks`), `mirrored` for the top seat and the CDP `touchscreen`.
@@ -132,8 +133,8 @@ textures, tokens).
   one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
   the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
   TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
-  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~25s for the
-  49 cases, ~1.2 min at `--repeat-each=3`): headless swiftshader makes rendering pathologically slow,
+  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~41s for the
+  58 cases, ~1.2 min at `--repeat-each=3`): headless swiftshader makes rendering pathologically slow,
   so (a) the `smoke-*.png`
   eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —
   and (b) `gotoGame()` **parks the RAF loop right after boot**, because any `page.evaluate` that runs

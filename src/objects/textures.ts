@@ -4,7 +4,8 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT } from '../layout';
+import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, STARFIELD } from '../layout';
+import { drawDashedLine } from './draw';
 import { ASTEROID_KIND } from '../waves';
 
 export const TEX = {
@@ -20,7 +21,30 @@ export const TEX = {
   bolt: 'icon-bolt', // B5 charge-bar cap (white, tinted at use)
   spark: 'px-spark', // B29 explosion: white dot → additive white-hot sparks
   shard: 'px-shard', // B29 explosion: dark rock chunk with a magenta edge
+  fleetShip: 'fleet-ship', // #19 colony ship (hull, windows, pod, bridge, engine flame)
+  fleetShipLost: 'fleet-ship-lost', // #19 a lost ship's faint dashed outline
+  /** One tiling texture per starfield layer (#19), index into STARFIELD.layers. */
+  starLayer: (i: number) => `star-layer-${i}`,
 } as const;
+
+/** Where a ship's local origin (left wall, sublane centre) sits inside the
+ *  fleet-ship textures, and their size: the bounding box of the hull and the
+ *  flame, plus room for the hull stroke. Fleet sets the image origin from
+ *  these, so the image's position IS the ship's local origin. */
+export const FLEET_TEX = (() => {
+  const pts = [...FLEET.hull, ...FLEET.flame];
+  const xs = pts.map(([x]) => x);
+  const ys = pts.map(([, y]) => y);
+  const pad = STROKES.hull.width;
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return {
+    ox: pad - minX,
+    oy: pad - minY,
+    width: Math.max(...xs) - minX + pad * 2,
+    height: Math.max(...ys) - minY + pad * 2,
+  };
+})();
 
 /** Rocket diamond from the mock: M0,-9 L4,2 L0,5 L-4,2 Z (nose at -y). */
 const ROCKET_POINTS = [
@@ -45,6 +69,85 @@ export function generateTextures(scene: Phaser.Scene): void {
   makeBolt(scene);
   makeSpark(scene);
   makeShard(scene);
+  makeFleetShip(scene);
+  makeFleetShipLost(scene);
+  STARFIELD.layers.forEach((_layer, i) => makeStarLayer(scene, i));
+}
+
+/** Hull points shifted into texture space. */
+function shipPoints(points: readonly (readonly [number, number])[]): Phaser.Geom.Point[] {
+  return points.map(([x, y]) => new Phaser.Geom.Point(x + FLEET_TEX.ox, y + FLEET_TEX.oy));
+}
+
+/** #19 colony ship, nose right, from the v6 mock: engine flame, hull, deck
+ *  line, two rows of windows, habitat pod, bridge. The mock's hull gradient is
+ *  a flat hullFill here; the glow comes from the fleet's shared shield glow. */
+function makeFleetShip(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.fleetShip)) return;
+  const { ox, oy } = FLEET_TEX;
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(COLORS.charge, 0.8);
+  g.fillPoints(shipPoints(FLEET.flame), true);
+  g.fillStyle(COLORS.hullFill, 1);
+  g.fillPoints(shipPoints(FLEET.hull), true);
+  g.lineStyle(STROKES.hull.width, COLORS.p1, 1);
+  g.strokePoints(shipPoints(FLEET.hull), true, true);
+  g.lineStyle(STROKES.deck.width, COLORS.p1, STROKES.deck.alpha);
+  g.lineBetween(FLEET.deck.x1 + ox, oy, FLEET.deck.x2 + ox, oy);
+  const w = FLEET.windows;
+  g.fillStyle(COLORS.hullWindow, 1);
+  for (const x of w.xs) {
+    g.fillRect(x + ox, w.yTop + oy, w.size, w.size);
+    g.fillRect(x + ox, w.yBottom + oy, w.size, w.size);
+  }
+  g.fillStyle(COLORS.hullFill, 1);
+  g.fillCircle(FLEET.pod.x + ox, oy, FLEET.pod.r);
+  g.lineStyle(STROKES.pod.width, COLORS.p1, 1);
+  g.strokeCircle(FLEET.pod.x + ox, oy, FLEET.pod.r);
+  g.fillStyle(COLORS.hullWindow, 1);
+  g.fillCircle(FLEET.bridge.x + ox, oy, FLEET.bridge.r);
+  g.generateTexture(TEX.fleetShip, FLEET_TEX.width, FLEET_TEX.height);
+  g.destroy();
+}
+
+/** A lost ship: its hull as a faint dashed outline (the mock's .v6-lost). */
+function makeFleetShipLost(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.fleetShipLost)) return;
+  const { dash, gap, width, alpha } = STROKES.lostShip;
+  const g = scene.make.graphics({}, false);
+  g.lineStyle(width, COLORS.chromeMuted, alpha);
+  const pts = shipPoints(FLEET.hull);
+  pts.forEach((a, i) => {
+    const b = pts[(i + 1) % pts.length];
+    drawDashedLine(g, a.x, a.y, b.x, b.y, dash, gap);
+  });
+  g.generateTexture(TEX.fleetShipLost, FLEET_TEX.width, FLEET_TEX.height);
+  g.destroy();
+}
+
+/** One starfield layer's tile (#19): seeded, so every run looks the same.
+ *  Stars cover the field's height; each is also drawn one tile-width to the
+ *  left so a star cut by the right edge continues across the wrap. */
+function makeStarLayer(scene: Phaser.Scene, i: number): void {
+  const key = TEX.starLayer(i);
+  if (scene.textures.exists(key)) return;
+  const layer = STARFIELD.layers[i];
+  const { width, height } = STARFIELD.tile;
+  const rnd = new Phaser.Math.RandomDataGenerator([`${STARFIELD.seed}-${i}`]);
+  const count = Math.round((layer.count * width) / GAME_WIDTH);
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(COLORS.star, layer.alpha);
+  for (let n = 0; n < count; n++) {
+    const x = rnd.frac() * width;
+    const y = rnd.frac() * GAME_HEIGHT;
+    const r = rnd.realInRange(layer.rMin, layer.rMax);
+    for (const dx of [0, -width]) {
+      if (layer.streak > 0) g.fillRoundedRect(x + dx, y - r / 2, layer.streak * r, r, r / 2);
+      else g.fillCircle(x + dx, y, r);
+    }
+  }
+  g.generateTexture(key, width, height);
+  g.destroy();
 }
 
 function makeRocket(scene: Phaser.Scene, key: string, color: number): void {
@@ -93,7 +196,7 @@ function drawAsteroid(g: Phaser.GameObjects.Graphics, r: number): void {
 /**
  * B34 command ship: the escorts' directional hull language scaled into a
  * flagship. It points up in texture space; Boss.activate rotates it left toward
- * the station. No circular shield decoration remains — the escorts' web is the
+ * the fleet. No circular shield decoration remains — the escorts' web is the
  * visible protection.
  */
 function makeBoss(scene: Phaser.Scene): void {
@@ -121,7 +224,7 @@ function makeEscort(scene: Phaser.Scene): void {
     new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
   ];
   const drawShip = (g: Phaser.GameObjects.Graphics, p1: boolean, p2: boolean) => {
-    // Nose points up; Escort.place rotates it toward the shared station.
+    // Nose points up; Escort.place rotates it toward the fleet.
     g.fillStyle(COLORS.rockFill, 1);
     g.fillPoints(hull, true);
     g.lineStyle(STROKES.rock.width, COLORS.danger, 1);

@@ -95,3 +95,70 @@ body {
 .hud-score { fill: var(--accent); font-size: 16px; filter: url(#neon-glow); }
 .ammo-p1   { fill: var(--p1); font-size: 16px; filter: url(#neon-glow-sm); }
 .ammo-p2   { fill: var(--p2); font-size: 16px; filter: url(#neon-glow-sm); }
+
+/* ============================================================
+   v6 colony-ship layout (#19, layout-colony-ship.html).
+   Same palette as src/tokens.ts: hull = hullFill + p1 stroke,
+   shield layers = shieldOuter/Mid/Inner, star = star.
+   ============================================================ */
+.sf-star        { fill: #bfefff; }
+.sf-near .sf-star { filter: url(#neon-glow-sm); }
+
+.v6-hull        { fill: url(#v6-hull-grad); stroke: #38f6ff; stroke-width: 2; stroke-linejoin: round;
+                  filter: url(#neon-glow-sm); }
+.v6-prow        { fill: #24609f; }
+.v6-deck        { fill: none; stroke: #38f6ff; stroke-width: 1.4; opacity: .65; }
+.v6-window      { fill: #bffcff; filter: url(#neon-glow-sm); }
+.v6-window.dim  { opacity: .55; }
+.v6-bridge      { fill: #bffcff; filter: url(#neon-glow-sm); }
+.v6-chevron     { fill: none; stroke: #38f6ff; stroke-width: 2; stroke-linecap: round;
+                  stroke-linejoin: round; opacity: .8; }
+.v6-engine      { fill: #9d6bff; opacity: .55; filter: url(#neon-glow); }
+
+.v6-shield      { fill: none; stroke-width: 5; opacity: .9; filter: url(#neon-glow-sm); }
+.v6-shield-o    { stroke: #38f6ff; }
+.v6-shield-m    { stroke: #9d6bff; }
+.v6-shield-i    { stroke: #ff5ec7; }
+
+.v6-lane        { fill: none; stroke: #ff5ec7; stroke-width: 1; stroke-dasharray: 3 5; opacity: .45; }
+.v6-lane-hit    { fill: #ff5ec7; opacity: .7; }
+
+/* seats: --seat is the player colour */
+.seat-p1        { --seat: #38f6ff; }
+.seat-p2        { --seat: #ffb13b; }
+.v6-btn         { fill: var(--seat); fill-opacity: .12; stroke: var(--seat); stroke-width: 2.5;
+                  stroke-opacity: .9; }
+.v6-glyph       { fill: var(--seat); }
+.v6-flame       { fill: #9d6bff; opacity: .9; }
+.v6-cross       { fill: none; stroke: var(--seat); stroke-width: 2.5; }
+.v6-pad         { fill: var(--seat); fill-opacity: .08; stroke: var(--seat); stroke-width: 1.5;
+                  stroke-opacity: .35; }
+.v6-range       { fill: none; stroke: var(--seat); stroke-width: 2; stroke-dasharray: 3 7;
+                  stroke-linecap: round; opacity: .8; }
+.v6-hint        { fill: var(--seat); opacity: .45; }
+.v6-knobline    { stroke: var(--seat); stroke-width: 2; opacity: .45; }
+.v6-knob        { fill: var(--seat); opacity: .6; }
+.v6-launcher    { fill: var(--seat); opacity: .6; }
+.v6-rocket      { fill: var(--seat); filter: url(#neon-glow-sm); }
+.v6-traj        { stroke: var(--seat); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round;
+                  opacity: .5; }
+.v6-ammo        { fill: var(--seat); font-size: 16px; }
+
+/* overlays */
+.v6-fan-p1      { fill: #38f6ff; opacity: .10; }
+.v6-fan-p2      { fill: #ffb13b; opacity: .10; }
+.v6-boss        { fill: #2a0a22; stroke: #ff2e88; stroke-width: 2; }
+.v6-escort      { fill: #2a0a22; stroke: #ff2e88; stroke-width: 1.5; }
+.v6-boss-sweep  { fill: none; stroke: #ff2e88; stroke-width: 1; stroke-dasharray: 4 4; opacity: .6; }
+.btn.on         { background: rgba(56,246,255,.22); border-color: #38f6ff; }
+/* v6 fleet + lane */
+.v6-lane-band   { fill: #9d6bff; opacity: .05; }
+.v6-lane-edge   { stroke: #9d6bff; stroke-width: 1.5; opacity: .45; filter: url(#neon-glow-sm); }
+.v6-sublane     { stroke: #9d6bff; stroke-width: 1; stroke-dasharray: 2 6; opacity: .35; }
+.v6-lane.pass   { stroke: #9d7fd6; opacity: .35; }
+.v6-pod         { fill: #123056; stroke: #38f6ff; stroke-width: 1.2; }
+.v6-engine-flame{ fill: #9d6bff; opacity: .8; filter: url(#neon-glow-sm); }
+.v6-bubble      { stroke-width: 3.5; }
+.v6-lost        { fill: none; stroke: #9d7fd6; stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .5; }
+.v6-fleet-ship  { cursor: pointer; }
+.v6-beam        { stroke: #ff2e88; stroke-width: 3; stroke-dasharray: 8 5; opacity: .85; filter: url(#neon-glow-sm); }

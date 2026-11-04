@@ -3,7 +3,7 @@
  * holds stationary. The BossEncounter drives the fight: the escorts' shield
  * web (B34) is the boss's only protection — any charged FIRE round that
  * physically reaches it through a gap chips 1 HP — and when the charge fills the encounter calls
- * `fireBeam()` (it shatters a shield ring).
+ * `fireBeam()` at the fleet ship it hits.
  *
  * HP and the charge countdown are read off the two off-boss gauges (BossBars,
  * owned by the encounter), so the center stays uncluttered. Not a missile
@@ -11,7 +11,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
-import { BOSS_LAYOUT, STATION } from '../layout';
+import { BOSS_LAYOUT, FLEET } from '../layout';
 import { BOSS } from '../waves';
 import { TEX } from './textures';
 
@@ -57,7 +57,7 @@ export class Boss {
       .setAlpha(1)
       .clearTint()
       .setPosition(BOSS_LAYOUT.enterFromX, y)
-      .setRotation(Math.atan2(STATION.cy - y, STATION.cx - x) + Math.PI / 2);
+      .setRotation(Math.atan2(FLEET.facePoint.y - y, FLEET.facePoint.x - x) + Math.PI / 2);
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
     this.scene.tweens.add({
       targets: this.sprite,
@@ -98,11 +98,11 @@ export class Boss {
     });
   }
 
-  /** A bright beam flashes boss → station when a charge fires. */
-  fireBeam(): void {
+  /** A bright beam flashes from the boss to the ship it hits when a charge fires. */
+  fireBeam(target: { x: number; y: number }): void {
     const g = this.scene.add.graphics().setDepth(1);
     g.lineStyle(6, COLORS.danger, 0.9);
-    g.lineBetween(this.sprite.x, this.sprite.y, STATION.cx, STATION.cy);
+    g.lineBetween(this.sprite.x, this.sprite.y, target.x, target.y);
     this.scene.tweens.add({ targets: g, alpha: 0, duration: 260, onComplete: () => g.destroy() });
   }
 

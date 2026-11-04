@@ -10,20 +10,20 @@
  *   CHARGING: live adjacent escorts make a physical shield web. Destroying a
  *   node opens two gaps for BOSS.escortRegenMs and resets + pauses the charge;
  *   charged FIRE rounds can hit the boss only if they physically pass through a gap.
- *   won: boss HP 0 · lost: a fired charge with no shield left.
+ *   won: boss HP 0 · lost: a fired charge takes the fleet's last ship.
  *
  * Boss + escort sprites are created ONCE here (parked) so the scene's
  * rocket↔boss overlap collider — built once over `sprites` — never points at a
  * recreated body (same discipline as the asteroid wrappers).
  */
 import Phaser from 'phaser';
-import { BOSS_LAYOUT, STATION } from '../layout';
+import { BOSS_LAYOUT, FLEET } from '../layout';
 import { BOSS } from '../waves';
 import { Boss } from './Boss';
 import { BossBars } from './BossBars';
 import { Escort } from './Escort';
 import { ShieldWeb } from './ShieldWeb';
-import { Station } from './Station';
+import { Fleet } from './Fleet';
 import { Overlay } from './Overlay';
 import type { HomingTarget } from './HomingTarget';
 import type { PlayerId } from './Rocket';
@@ -43,7 +43,7 @@ export class BossEncounter {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly station: Station,
+    private readonly fleet: Fleet,
     private readonly failOverlay: Overlay,
     /** The boss is down and the field is clear: the run continues. */
     private readonly onDefeated: () => void,
@@ -80,7 +80,7 @@ export class BossEncounter {
   /** Called by the WaveDirector when the command-ship wave starts. */
   start(): void {
     if (this.phaseState === 'charging') return;
-    this.station.setShieldRegenMs(BOSS.shieldRegenMs);
+    this.fleet.setShieldRegenMs(BOSS.shieldRegenMs);
     this.boss.activate(); // slides in; charging holds until it has parked
     this.startCharge();
   }
@@ -190,16 +190,20 @@ export class BossEncounter {
     this.web.update(0, this.escorts);
   }
 
+  /** The charge fired: the beam hits the top-most live ship (#19's placeholder
+   *  rule; #27 decides the final one). The fleet can't be empty here — losing
+   *  the last ship ends the encounter. */
   private bossFires(): void {
-    this.boss.fireBeam();
-    if (this.station.onEnemyReached() === 'destroyed') {
+    const target = this.fleet.topMostLive();
+    this.boss.fireBeam(this.fleet.shipPoint(target));
+    if (this.fleet.onEnemyReached(target) === 'fleetLost') {
       this.phaseState = 'lost';
       this.drawBars(); // hides them
       this.scene.physics.pause(); // freeze the field behind the card
       this.failOverlay.show();
       return;
     }
-    // You take the ring; the web stays as-is. Reset the charge and keep going.
+    // The fleet takes the hit; the web stays as-is. Reset the charge and keep going.
     this.timer = 0;
   }
 
@@ -210,7 +214,7 @@ export class BossEncounter {
     this.escorts.forEach((e, i) => {
       if (!e.isActive) return;
       const a = this.orbitAngle + i * step;
-      e.place(bx + Math.cos(a) * r, by + Math.sin(a) * r, STATION.cx, STATION.cy);
+      e.place(bx + Math.cos(a) * r, by + Math.sin(a) * r, FLEET.facePoint.x, FLEET.facePoint.y);
     });
   }
 

@@ -15,7 +15,7 @@ import Phaser from 'phaser';
 import { COLORS, FONTS, STROKES } from '../tokens';
 import { AMMO, GAME_HEIGHT, GAME_WIDTH, JOIN, seatPoint, type SeatEdge } from '../layout';
 import { generateTextures } from '../objects/textures';
-import { drawStarfield } from '../objects/draw';
+import { Starfield } from '../objects/Starfield';
 import type { PlayerId } from '../objects/Rocket';
 import { SEAT_DEFS, toLineup, type Lineup, type SeatDef } from '../lineup';
 
@@ -44,6 +44,7 @@ export class JoinScene extends Phaser.Scene {
   /** When (clockMs) each joined seat joined: a ring tap only leaves after
    *  JOIN.leaveGraceMs, so a double-tap or a two-finger slap stays joined. */
   private joinedAt: Partial<Record<PlayerId, number>> = {};
+  private starfield!: Starfield;
 
   constructor() {
     super('Join');
@@ -54,8 +55,8 @@ export class JoinScene extends Phaser.Scene {
     this.joinedAt = {};
     this.countdownLeft = null;
     this.clockMs = 0;
-    generateTextures(this); // the ring's rocket glyph (idempotent across scenes)
-    drawStarfield(this);
+    generateTextures(this); // the ring's rocket glyph + the star tiles (idempotent across scenes)
+    this.starfield = new Starfield(this); // first, so it sits under the panels
     this.panels = SEAT_DEFS.map((def) => this.buildPanel(def));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onDown(p));
     this.refresh();
@@ -85,6 +86,7 @@ export class JoinScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.clockMs += delta;
+    this.starfield.update(delta);
     // The unjoined rings breathe; a joined seat's ring holds still.
     const breath = 1 + JOIN.pulseScale * Math.sin((this.clockMs / JOIN.pulseMs) * Math.PI * 2);
     for (const panel of this.panels) panel.ring.setScale(this.picks[panel.player] === undefined ? breath : 1);

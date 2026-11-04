@@ -1,6 +1,6 @@
 /**
  * Escort (B5) — one of the 4 small guards that orbit the command-ship boss. Pure
- * gating target: it doesn't threaten the station, but each live escort anchors
+ * gating target: it doesn't threaten the fleet, but each live escort anchors
  * two links of the shield web (B34); destroying one opens a gap and RESETS the
  * boss's charge (the defensive payoff). The BossEncounter places it on the orbit each frame
  * (kinematic — we set position, the arcade body follows). Satisfies

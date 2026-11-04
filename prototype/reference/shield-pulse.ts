@@ -17,7 +17,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, CSS, FONTS, STROKES } from '../../src/tokens';
-import { SHIELD_RINGS, STATION } from '../../src/layout';
+import { SHIELD_RINGS, STATION } from './station-geometry';
 
 const W = 360;
 const H = 720;

@@ -7,32 +7,38 @@
  *
  *   live | boss → between → (next wave) live | boss … → won
  *
- * Between waves (`between`): the shield restores, the star-shower plays, then
+ * Between waves (`between`): the fleet is restored (lost ships rebuilt, every
+ * shield back), the star-shower plays, then
  * the interlude hooks run in order: `bossDrop` after a boss wave (#26), then
  * `actTransition` when the act changes (#29). Each calls `done()` when it's
  * finished. Then the banner announces the next wave. After wave 10 the run is
  * won. The starting wave (wave 1, a `?wave`/`?boss` shortcut, or a Try again
  * retry) starts directly with no banner, so play begins within seconds.
  *
+ * Spawns: every (re)spawn draws its y from a shuffle bag over the 4 sublanes
+ * (pickY), so each sublane gets an equal share of a wave's rocks whichever
+ * stream fields them, and every ship is threatened. A lost ship's sublane
+ * stays in the bag: its rocks fly past.
+ *
  * A lost run restarts via scene.restart() (the fail overlay), which rebuilds
  * this object from constants, so no reset logic lives here; the scene picks
  * the wave that restart begins at.
  */
 import Phaser from 'phaser';
-import { SPLITTER_CHILDREN } from '../layout';
+import { LANE, SPLITTER_CHILDREN, SUBLANE_H, sublaneCenterY } from '../layout';
 import {
   asteroidsFor,
   BREATHER,
   DIFFICULTY_MODEL,
   isWaveNumber,
-  LANE_SLOTS,
+  ROCK_STREAMS,
   ASTEROID_KIND,
   RUN,
   type Act,
   type RunWave,
 } from '../waves';
 import { Asteroid } from './Asteroid';
-import { Station } from './Station';
+import { Fleet } from './Fleet';
 import { PlayerHud } from './PlayerHud';
 import { WaveBanner } from './WaveBanner';
 
@@ -66,12 +72,12 @@ export interface RunOptions {
 }
 
 export class WaveDirector {
-  /** One wrapper per lane slot PLUS the splitter-child pool, all alive for the
+  /** One wrapper per rock stream PLUS the splitter-child pool, all alive for the
    *  whole run (see Asteroid's header: the overlap collider depends on these
    *  never being recreated). The child wrappers are the tail of this array. */
   readonly asteroids: Asteroid[];
 
-  /** The splitter-child pool — the tail of `asteroids` (indices ≥ lane count). */
+  /** The splitter-child pool — the tail of `asteroids` (indices ≥ stream count). */
   private readonly childPool: Asteroid[];
 
   private waveIndex = 0;
@@ -82,13 +88,15 @@ export class WaveDirector {
   private runToken = 0;
   /** Cumulative split events (B30) — a deterministic signal for the e2e suite. */
   splitCount = 0;
+  /** Sublanes still to deal this round of the spawn bag (pickY). */
+  private sublaneBag: number[] = [];
   /** Interludes that ran, in order ('drop:3', 'act:1-2') — the e2e suite's
    *  signal that the hooks fire at the right seams. */
   readonly interludes: string[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly station: Station,
+    private readonly fleet: Fleet,
     private readonly huds: PlayerHud[],
     private readonly banner: WaveBanner,
     private readonly run: RunOptions,
@@ -99,40 +107,41 @@ export class WaveDirector {
     /** Live seats (the join screen's lineup): solo scales each wave's target (SOLO in waves.ts). */
     private readonly players: 1 | 2
   ) {
-    // One wrapper per physical lane slot, alive for the whole run, built
-    // parked with a weak default; each field wave reconfigures the lanes it
-    // fields (startWave), and the rest stay parked.
-    this.asteroids = LANE_SLOTS.map(
-      (slot) =>
+    // One wrapper per rock stream, alive for the whole run, built parked with
+    // a weak default; each field wave reconfigures the streams it fields
+    // (startWave), and the rest stay parked.
+    this.asteroids = ROCK_STREAMS.map(
+      (stream) =>
         new Asteroid(
           this.scene,
           {
             kind: 'standard',
             radius: ASTEROID_KIND.standard.radius,
-            y: slot.y,
-            speed: slot.baseSpeed * DIFFICULTY_MODEL.minSpeedScale,
+            speed: stream.baseSpeed * DIFFICULTY_MODEL.minSpeedScale,
           },
           DIFFICULTY_MODEL.spawnGapMax,
           () => this.grantRespawn(),
+          this.pickY,
           this.boom
         )
     );
     // Append dedicated child wrappers to the SAME array, parked. They
     // join here (before SandboxScene builds the rocket→asteroid collider once
-    // over this.asteroids), so they get the collider + update loop + station
-    // contact + missile + field-empty checks for free. They differ from lane
+    // over this.asteroids), so they get the collider + update loop + fleet
+    // contact + missile + field-empty checks for free. They differ from stream
     // rocks in exactly two ways: onWantRespawn returns false (one-shot — they
     // park rather than respawn off the right edge), and they're fielded via
-    // spawnChild() at a scatter position. Their indices are ≥ lane count, so
+    // spawnChild() at a scatter position. Their indices are ≥ stream count, so
     // startWave's specs[i] is undefined for them and waves never field them.
     this.childPool = Array.from(
       { length: SPLITTER_CHILDREN.poolSize },
       () =>
         new Asteroid(
           this.scene,
-          { kind: 'standard', radius: ASTEROID_KIND.standard.radius, y: 0, speed: SPLITTER_CHILDREN.childSpeed },
+          { kind: 'standard', radius: ASTEROID_KIND.standard.radius, speed: SPLITTER_CHILDREN.childSpeed },
           DIFFICULTY_MODEL.spawnGapMax,
           () => false, // one-shot: never respawns off the right edge
+          this.pickY, // unused: a child never respawns
           this.boom
         )
     );
@@ -210,6 +219,18 @@ export class WaveDirector {
     this.splitCount += 1;
   }
 
+  /** A spawn's y: the next sublane from the shuffle bag (refilled + reshuffled
+   *  when empty), at a uniform height inside it that keeps a rock of this
+   *  radius within the sublane. An arrow property: every Asteroid calls it. */
+  readonly pickY = (radius: number): number => {
+    if (this.sublaneBag.length === 0) {
+      this.sublaneBag = Phaser.Utils.Array.Shuffle(Array.from({ length: LANE.sublanes }, (_, i) => i));
+    }
+    const sublane = this.sublaneBag.pop()!;
+    const spread = Math.max(0, SUBLANE_H / 2 - radius);
+    return sublaneCenterY(sublane) + Phaser.Math.FloatBetween(-spread, spread);
+  };
+
   /** An asteroid finished popping and wants back in — spend quota if any. */
   private grantRespawn(): boolean {
     if (this.state !== 'live' || this.quotaRemaining <= 0) return false;
@@ -224,7 +245,7 @@ export class WaveDirector {
     const { field } = this.wave;
     if (!field) {
       // The command ship: no asteroids; the encounter owns the field (and the
-      // shield regen) until it reports the boss down.
+      // fleet's shield regen) until it reports the boss down.
       this.quotaRemaining = 0;
       this.state = 'boss';
       this.run.startEncounter();
@@ -232,10 +253,10 @@ export class WaveDirector {
     }
     const specs = asteroidsFor(field, this.players);
     this.quotaRemaining = field.quota;
-    this.station.setShieldRegenMs(field.shieldRegenMs);
+    this.fleet.setShieldRegenMs(field.shieldRegenMs);
     this.asteroids.forEach((asteroid, i) => {
       const spec = specs[i];
-      if (!spec) return; // lane not live this wave; stays parked
+      if (!spec) return; // stream not live this wave; stays parked
       asteroid.reconfigure(spec, DIFFICULTY_MODEL.spawnGapMax);
       if (this.quotaRemaining > 0) {
         this.quotaRemaining -= 1; // initial spawns count against the quota
@@ -260,7 +281,7 @@ export class WaveDirector {
 
   private onWaveCleared(): void {
     this.state = 'between';
-    this.station.restoreShield(); // celebration: rings regrow one-by-one
+    this.fleet.restoreAll(); // celebration: lost ships rebuilt, shields back, one by one
     this.celebrate(); // B7: star-shower across the field on every wave clear
     const ended = this.wave;
     const next = this.waveIndex + 1;

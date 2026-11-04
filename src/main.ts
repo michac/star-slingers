@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, LANE_SLOTS, requiredDamagePerSec, RUN, waveTarget } from './waves';
+import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RUN, waveTarget } from './waves';
 import { COLORS } from './tokens';
 import { JoinScene } from './scenes/JoinScene';
 import { SandboxScene } from './scenes/SandboxScene';
@@ -18,11 +18,11 @@ if (import.meta.env.DEV) {
     }
     const specs = asteroidsFor(w, players);
     const splitters = specs.filter((s) => s.kind === 'splitter').length;
-    const speedScale = (specs[0].speed / LANE_SLOTS[0].baseSpeed).toFixed(2);
+    const speedScale = (specs[0].speed / ROCK_STREAMS[0].baseSpeed).toFixed(2);
     console.log(
       `${label} (${players}p): target ${waveTarget(w, players).toFixed(2)} -> achieved ` +
         `${requiredDamagePerSec(w, players).toFixed(2)} required damage/s ` +
-        `[lanes ${specs.length}, speed x${speedScale}, splitters ${splitters}], ` +
+        `[streams ${specs.length}, speed x${speedScale}, splitters ${splitters}], ` +
         `break-even ${(breakEvenAccuracy(w, players) * 100).toFixed(0)}%, quota ${w.quota}`
     );
   }

@@ -8,8 +8,8 @@
  *
  * Neon is a richer palette than the wireframe it replaced: the wireframe used
  * one `line` color for hull/shield/borders, but neon splits those roles, so
- * this set has grown (hull stroke is cyan, the 3 shield rings each take one
- * stop of the mock's cyan→purple→magenta gradient, etc.). The mock's glow,
+ * this set has grown (hull stroke is cyan, the shield and lane take stops of
+ * the mock's cyan→purple→magenta gradient, etc.). The mock's glow,
  * gradients, and a shield pulse are NOT here — they're the deferred effects
  * layer (backlog B21–B23); this file is flat color + font only.
  */
@@ -27,14 +27,15 @@ export const COLORS = {
   chromeMuted: 0x9d7fd6, // --chrome-muted: HUD labels
   accent: 0xff5ec7, // --accent: score text, overlay card border
 
-  // Station + enemies need fills the wireframe never had:
+  // The fleet + enemies need fills the wireframe never had:
   hullFill: 0x123056, // solid stand-in for the #neon-hull radial (#16306a→#0b1130)
   hullWindow: 0xbffcff, // .hull-window
   rockFill: 0x2a0e3e, // .rock interior (wireframe rock was stroke-only)
   crater: 0xff7ab3, // .crater
   star: 0xbfefff, // .star (bright cyan-white, was lineDim)
 
-  // The 3-ring shield maps onto the #neon-shield gradient stops (outer→inner).
+  // The #neon-shield gradient stops (outer→inner). A fleet ship's shield bubble
+  // is the cyan stop; the lane band is the violet one.
   shieldOuter: 0x38f6ff, // cyan
   shieldMid: 0x9d6bff, // purple
   shieldInner: 0xff5ec7, // magenta
@@ -71,8 +72,16 @@ export const STROKES = {
   rock: { width: 2.5 }, // .rock
   crater: { width: 1.5 }, // .crater
   // Solid (not dashed) shield rings: 3 nested dashed circles read as noise.
+  // The locked shield-pulse reference draws its rings with this.
   shield: { width: 5, alpha: 0.9 },
-  hull: { width: 2 },
+  // A fleet ship's shield bubble: thinner than a ring, since four sit stacked.
+  bubble: { width: 3.5, alpha: 0.9 },
+  laneEdge: { width: 1.5, alpha: 0.45 }, // the enemy lane's top/bottom lines
+  laneFill: { alpha: 0.05 }, // the lane band's faint violet wash
+  lostShip: { width: 1.2, alpha: 0.5, dash: 3, gap: 3 }, // a lost ship's dashed outline
+  hull: { width: 2 }, // fleet ship hull outline
+  deck: { width: 1.4, alpha: 0.65 }, // a ship's centre line
+  pod: { width: 1.2 }, // a ship's habitat-pod outline
   replay: { width: 5, alpha: 0.9 }, // fail-overlay circular-arrow icon
   panel: { width: 2, alpha: 1 }, // fail-overlay modal card border
 } as const;
