@@ -189,3 +189,43 @@ test('the starfield scrolls on the game clock, near layers faster', async ({ pag
     expect(after[i] - before[i]).toBeCloseTo(layer.speed * 0.96 * STARFIELD.speedScale, 1);
   });
 });
+
+test('a ship lost mid-shake is rebuilt level with its sublane', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  const cy = sublaneCenterY(2);
+  await page.evaluate(`${SCENE}.fleet.onEnemyReached(2)`);
+  // The worried shake is a wall-clock tween, which doesn't advance under
+  // stepping: put the hull where the shake would have it mid-way, as a second
+  // hit within ~360ms would find it.
+  await page.evaluate(`${SCENE}.fleet.ships[2].image.setY(${cy + 3})`);
+  await page.evaluate(`${SCENE}.fleet.onEnemyReached(2)`);
+  expect((await fleetStates(page))[2]).toBe('lost');
+
+  await page.evaluate(`${SCENE}.__debug.clearWave()`);
+  expect((await stepUntil(page, 's.fleet.ships[2].image.visible', 120)).done).toBe(true);
+  expect(await page.evaluate(`${SCENE}.fleet.ships[2].image.y`)).toBe(cy);
+});
+
+test('the starfield carries on across a Try again restart instead of jumping back', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  await stepGame(page, 16, 60);
+  // Lose the run through the real contact path, then tap Try again.
+  await loseShips(page, 1, 2, 3);
+  await page.evaluate(`${SCENE}.fleet.onEnemyReached(0)`);
+  await fieldRock(page, { x: FLEET.noseX, y: sublaneCenterY(0) });
+  await stepGame(page, 16, 2);
+  expect(await failVisible(page)).toBe(true);
+  const before = (await page.evaluate(`${SCENE}.__debug.starOffsets()`)) as number[];
+  expect(Math.min(...before)).toBeGreaterThan(0);
+
+  await page.evaluate(`${SCENE}.failOverlay.tapZone.emit('pointerdown')`);
+  await stepGame(page, 16, 2);
+  const after = (await page.evaluate(`${SCENE}.__debug.starOffsets()`)) as number[];
+  STARFIELD.layers.forEach((layer, i) => {
+    // At most the restart's couple of frames further on, never back at 0.
+    expect(after[i]).toBeGreaterThanOrEqual(before[i]);
+    expect(after[i] - before[i]).toBeLessThanOrEqual(layer.speed * 0.05);
+  });
+});

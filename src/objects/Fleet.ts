@@ -20,7 +20,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { FLEET, LANE, REGROW, SHAKE, SHIELD_FX, sublaneCenterY } from '../layout';
+import { DEPTHS, FLEET, LANE, REGROW, SHAKE, SHIELD_FX, sublaneCenterY } from '../layout';
 import { BREATHER } from '../waves';
 import { FLEET_TEX, TEX } from './textures';
 
@@ -87,9 +87,10 @@ export class Fleet {
     /** The shared burst (B29), fired where a ship is lost. */
     private readonly boom: (x: number, y: number, radius: number) => void
   ) {
-    // Construction order = depth: glow (behind) → ships → bubbles. postFX is
-    // guarded so headless software WebGL can't crash; the glow is just absent.
-    this.glowDisc = scene.add.graphics();
+    // The glow goes under everything, starfield included (DEPTHS.fleetGlow);
+    // then construction order: ships → bubbles. postFX is guarded so headless
+    // software WebGL can't crash; the glow is just absent.
+    this.glowDisc = scene.add.graphics().setDepth(DEPTHS.fleetGlow);
     this.ambientGlow = this.glowDisc.postFX?.addGlow(COLORS.shieldOuter, 2, 0, false, SHIELD_FX.glowQuality, 22);
     const origin = [FLEET_TEX.ox / FLEET_TEX.width, FLEET_TEX.oy / FLEET_TEX.height] as const;
     this.ships = Array.from({ length: LANE.sublanes }, (_, i) => {
@@ -137,6 +138,9 @@ export class Fleet {
    *  was already down. Hitting a ship that's already lost changes nothing. */
   onEnemyReached(i: number): FleetHit {
     const ship = this.ships[i];
+    // A restored ship hit before its staggered turn shows itself first, so the
+    // pop below lands on a bubble that's drawn.
+    if (ship.revealAtMs !== null) this.reveal(ship);
     if (ship.state === 'shielded') {
       ship.state = 'exposed';
       ship.msSinceHit = 0; // a hit restarts this ship's regen clock
@@ -147,8 +151,8 @@ export class Fleet {
     if (ship.state === 'exposed') {
       ship.state = 'lost';
       ship.revealAtMs = null;
-      this.scene.tweens.killTweensOf(ship.image);
-      ship.image.setVisible(false);
+      this.scene.tweens.killTweensOf(ship.image); // may stop a shake mid-way:
+      ship.image.setY(ship.cy).setVisible(false); // put the hull back for its rebuild
       ship.lostImage.setVisible(true);
       this.boom(FLEET.shield.cx, ship.cy, FLEET.lostBoomR);
     }

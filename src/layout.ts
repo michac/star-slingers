@@ -284,7 +284,11 @@ export const HEALTH_BAR = {
 
 /** Explicit render depths for late-created UI (creation order isn't enough:
  *  the WaveDirector creates asteroids AFTER the overlays exist). */
-export const DEPTHS = { banner: 900, overlay: 1000 } as const;
+/** Draw order above (or, negative, below) the default depth 0 that most of the
+ *  game draws at in creation order. fleetGlow sits under the starfield: the
+ *  glow's source shapes are filled with the scene background, so drawn above
+ *  the stars they would blank them out inside every bubble. */
+export const DEPTHS = { fleetGlow: -1, banner: 900, overlay: 1000 } as const;
 
 /** Victory-card icon: a star burst — celebratory and symmetric, so it
  *  reads the same from both seats. Offsets are local to the card center. */
