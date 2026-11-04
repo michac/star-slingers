@@ -354,9 +354,9 @@ export const AMMO_REGEN_MS = 1000;
  *
  * P1 (top edge) is the same layout rotated 180° about the field centre, i.e.
  * (x, y) → (GAME_WIDTH − x, GAME_HEIGHT − y); P2_ANCHOR maps onto P1_ANCHOR. A
- * `?lefty` seat mirrors x within its own frame (x → GAME_WIDTH − x) BEFORE that
- * rotation: aim zone + pad on the player's left, buttons on their right. Aim
- * directions are not mirrored.
+ * lefty seat (switched in game with its swap control, #21) mirrors x within its
+ * own frame (x → GAME_WIDTH − x) BEFORE that rotation: aim zone + pad on the
+ * player's left, buttons + swap on their right. Aim directions are not mirrored.
  *
  * Aim angle (seat frame): 0° = toward the player's right, 90° = straight across
  * the field at the other player, 180° = toward the player's left.
@@ -402,6 +402,11 @@ export const CONTROLS_V2 = {
    *  (x≥215) while staying right of the mirrored pad's range arc (x≤111). */
   hud: { x: 150, y: 670 },
   hudLefty: { x: 116, y: 670 },
+  /** Lefty swap (#21): a small ⇄ control above FIRE, on the buttons' side (it
+   *  mirrors with them). Holding it `holdMs` mirrors the seat; an earlier
+   *  release cancels. Its hit circle (r + hitPad) stays clear of both aim zones
+   *  (righty x ≥ 165, lefty x ≤ 195) and ~45 units above FIRE's hit edge. */
+  swap: { x: 28, y: 572, r: 16, hitPad: 6, holdMs: 800 },
 } as const;
 
 /** Phone vibration (#3), in ms; values accepted on the Pixel 6: a buzz
