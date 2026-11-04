@@ -32,8 +32,8 @@ import {
   type Pt,
   type Touchscreen,
 } from './helpers';
-import { BOMB, MISSILE, PODS, SCORE, SLING, SPECIAL, SPECIAL_SWIPE } from '../src/layout';
-import { BOSS, BOSS_DROPS } from '../src/waves';
+import { BOMB, GAME_WIDTH, MISSILE, PODS, SCORE, SLING, SPECIAL, SPECIAL_SWIPE } from '../src/layout';
+import { ASTEROID_KIND, BOSS, BOSS_DROPS } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -316,6 +316,25 @@ test('a bomb also blows up on touching a rock, and at the screen edge (AC4)', as
   expect(await liveShots(page)).toEqual([]);
 });
 
+test('a blast splits a splitter like a shot (the children survive it), and spares rocks still off-screen (AC4)', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  await stepGame(page, 16, 1);
+  const blast = (x: number, y: number) =>
+    page.evaluate(`${SCENE}.detonate(${SCENE}.rockets.fire('rocket-p2', ${x}, ${y}, 0, 0, 'p2', { bomb: true }))`);
+  await fieldRock(page, { x: 200, y: 380, kind: 'splitter', hp: 1, slot: 0 });
+  await blast(200, 380);
+  expect(await score(page)).toBe(SCORE.splitter);
+  expect(await debug(page, 'childrenAlive()')).toBe(2);
+
+  // A rock waiting just past the right edge is out of play: a blast there misses it.
+  const r = ASTEROID_KIND.standard.radius;
+  await fieldRock(page, { x: GAME_WIDTH + r + 2, y: 300, slot: 1 });
+  await blast(GAME_WIDTH - 4, 300);
+  expect(await score(page)).toBe(SCORE.splitter);
+  expect(await page.evaluate(`${SCENE}.asteroids[1].isActive && !${SCENE}.asteroids[1].isPopping`)).toBe(true);
+});
+
 test('boss fight: a blast takes each escort it reaches as that seat\'s lock and never hurts the boss (AC4)', async ({ page }) => {
   await gotoGame(page);
   await enterBoss(page);
@@ -345,6 +364,12 @@ test('Try again keeps the specials the seats had when the act began; a fresh run
   expect(await modes(page, 2)).toEqual({ modes: ['missile', 'detonator'], current: 'detonator' });
   expect(await debug(page, 'special(1)')).toEqual({ control: 'triple', hud: 'triple' });
   expect(await debug(page, 'special(2)')).toEqual({ control: 'detonator', hud: 'detonator' });
+  // A second loss in the same act keeps them too.
+  await loseRun(page);
+  await tryAgain(page);
+  expect(await debug(page, 'wave()')).toBe(4);
+  expect(await modes(page, 1)).toEqual({ modes: ['missile', 'triple'], current: 'triple' });
+  expect(await modes(page, 2)).toEqual({ modes: ['missile', 'detonator'], current: 'detonator' });
 
   // A win goes back to the join screen, and the next run starts with only the missile.
   await winToFreshRun(page);

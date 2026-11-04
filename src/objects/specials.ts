@@ -13,6 +13,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
+import { starPoints } from './draw';
 
 export type SpecialKind = 'missile' | 'triple' | 'detonator';
 
@@ -89,33 +90,18 @@ export const SPECIALS: Record<SpecialKind, SpecialDef> = {
       // The spark: a small white-hot star with violet glints.
       const sx = capX + r * 0.24, sy = capY - r * 0.28;
       g.fillStyle(COLORS.charge, 0.9);
-      drawStar(g, sx, sy, r * 0.22, r * 0.08, 6);
+      g.fillPoints(starPoints(sx, sy, r * 0.22, r * 0.08, 6), true);
       g.fillStyle(COLORS.white, 1);
       g.fillCircle(sx, sy, Math.max(1, r * 0.06));
     },
   },
 };
 
-/** A filled n-point star centred on (cx, cy). */
-function drawStar(g: Phaser.GameObjects.Graphics, cx: number, cy: number, outer: number, inner: number, points: number): void {
-  for (let i = 0; i < points; i++) {
-    const a0 = (i / points) * Math.PI * 2 - Math.PI / 2;
-    const a1 = a0 + Math.PI / points;
-    const am = a0 - Math.PI / points;
-    g.fillTriangle(
-      cx + Math.cos(a0) * outer, cy + Math.sin(a0) * outer,
-      cx + Math.cos(a1) * inner, cy + Math.sin(a1) * inner,
-      cx + Math.cos(am) * inner, cy + Math.sin(am) * inner
-    );
-  }
-  g.fillCircle(cx, cy, inner);
-}
-
 /** The SPECIAL button's face while the seat's detonator bomb is in flight: a
  *  starburst, "press to blow it up". */
 export function drawDetonateIcon(g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, color: number): void {
   g.fillStyle(color, 1);
-  drawStar(g, cx, cy, r * 0.62, r * 0.26, 8);
+  g.fillPoints(starPoints(cx, cy, r * 0.62, r * 0.26, 8), true);
   g.fillStyle(COLORS.white, 1);
   g.fillCircle(cx, cy, r * 0.16);
 }

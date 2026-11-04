@@ -115,6 +115,9 @@ export class SandboxScene extends Phaser.Scene {
     this.fleet = new Fleet(this, (x, y, r) => this.explosions.boom(x, y, r));
 
     this.rockets = new RocketPool(this, (bomb) => this.detonate(bomb));
+    // Phaser reuses this instance on restart: drop the last run's controls
+    // before the director's starting wave reaches onWaveStart below.
+    this.controls = [];
     this.seatControls = {};
     this.bombs = {};
     this.actStartSpecials = { ...data.specials };
@@ -465,8 +468,10 @@ export class SandboxScene extends Phaser.Scene {
     this.explosions.boom(x, y, r);
     buzz(HAPTICS.blastMs);
     for (const asteroid of this.asteroids) {
-      if (!inBlast(asteroid, x, y, r)) continue;
       const s = asteroid.sprite;
+      // A rock still waiting off the right edge isn't in play yet (the
+      // missile picker's rule too): a blast at the edge can't reach it.
+      if (s.x - asteroid.radius >= GAME_WIDTH || !inBlast(asteroid, x, y, r)) continue;
       const pts = asteroid.takeHit(DAMAGE.blast);
       if (pts > 0) {
         this.scoreKeeper.add(pts, s.x, s.y);
