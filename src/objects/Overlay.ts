@@ -13,6 +13,7 @@ import Phaser from 'phaser';
 import { COLORS, CSS, FONTS, STROKES } from '../tokens';
 import { DEPTHS, GAME_HEIGHT, GAME_WIDTH, OVERLAY, VICTORY_ICON } from '../layout';
 import type { PlayerId } from './Rocket';
+import { starPoints } from './draw';
 
 export interface OverlayConfig {
   /** Decorative text, shown once per live seat (P1's copy rotated 180°). */
@@ -135,14 +136,8 @@ function drawVictoryIcon(
   const g = scene.add.graphics({ x: cx, y: cy });
   const { starR, starInnerRatio, sparkles } = VICTORY_ICON;
 
-  const points: Phaser.Geom.Point[] = [];
-  for (let i = 0; i < 10; i++) {
-    const r = i % 2 === 0 ? starR : starR * starInnerRatio;
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    points.push(new Phaser.Geom.Point(r * Math.cos(a), r * Math.sin(a)));
-  }
   g.lineStyle(STROKES.replay.width, COLORS.ink, STROKES.replay.alpha);
-  g.strokePoints(points, true);
+  g.strokePoints(starPoints(0, 0, starR, starR * starInnerRatio, 5), true);
 
   // Sparkles alternate the two player colors — a shared win.
   sparkles.forEach((s, i) => {

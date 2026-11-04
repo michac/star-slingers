@@ -12,6 +12,7 @@
  * the budget math needs.
  */
 import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN } from './layout';
+import type { SpecialKind } from './objects/specials';
 
 export interface AsteroidSpec {
   kind: AsteroidKind;
@@ -31,13 +32,15 @@ export const ASTEROID_KIND = {
 
 /** Damage per rocket hit, by shot type (#22): a plain FIRE round, a charged
  *  FIRE round (the railgun: double damage, and it carries on past a target only
- *  if this hit kills it), and the SPECIAL homing missile. Every rock is 1 hp
+ *  if this hit kills it), the SPECIAL homing missile (one per missile of a
+ *  triple, #26), and a detonator's blast (#26: to every enemy inside it). Every rock is 1 hp
  *  today, so a charged round's second point is overkill on a rock and the
  *  solver's per-kill damage is unchanged. */
 export const DAMAGE = {
   fire: 1,
   charged: 2,
   missile: 1,
+  blast: 2,
 } as const;
 
 /** A rock's max hp: its spec override, else its kind's default. */
@@ -138,6 +141,15 @@ export const RUN: readonly RunWave[] = [
   { act: 3, kind: 'boss', boss: 'monsterBoss', placeholder: true, field: { required: 0.75, quota: 14, shieldRegenMs: 15000 } },
   { act: 4, kind: 'finale', field: { required: 0.9, quota: 24, shieldRegenMs: 8000 } },
 ];
+
+/** What each boss drops when it's popped (#26): the two upgrade pods' specials,
+ *  in pod order (left, right). The command ship and the monster boss drop the
+ *  giant asteroid's pair until #27 and #28 pick theirs; each edits its row. */
+export const BOSS_DROPS: Record<BossId, readonly [SpecialKind, SpecialKind]> = {
+  giantAsteroid: ['triple', 'detonator'],
+  commandShip: ['triple', 'detonator'],
+  monsterBoss: ['triple', 'detonator'],
+};
 
 /** The 1-based wave number of the command-ship boss (`?boss` jumps here). */
 export const COMMAND_SHIP_WAVE = RUN.findIndex((w) => w.boss === 'commandShip') + 1;

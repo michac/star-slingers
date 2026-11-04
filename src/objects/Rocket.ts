@@ -1,6 +1,8 @@
 /**
  * RocketPool — pooled arcade-physics sprites for both players' shots: FIRE
- * rounds (plain or charged) and SPECIAL homing missiles (#22). Rounds fly
+ * rounds (plain or charged), SPECIAL homing missiles (#22) and detonator bombs
+ * (#26: straight; wherever a flight ends without a hit, end() hands a bomb to
+ * `onBombEnd` to blow up there instead of recycling it quietly). Rounds fly
  * straight (no gravity) and recycle at the world bounds or on a hit (a charged
  * round carries on past a kill, see the scene's spendShot). Missiles carry a
  * target and get steered toward it each frame by steer().
@@ -8,7 +10,7 @@
 import Phaser from 'phaser';
 import { MISSILE, TRAIL } from '../layout';
 import { COLORS } from '../tokens';
-import type { HomingTarget } from './HomingTarget';
+import { specialCanHit, type HomingTarget } from './HomingTarget';
 import { TEX } from './textures';
 
 export type PlayerId = 'p1' | 'p2';
@@ -21,6 +23,8 @@ export interface ShotOptions {
   missile?: boolean;
   /** The missile's target at launch; null/absent = it acquires one in flight. */
   target?: HomingTarget | null;
+  /** A SPECIAL detonator bomb (#26): flies straight until the scene blows it up. */
+  bomb?: boolean;
 }
 
 /** Picks a missile's target: the live enemy nearest the line from (ox, oy)
@@ -41,7 +45,11 @@ export class RocketPool {
   /** Drives the brightness flux scrolling down the exhaust. */
   private elapsed = 0;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(
+    scene: Phaser.Scene,
+    /** A bomb's flight ended (end()): the scene blows it up there (and recycles it). */
+    private readonly onBombEnd: (rocket: Phaser.Physics.Arcade.Sprite) => void
+  ) {
     this.group = scene.physics.add.group({ allowGravity: false, maxSize: 24 });
     // Created right after the group (before the asteroids), so it sits just
     // below the rockets; additive + filled quads only (no postFX, no particles).
@@ -53,9 +61,7 @@ export class RocketPool {
       Phaser.Physics.Arcade.Events.WORLD_BOUNDS,
       (body: Phaser.Physics.Arcade.Body) => {
         const go = body.gameObject as Phaser.GameObjects.GameObject | undefined;
-        if (go?.getData('isRocket')) {
-          this.recycle(go as Phaser.Physics.Arcade.Sprite);
-        }
+        if (go?.getData('isRocket')) this.end(go as Phaser.Physics.Arcade.Sprite);
       }
     );
   }
@@ -79,6 +85,7 @@ export class RocketPool {
     rocket.setData('isRocket', true);
     rocket.setData('missile', false); // pooled sprite may carry a stale flag
     rocket.setData('charged', false); // pooled sprite may carry a stale flag
+    rocket.setData('bomb', opts.bomb === true);
     rocket.setData('player', player); // B33: escorts need one hit from each seat
     rocket.setData('dist', 0); // reset travelled distance for the arm/ramp curve
     rocket.setData('age', 0); // ms in flight (the missile's lifetime cap)
@@ -97,12 +104,20 @@ export class RocketPool {
     return rocket;
   }
 
-  /** Recycle every live rocket the predicate selects (e.g. ones the boss's
-   *  shield web blocks this frame). */
-  recycleWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): void {
+  /** This shot's flight ends here without a hit (the world bounds, the
+   *  boss's shield web): a bomb goes to `onBombEnd` to blow up, anything else
+   *  recycles. */
+  end(rocket: Phaser.Physics.Arcade.Sprite): void {
+    if (rocket.getData('bomb')) this.onBombEnd(rocket);
+    else this.recycle(rocket);
+  }
+
+  /** End (end()) every live rocket the predicate selects (e.g. ones the
+   *  boss's shield web blocks this frame). */
+  endWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): void {
     this.group.children.iterate((child) => {
       const rocket = child as Phaser.Physics.Arcade.Sprite;
-      if (rocket.active && pred(rocket)) this.recycle(rocket);
+      if (rocket.active && pred(rocket)) this.end(rocket);
       return true;
     });
   }
@@ -148,7 +163,7 @@ export class RocketPool {
       const maxTurn = fullTurn * Math.min(1, ramp);
 
       let target = rocket.getData('target') as HomingTarget | null;
-      if (!target || !target.isActive || target.isPopping) {
+      if (!target || !specialCanHit(target)) {
         target = acquire(rocket.x, rocket.y, body.velocity.x, body.velocity.y);
         rocket.setData('target', target);
         if (!target) return true; // nothing in its cone: fly straight, keep looking
@@ -171,6 +186,7 @@ export class RocketPool {
     rocket.setData('history', undefined); // drop the trail so a refire starts clean
     rocket.setData('charged', false); // clear the shot-kind flags…
     rocket.setData('missile', false);
+    rocket.setData('bomb', false);
     rocket.setData('target', null); // …and drop its target ref
     rocket.setData('player', undefined);
   }

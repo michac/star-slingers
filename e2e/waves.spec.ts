@@ -4,8 +4,8 @@
  * the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, loseShips, failVisible, type Page } from './helpers';
-import { ACT_TRANSITION, AMMO_REGEN_MS, FLEET, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
+import { test, expect, debug, gotoGame, stepGame, stepUntil, loseShips, loseRun, tryAgain, winToFreshRun, type Page } from './helpers';
+import { ACT_TRANSITION, AMMO_REGEN_MS, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
   ASTEROID_KIND,
@@ -23,8 +23,6 @@ import {
 } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-const debug = <T>(page: Page, call: string) => page.evaluate(`${SCENE}.__debug.${call}`) as Promise<T>;
 
 /** The run's position and the fail card, read in one round-trip. */
 const runState = (page: Page) =>
@@ -87,6 +85,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
         d.clearWave();
       }
       row.cleared = until(() => !playing(), 3);
+      d.skipDrop(); // a boss wave's pods (#26) leave at once (no-op otherwise)
       if (n < 10) {
         // A breather is the fleet's flyby (#29) after each act's last wave, then the banner.
         const numerals = s.waveDirector.banner.numerals;
@@ -131,6 +130,7 @@ async function flyAct1To2(page: Page) {
     const d = s.__debug;
     const samples: any[] = [];
     for (let n = 0; n < 800 && !(d.wave() === 4 && d.state() === 'live'); n++) {
+      d.skipDrop(); // the giant asteroid's pods (#26) leave as soon as they're up
       w.__step();
       const banner = s.waveDirector.banner.numerals.every((t: any) => t.text === '4');
       samples.push({ ...d.transition(), banner, state: d.state() });
@@ -173,7 +173,8 @@ test('a fleet still being rebuilt finishes before it takes off (#29)', async ({ 
   await debug(page, 'jumpToWave(3)');
   await loseShips(page, 0, 1, 2); // three rebuilds, staggered past the lead-in
   await debug(page, 'clearWave()');
-  const { done, steps } = await stepUntil(page, "s.__debug.transition().phase === 'out'", 300);
+  // skipDrop: the boss's pods (#26) leave as soon as they're up.
+  const { done, steps } = await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'out')", 300);
   expect(done).toBe(true);
   // The last ship reappears 2 staggers after the clear, then its bubble settles in.
   expect(steps * 16).toBeGreaterThanOrEqual(2 * BREATHER.shipRestoreStaggerMs + REGROW.durationMs);
@@ -184,7 +185,7 @@ test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
   await debug(page, 'clearWave()');
-  expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 50", 300)).done).toBe(true);
+  expect((await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 50)", 300)).done).toBe(true);
   await debug(page, 'skipTransition()');
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
   // Skipping counts as finishing: the banner and wave 4 follow.
@@ -195,7 +196,7 @@ test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page
   await debug(page, 'snapBossIn()');
   await stepGame(page, 16, 1);
   await debug(page, 'defeatBoss()');
-  expect((await stepUntil(page, "s.__debug.transition().phase === 'in'", 400)).done).toBe(true);
+  expect((await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'in')", 400)).done).toBe(true);
   await debug(page, 'jumpToWave(2)');
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
   await stepGame(page, 16, 400);
@@ -225,7 +226,7 @@ test('shots fired during the flyby hit nothing and break nothing (#29)', async (
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
   await debug(page, 'clearWave()');
-  expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 100", 300)).done).toBe(true);
+  expect((await stepUntil(page, "(s.__debug.skipDrop(), s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 100)", 300)).done).toBe(true);
   const hits = await debug<number>(page, 'hits()');
   // A FIRE round straight through the moving fleet's row, and a SPECIAL
   // through the seat's real shot path (its missile looks for a target).
@@ -251,23 +252,6 @@ test('shots fired during the flyby hit nothing and break nothing (#29)', async (
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, flights: ['1-2'] });
 });
 
-/** Lose the current wave through the real fleet-contact path: lose ships 1-3
- *  and pop ship 0's shield, then field a rock at ship 0's bare hull and step
- *  it into contact. */
-async function loseRun(page: Page): Promise<void> {
-  await loseShips(page, 1, 2, 3);
-  await page.evaluate(`${SCENE}.fleet.onEnemyReached(0)`);
-  await fieldRock(page, { x: FLEET.noseX, y: sublaneCenterY(0) });
-  await stepGame(page, 16, 2);
-  expect(await failVisible(page)).toBe(true);
-}
-
-/** Tap the fail card (its full-field zone) and step the scene restart through. */
-async function tryAgain(page: Page): Promise<void> {
-  await page.evaluate(`${SCENE}.failOverlay.tapZone.emit('pointerdown')`);
-  await stepGame(page, 16, 2);
-}
-
 test('Try again after a loss restarts at the first wave of that act', async ({ page }) => {
   await gotoGame(page);
   await debug(page, 'jumpToWave(5)');
@@ -281,14 +265,7 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   // A win after that retry goes back to the join screen (#20), and the next run
   // starts fresh at wave 1, not at the retry wave (Phaser keeps the last
   // restart's data unless given new data).
-  await debug(page, 'jumpToWave(10)');
-  await debug(page, 'clearWave()');
-  expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
-  await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
-  await stepGame(page, 16, 2);
-  expect(await sceneActive(page, 'Join')).toBe(true);
-  await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
-  await stepGame(page, 16, 2);
+  await winToFreshRun(page);
   expect(await runState(page)).toMatchObject({ wave: 1, act: 1, state: 'live' });
 });
 

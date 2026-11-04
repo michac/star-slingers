@@ -6,8 +6,18 @@
  *    along the aim and a charge ring fills round the button); release fires at
  *    the fixed SLING.maxSpeed. Held ≥ CHARGE.fullMs, release fires a charged round.
  *  - SPECIAL (#22): while held, rings the enemy the seat's current special would
- *    take; release fires it (a homing missile today). Never charges. Its icon is
- *    drawn from SPECIALS by the `special` field, and dims while its pool is empty.
+ *    take; release fires it. Never charges. Its icon is drawn from SPECIALS by
+ *    the current mode, and dims while its pool is empty.
+ *  - Special modes (#26): the seat owns a list of specials (the missile, plus
+ *    every upgrade picked from a boss's pods; `grant`). An upward swipe on
+ *    SPECIAL (seat frame, so toward the field for either edge and either hand)
+ *    rotates to the next mode the moment it crosses SPECIAL_SWIPE's threshold
+ *    and direction test; that press then fires nothing. A shorter or sideways
+ *    wobble is still a tap and fires on release. The icons slide carousel-style
+ *    and pips under the button show the modes, all on update(delta).
+ *  - Detonator (#26): while the seat's bomb is in flight the SPECIAL face is a
+ *    starburst, and a press on SPECIAL detonates it at once (no shot, no
+ *    swipe, no rotation).
  *  - One button at a time: while either is held, a press on the other is ignored.
  *  - Haptics (#3): FIRE ticks once the moment it's fully charged with ammo to
  *    fire (HAPTICS dials, src/haptics.ts). The per-shot buzz is the scene's,
@@ -31,10 +41,10 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, seatPoint, SLING, type SeatEdge } from '../layout';
+import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, seatPoint, SLING, SPECIAL_SWIPE, type SeatEdge } from '../layout';
 import { buzz } from '../haptics';
 import { drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
-import { DEFAULT_SPECIAL, SPECIALS, type SpecialKind } from './specials';
+import { DEFAULT_SPECIAL, drawDetonateIcon, SPECIALS, type SpecialKind } from './specials';
 
 type Point = { x: number; y: number };
 type Circle = Point & { r: number };
@@ -64,11 +74,27 @@ export interface TwoThumbControlConfig {
   onFire: (x: number, y: number, dirx: number, diry: number, kind: ShotKind) => void;
   /** The enemy the special along (origin, dir) would take, or null. */
   specialTargetAt: (ox: number, oy: number, dirx: number, diry: number) => { x: number; y: number; r: number } | null;
+  /** The seat's modes at boot (Try again carries them, #26); absent = the missile only. */
+  specials?: SeatSpecials;
+  /** The current mode changed (a rotation or a new upgrade): the HUD follows. */
+  onSpecialChange: (kind: SpecialKind) => void;
+  /** Blow up this seat's bomb now (a SPECIAL press while it flies; the scene
+   *  reports the bomb's flight through setBombInFlight). */
+  detonate: () => void;
+}
+
+/** A seat's special modes, in rotation order, and the current one. */
+export interface SeatSpecials {
+  modes: readonly SpecialKind[];
+  current: SpecialKind;
 }
 
 const DEG = Math.PI / 180;
 /** Charge/hold ring stroke: a touch bolder than the base stroke, the rings are small. */
 const RING_WIDTH = STROKES.chargeArc.width + 1.5;
+
+/** tan of the swipe's direction cone, for the |dx| ≤ dy·tan test. */
+const SWIPE_TAN = Math.tan(SPECIAL_SWIPE.maxOffDeg * DEG);
 
 /** Does a point fall inside a circle grown by `pad` (a control's hit area)? */
 const hits = (p: Point, c: Circle, pad: number): boolean => Math.hypot(p.x - c.x, p.y - c.y) <= c.r + pad;
@@ -77,6 +103,10 @@ export class TwoThumbControl {
   private readonly staticGfx: Phaser.GameObjects.Graphics;
   /** The SPECIAL button's icon, on its own so it can dim and be swapped. */
   private readonly specialIconGfx: Phaser.GameObjects.Graphics;
+  /** The icon sliding out during a mode rotation's carousel. */
+  private readonly outgoingIconGfx: Phaser.GameObjects.Graphics;
+  /** One pip per mode under SPECIAL, the current one filled (2+ modes only). */
+  private readonly pipsGfx: Phaser.GameObjects.Graphics;
   private readonly dynamicGfx: Phaser.GameObjects.Graphics;
   /** World-space: the target ring on the enemy the special would take. */
   private readonly lockGfx: Phaser.GameObjects.Graphics;
@@ -90,8 +120,20 @@ export class TwoThumbControl {
   private pad!: Point;
   private swap!: Circle;
 
-  /** The seat's current special: what SPECIAL fires and which icon it shows. */
+  /** The seat's special modes in rotation order, and the current one: what
+   *  SPECIAL fires and which icon it shows. */
+  private modes: SpecialKind[] = [DEFAULT_SPECIAL];
   private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
+  /** Is this seat's detonator bomb in flight? (The scene tells us: setBombInFlight.) */
+  private bombInFlight = false;
+  /** What specialIconGfx shows now: a mode's icon, or the detonate face. */
+  private iconFace: SpecialKind | 'detonate' | null = null;
+  /** ms left of the rotation carousel (0 = at rest). */
+  private carouselLeft = 0;
+  /** Where the SPECIAL press went down (seat frame), for the swipe test. */
+  private specialDown: Point = { x: 0, y: 0 };
+  /** This SPECIAL press is used up (a swipe, or a detonation): its release fires nothing. */
+  private specialSpent = false;
 
   /** Seat-frame aim, degrees (0 = player's right, 90 = across the field). */
   private aimDeg: number = CONTROLS_V2.aim.startDeg;
@@ -126,12 +168,15 @@ export class TwoThumbControl {
       .setAngle(config.edge === 'top' ? 180 : 0);
     this.staticGfx = scene.add.graphics();
     this.specialIconGfx = scene.add.graphics();
+    this.outgoingIconGfx = scene.add.graphics();
+    this.pipsGfx = scene.add.graphics();
     this.dynamicGfx = scene.add.graphics();
     this.nockedRocket = scene.add.image(this.launcher.x, this.launcher.y, config.rocketTexture);
-    inner.add([this.staticGfx, this.specialIconGfx, this.dynamicGfx, this.nockedRocket]);
+    inner.add([this.staticGfx, this.specialIconGfx, this.outgoingIconGfx, this.pipsGfx, this.dynamicGfx, this.nockedRocket]);
     this.lockGfx = scene.add.graphics();
     this.drawStatic();
-    this.setSpecial(this.currentSpecial);
+    if (config.specials) this.modes = [...config.specials.modes];
+    this.setCurrent(config.specials?.current ?? DEFAULT_SPECIAL); // the HUD follows from boot
   }
 
   // ---- read-outs (DEV hooks / tests) ----
@@ -144,13 +189,85 @@ export class TwoThumbControl {
     return this.currentSpecial;
   }
 
-  /** Change what SPECIAL fires (#26 upgrades): redraws the button's icon. */
-  setSpecial(kind: SpecialKind): void {
+  /** The seat's modes and current one (a copy: Try again's snapshot, tests). */
+  get specials(): SeatSpecials {
+    return { modes: [...this.modes], current: this.currentSpecial };
+  }
+
+  /** A new upgrade (#26): add it to the seat's modes if it's new, and make it
+   *  the current mode either way, so the player sees what they just got. */
+  grant(kind: SpecialKind): void {
+    if (!this.modes.includes(kind)) this.modes.push(kind);
+    this.setCurrent(kind);
+  }
+
+  /** Rotate to the next mode, wrapping (the upward swipe). The outgoing icon
+   *  slides up and out while the next slides in from below. */
+  private rotate(): void {
+    const next = this.modes[(this.modes.indexOf(this.currentSpecial) + 1) % this.modes.length];
+    const out = this.outgoingIconGfx;
+    out.clear();
+    const b = this.specialBtn;
+    SPECIALS[this.currentSpecial].drawIcon(out, b.x, b.y, b.r, this.config.color);
+    this.carouselLeft = SPECIAL_SWIPE.carouselMs;
+    this.setCurrent(next);
+    this.placeCarousel();
+  }
+
+  /** The scene's word on this seat's bomb (#26): it launched, or it's gone.
+   *  While it flies the SPECIAL face is the detonate starburst. */
+  setBombInFlight(on: boolean): void {
+    if (on === this.bombInFlight) return;
+    this.bombInFlight = on;
+    this.drawSpecial();
+  }
+
+  private setCurrent(kind: SpecialKind): void {
     this.currentSpecial = kind;
+    this.drawSpecial();
+    this.config.onSpecialChange(kind);
+  }
+
+  /** Redraw the SPECIAL face (the current mode's icon, or the detonate
+   *  starburst while the seat's bomb flies) and the mode pips. */
+  private drawSpecial(): void {
+    const b = this.specialBtn;
+    const { color } = this.config;
     const g = this.specialIconGfx;
     g.clear();
-    const b = this.specialBtn;
-    SPECIALS[kind].drawIcon(g, b.x, b.y, b.r, this.config.color);
+    this.iconFace = this.bombInFlight ? 'detonate' : this.currentSpecial;
+    if (this.iconFace === 'detonate') drawDetonateIcon(g, b.x, b.y, b.r, color);
+    else SPECIALS[this.iconFace].drawIcon(g, b.x, b.y, b.r, color);
+
+    const p = this.pipsGfx;
+    p.clear();
+    if (this.modes.length < 2) return;
+    const { pipR, pipGap, pipBelow } = SPECIAL_SWIPE;
+    const y = b.y + b.r + pipBelow;
+    const x0 = b.x - ((this.modes.length - 1) * pipGap) / 2;
+    this.modes.forEach((kind, i) => {
+      const x = x0 + i * pipGap;
+      if (kind === this.currentSpecial) {
+        p.fillStyle(color, 1);
+        p.fillCircle(x, y, pipR);
+      } else {
+        p.lineStyle(1.2, color, 0.7);
+        p.strokeCircle(x, y, pipR);
+      }
+    });
+  }
+
+  /** The rotation carousel's progress, 0 → 1 (1 = at rest). */
+  private carouselT(): number {
+    return 1 - this.carouselLeft / SPECIAL_SWIPE.carouselMs;
+  }
+
+  /** Carousel offsets for the current frame: out slides up, in rises from below. */
+  private placeCarousel(): void {
+    const t = this.carouselT();
+    const slide = SPECIAL_SWIPE.slidePx;
+    this.outgoingIconGfx.setY(-slide * t).setAlpha(1 - t).setVisible(t < 1);
+    this.specialIconGfx.setY(slide * (1 - t));
   }
 
   /** World-space centres + radii of this seat's controls. */
@@ -184,6 +301,12 @@ export class TwoThumbControl {
       this.charge = 0;
       this.armedBuzzed = false;
       this.dirty = true;
+      if (button === 'special') {
+        this.specialDown = p;
+        // A press while the seat's bomb flies blows it up, and that's all it does.
+        this.specialSpent = this.bombInFlight;
+        if (this.specialSpent) this.config.detonate();
+      }
       return;
     }
     if (this.aimPointer !== null || !this.inAimRegion(p)) return;
@@ -202,7 +325,11 @@ export class TwoThumbControl {
       }
       return;
     }
-    if (pointer.id !== this.aimPointer) return; // a held button ignores sliding
+    if (pointer.id === this.buttonPointer) {
+      if (this.held === 'special') this.checkSwipe(this.toSeat(pointer));
+      return; // otherwise a held button ignores sliding
+    }
+    if (pointer.id !== this.aimPointer) return;
     const p = this.toSeat(pointer);
     this.setAim(this.aimDeg - (p.x - this.dragLastX) * CONTROLS_V2.drag.gainDegPerPx);
     this.dragLastX = p.x;
@@ -220,8 +347,9 @@ export class TwoThumbControl {
     if (pointer.id !== this.buttonPointer) return;
     const button = this.held;
     const charged = button === 'fire' && this.charge >= 1;
+    const spent = button === 'special' && this.specialSpent;
     this.dropButton();
-    if (!button || !this.config.canFire(button)) return;
+    if (!button || spent || !this.config.canFire(button)) return;
     const dir = this.worldDir();
     const { anchor } = this.config;
     this.config.onFire(anchor.x, anchor.y, dir.x, dir.y, { button, charged });
@@ -235,8 +363,13 @@ export class TwoThumbControl {
     }
     if (this.held === 'fire') this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
     const canFire = this.config.canFire('fire');
-    // An empty special pool dims the SPECIAL icon (it regens on its own clock).
-    this.specialIconGfx.setAlpha(this.config.canFire('special') ? 1 : 0.35);
+    if (this.carouselLeft > 0) {
+      this.carouselLeft = Math.max(0, this.carouselLeft - deltaMs);
+      this.placeCarousel();
+    }
+    // An empty special pool dims the SPECIAL icon (it regens on its own clock);
+    // mid-carousel the incoming icon also fades in.
+    this.specialIconGfx.setAlpha((this.config.canFire('special') || this.bombInFlight ? 1 : 0.35) * this.carouselT());
     // Armed tick: once per hold, the first frame it's both fully charged AND
     // has ammo (no "ready" buzz for a release that would fire nothing).
     if (this.held === 'fire' && this.charge >= 1 && canFire && !this.armedBuzzed) {
@@ -281,7 +414,9 @@ export class TwoThumbControl {
     this.aimPointer = null;
     this.swapPointer = null;
     this.drawStatic();
-    this.setSpecial(this.currentSpecial);
+    this.carouselLeft = 0;
+    this.placeCarousel();
+    this.drawSpecial();
     this.config.onLeftyChange(this.lefty);
   }
 
@@ -289,6 +424,7 @@ export class TwoThumbControl {
   private dropButton(): void {
     this.buttonPointer = null;
     this.held = null;
+    this.specialSpent = false;
     this.charge = 0;
     this.dirty = true;
     this.lockGfx.clear();
@@ -318,6 +454,20 @@ export class TwoThumbControl {
     return f <= s ? 'fire' : 'special';
   }
 
+  /** The upward swipe on a held SPECIAL (seat frame): once its travel up is
+   *  at least `minUpPx` and within `maxOffDeg` of straight up, the press is
+   *  spent (it will fire nothing) and, with two or more modes, the seat rotates
+   *  to the next. One rotation per press. */
+  private checkSwipe(p: Point): void {
+    if (this.specialSpent) return;
+    const up = this.specialDown.y - p.y;
+    if (up < SPECIAL_SWIPE.minUpPx || Math.abs(p.x - this.specialDown.x) > up * SWIPE_TAN) return;
+    this.specialSpent = true;
+    this.lockGfx.clear(); // nothing will fire: drop the target ring
+    this.dirty = true;
+    if (this.modes.length >= 2) this.rotate();
+  }
+
   /** The aim zone: the player's side of their band away from the buttons. */
   private inAimRegion(p: Point): boolean {
     const { minX, minY } = CONTROLS_V2.drag;
@@ -337,7 +487,7 @@ export class TwoThumbControl {
 
     this.drawButtonBase(g, this.fire);
     this.drawRocketGlyph(g, this.fire.x, this.fire.y, this.fire.r);
-    this.drawButtonBase(g, this.specialBtn); // its icon is specialIconGfx (setSpecial)
+    this.drawButtonBase(g, this.specialBtn); // its icon is specialIconGfx (drawSpecial)
 
     // Aim pad: dim disc + rim, the aimable range as a dashed arc just outside,
     // a centre dot, and a ◀ ▶ hint (sideways turns the aim).
@@ -482,7 +632,7 @@ export class TwoThumbControl {
   private drawLock(): void {
     const g = this.lockGfx;
     g.clear();
-    if (this.held !== 'special' || !this.config.canFire('special')) return; // nothing would fire
+    if (this.held !== 'special' || this.specialSpent || !this.config.canFire('special')) return; // nothing would fire
     const { anchor, color } = this.config;
     const d = this.worldDir();
     const lock = this.config.specialTargetAt(anchor.x, anchor.y, d.x, d.y);
