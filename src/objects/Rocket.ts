@@ -1,8 +1,8 @@
 /**
  * RocketPool — pooled arcade-physics sprites for both players' shots: FIRE
  * rounds (plain or charged), SPECIAL homing missiles (#22) and detonator bombs
- * (#26: straight; at the world bounds a bomb goes to `onBombBounds` to blow up
- * there instead of recycling quietly). Rounds fly
+ * (#26: straight; wherever a flight ends without a hit, end() hands a bomb to
+ * `onBombEnd` to blow up there instead of recycling it quietly). Rounds fly
  * straight (no gravity) and recycle at the world bounds or on a hit (a charged
  * round carries on past a kill, see the scene's spendShot). Missiles carry a
  * target and get steered toward it each frame by steer().
@@ -10,7 +10,7 @@
 import Phaser from 'phaser';
 import { MISSILE, TRAIL } from '../layout';
 import { COLORS } from '../tokens';
-import type { HomingTarget } from './HomingTarget';
+import { specialCanHit, type HomingTarget } from './HomingTarget';
 import { TEX } from './textures';
 
 export type PlayerId = 'p1' | 'p2';
@@ -47,8 +47,8 @@ export class RocketPool {
 
   constructor(
     scene: Phaser.Scene,
-    /** A bomb reached the world bounds: the scene blows it up there (and recycles it). */
-    onBombBounds: (rocket: Phaser.Physics.Arcade.Sprite) => void
+    /** A bomb's flight ended (end()): the scene blows it up there (and recycles it). */
+    private readonly onBombEnd: (rocket: Phaser.Physics.Arcade.Sprite) => void
   ) {
     this.group = scene.physics.add.group({ allowGravity: false, maxSize: 24 });
     // Created right after the group (before the asteroids), so it sits just
@@ -61,10 +61,7 @@ export class RocketPool {
       Phaser.Physics.Arcade.Events.WORLD_BOUNDS,
       (body: Phaser.Physics.Arcade.Body) => {
         const go = body.gameObject as Phaser.GameObjects.GameObject | undefined;
-        if (!go?.getData('isRocket')) return;
-        const rocket = go as Phaser.Physics.Arcade.Sprite;
-        if (rocket.getData('bomb')) onBombBounds(rocket);
-        else this.recycle(rocket);
+        if (go?.getData('isRocket')) this.end(go as Phaser.Physics.Arcade.Sprite);
       }
     );
   }
@@ -107,12 +104,20 @@ export class RocketPool {
     return rocket;
   }
 
-  /** Recycle every live rocket the predicate selects (e.g. ones the boss's
-   *  shield web blocks this frame). */
-  recycleWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): void {
+  /** This shot's flight ends here without a hit (the world bounds, the
+   *  boss's shield web): a bomb goes to `onBombEnd` to blow up, anything else
+   *  recycles. */
+  end(rocket: Phaser.Physics.Arcade.Sprite): void {
+    if (rocket.getData('bomb')) this.onBombEnd(rocket);
+    else this.recycle(rocket);
+  }
+
+  /** End (end()) every live rocket the predicate selects (e.g. ones the
+   *  boss's shield web blocks this frame). */
+  endWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): void {
     this.group.children.iterate((child) => {
       const rocket = child as Phaser.Physics.Arcade.Sprite;
-      if (rocket.active && pred(rocket)) this.recycle(rocket);
+      if (rocket.active && pred(rocket)) this.end(rocket);
       return true;
     });
   }
@@ -158,7 +163,7 @@ export class RocketPool {
       const maxTurn = fullTurn * Math.min(1, ramp);
 
       let target = rocket.getData('target') as HomingTarget | null;
-      if (!target || !target.isActive || target.isPopping) {
+      if (!target || !specialCanHit(target)) {
         target = acquire(rocket.x, rocket.y, body.velocity.x, body.velocity.y);
         rocket.setData('target', target);
         if (!target) return true; // nothing in its cone: fly straight, keep looking

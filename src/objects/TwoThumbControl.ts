@@ -78,9 +78,8 @@ export interface TwoThumbControlConfig {
   specials?: SeatSpecials;
   /** The current mode changed (a rotation or a new upgrade): the HUD follows. */
   onSpecialChange: (kind: SpecialKind) => void;
-  /** Is this seat's detonator bomb in flight? */
-  bombInFlight: () => boolean;
-  /** Blow up this seat's bomb now (a SPECIAL press while it flies). */
+  /** Blow up this seat's bomb now (a SPECIAL press while it flies; the scene
+   *  reports the bomb's flight through setBombInFlight). */
   detonate: () => void;
 }
 
@@ -95,7 +94,7 @@ const DEG = Math.PI / 180;
 const RING_WIDTH = STROKES.chargeArc.width + 1.5;
 
 /** tan of the swipe's direction cone, for the |dx| ≤ dy·tan test. */
-const SWIPE_TAN = Math.tan(SPECIAL_SWIPE.maxOffDeg * (Math.PI / 180));
+const SWIPE_TAN = Math.tan(SPECIAL_SWIPE.maxOffDeg * DEG);
 
 /** Does a point fall inside a circle grown by `pad` (a control's hit area)? */
 const hits = (p: Point, c: Circle, pad: number): boolean => Math.hypot(p.x - c.x, p.y - c.y) <= c.r + pad;
@@ -125,6 +124,8 @@ export class TwoThumbControl {
    *  SPECIAL fires and which icon it shows. */
   private modes: SpecialKind[] = [DEFAULT_SPECIAL];
   private currentSpecial: SpecialKind = DEFAULT_SPECIAL;
+  /** Is this seat's detonator bomb in flight? (The scene tells us: setBombInFlight.) */
+  private bombInFlight = false;
   /** What specialIconGfx shows now: a mode's icon, or the detonate face. */
   private iconFace: SpecialKind | 'detonate' | null = null;
   /** ms left of the rotation carousel (0 = at rest). */
@@ -174,11 +175,8 @@ export class TwoThumbControl {
     inner.add([this.staticGfx, this.specialIconGfx, this.outgoingIconGfx, this.pipsGfx, this.dynamicGfx, this.nockedRocket]);
     this.lockGfx = scene.add.graphics();
     this.drawStatic();
-    if (config.specials) {
-      this.modes = [...config.specials.modes];
-      this.currentSpecial = config.specials.current;
-    }
-    this.drawSpecial();
+    if (config.specials) this.modes = [...config.specials.modes];
+    this.setCurrent(config.specials?.current ?? DEFAULT_SPECIAL); // the HUD follows from boot
   }
 
   // ---- read-outs (DEV hooks / tests) ----
@@ -216,6 +214,14 @@ export class TwoThumbControl {
     this.placeCarousel();
   }
 
+  /** The scene's word on this seat's bomb (#26): it launched, or it's gone.
+   *  While it flies the SPECIAL face is the detonate starburst. */
+  setBombInFlight(on: boolean): void {
+    if (on === this.bombInFlight) return;
+    this.bombInFlight = on;
+    this.drawSpecial();
+  }
+
   private setCurrent(kind: SpecialKind): void {
     this.currentSpecial = kind;
     this.drawSpecial();
@@ -229,7 +235,7 @@ export class TwoThumbControl {
     const { color } = this.config;
     const g = this.specialIconGfx;
     g.clear();
-    this.iconFace = this.config.bombInFlight() ? 'detonate' : this.currentSpecial;
+    this.iconFace = this.bombInFlight ? 'detonate' : this.currentSpecial;
     if (this.iconFace === 'detonate') drawDetonateIcon(g, b.x, b.y, b.r, color);
     else SPECIALS[this.iconFace].drawIcon(g, b.x, b.y, b.r, color);
 
@@ -251,9 +257,14 @@ export class TwoThumbControl {
     });
   }
 
+  /** The rotation carousel's progress, 0 → 1 (1 = at rest). */
+  private carouselT(): number {
+    return 1 - this.carouselLeft / SPECIAL_SWIPE.carouselMs;
+  }
+
   /** Carousel offsets for the current frame: out slides up, in rises from below. */
   private placeCarousel(): void {
-    const t = this.carouselLeft > 0 ? 1 - this.carouselLeft / SPECIAL_SWIPE.carouselMs : 1;
+    const t = this.carouselT();
     const slide = SPECIAL_SWIPE.slidePx;
     this.outgoingIconGfx.setY(-slide * t).setAlpha(1 - t).setVisible(t < 1);
     this.specialIconGfx.setY(slide * (1 - t));
@@ -293,7 +304,7 @@ export class TwoThumbControl {
       if (button === 'special') {
         this.specialDown = p;
         // A press while the seat's bomb flies blows it up, and that's all it does.
-        this.specialSpent = this.config.bombInFlight();
+        this.specialSpent = this.bombInFlight;
         if (this.specialSpent) this.config.detonate();
       }
       return;
@@ -352,16 +363,13 @@ export class TwoThumbControl {
     }
     if (this.held === 'fire') this.charge = Math.min(1, this.charge + deltaMs / CHARGE.fullMs);
     const canFire = this.config.canFire('fire');
-    // The face follows the bomb (detonate starburst while it flies).
-    if ((this.config.bombInFlight() ? 'detonate' : this.currentSpecial) !== this.iconFace) this.drawSpecial();
     if (this.carouselLeft > 0) {
       this.carouselLeft = Math.max(0, this.carouselLeft - deltaMs);
       this.placeCarousel();
     }
     // An empty special pool dims the SPECIAL icon (it regens on its own clock);
     // mid-carousel the incoming icon also fades in.
-    const fadeIn = this.carouselLeft > 0 ? 1 - this.carouselLeft / SPECIAL_SWIPE.carouselMs : 1;
-    this.specialIconGfx.setAlpha((this.config.canFire('special') || this.iconFace === 'detonate' ? 1 : 0.35) * fadeIn);
+    this.specialIconGfx.setAlpha((this.config.canFire('special') || this.bombInFlight ? 1 : 0.35) * this.carouselT());
     // Armed tick: once per hold, the first frame it's both fully charged AND
     // has ammo (no "ready" buzz for a release that would fire nothing).
     if (this.held === 'fire' && this.charge >= 1 && canFire && !this.armedBuzzed) {

@@ -16,11 +16,14 @@
  * Everything runs on update(delta), not tweens or timers, so the e2e fixed
  * timestep drives the bob, the timeout, the blink and the fade. The two pod
  * sprites are created ONCE (parked) so the scene's rocket↔pod collider, built
- * once over `sprites`, never points at a recreated body.
+ * once over `sprites`, never points at a recreated body. Each pod's icon and
+ * pick rings sit on its own Graphics, drawn only on start and on a pick, and
+ * moved with the pod as it bobs.
  */
 import Phaser from 'phaser';
 import { PODS } from '../layout';
 import { COLORS } from '../tokens';
+import { SEAT_DEFS } from '../lineup';
 import type { PlayerId } from './Rocket';
 import { SPECIALS, type SpecialKind } from './specials';
 import { TEX } from './textures';
@@ -29,19 +32,20 @@ type DropPhase = 'idle' | 'live' | 'fading';
 
 /** How long the pods take to fade out once they leave (stepped clock). */
 const FADE_MS = 300;
-const SEAT_COLOR: Record<PlayerId, number> = { p1: COLORS.p1, p2: COLORS.p2 };
 
 export class UpgradeDrop {
   private readonly pods: Phaser.Physics.Arcade.Sprite[];
-  /** Icons, pick rings: redrawn each frame over the pods. */
-  private readonly gfx: Phaser.GameObjects.Graphics;
+  /** Per pod (index-aligned): its upgrade icon and pick rings, drawn about
+   *  the Graphics' own origin, which place() keeps on the pod. */
+  private readonly icons: Phaser.GameObjects.Graphics[];
   private phase: DropPhase = 'idle';
-  private kinds: readonly SpecialKind[] = [];
+  private kinds: readonly SpecialKind[] = []; // empty while parked
   private seats: readonly PlayerId[] = [];
   /** Which pod each seat took this drop. */
   private picks: Partial<Record<PlayerId, number>> = {};
-  /** ms since the drop started (live), then ms into the fade. */
+  /** ms since the drop started (it stops at the timeout or once the pods leave). */
   private elapsed = 0;
+  /** ms into the fade, once the pods leave. */
   private fadeMs = 0;
   private done: (() => void) | null = null;
 
@@ -55,7 +59,7 @@ export class UpgradeDrop {
       body.setCircle(PODS.r, sprite.width / 2 - PODS.r, sprite.height / 2 - PODS.r);
       return sprite;
     });
-    this.gfx = scene.add.graphics().setDepth(2);
+    this.icons = this.pods.map(() => scene.add.graphics().setDepth(2));
     this.park();
   }
 
@@ -77,19 +81,18 @@ export class UpgradeDrop {
 
   /** Put the boss's pods in the field for these live seats. `done` runs once,
    *  after they've gone. */
-  start(kinds: readonly SpecialKind[], seats: readonly PlayerId[], done: () => void): void {
-    this.kinds = kinds.slice(0, this.pods.length);
+  start(kinds: readonly [SpecialKind, SpecialKind], seats: readonly PlayerId[], done: () => void): void {
+    this.kinds = kinds;
     this.seats = seats;
     this.picks = {};
     this.elapsed = 0;
-    this.fadeMs = 0;
     this.done = done;
     this.phase = 'live';
-    this.pods.forEach((pod, i) => {
-      const live = i < this.kinds.length;
-      pod.setVisible(live).setAlpha(1).setActive(live);
-      (pod.body as Phaser.Physics.Arcade.Body).enable = live;
-    });
+    this.setAlpha(1);
+    for (const pod of this.pods) {
+      pod.setVisible(true).setActive(true);
+      (pod.body as Phaser.Physics.Arcade.Body).enable = true;
+    }
     this.place();
     this.draw();
   }
@@ -115,9 +118,7 @@ export class UpgradeDrop {
     if (this.phase === 'idle') return;
     if (this.phase === 'fading') {
       this.fadeMs += deltaMs;
-      const alpha = Math.max(0, 1 - this.fadeMs / FADE_MS);
-      for (const pod of this.pods) pod.setAlpha(alpha);
-      this.gfx.setAlpha(alpha);
+      this.setAlpha(Math.max(0, 1 - this.fadeMs / FADE_MS));
       if (this.fadeMs >= FADE_MS) this.finish();
       return;
     }
@@ -130,10 +131,7 @@ export class UpgradeDrop {
     // Blink for the last PODS.blinkMs: "going soon".
     const left = PODS.timeoutMs - this.elapsed;
     const on = left > PODS.blinkMs || Math.floor(left / PODS.blinkPeriodMs) % 2 === 0;
-    const alpha = on ? 1 : 0.3;
-    for (const pod of this.pods) pod.setAlpha(alpha);
-    this.gfx.setAlpha(alpha);
-    this.draw();
+    this.setAlpha(on ? 1 : 0.3);
   }
 
   /** DEV/test: end a live drop now as if its pods had gone (done() runs), so
@@ -145,7 +143,6 @@ export class UpgradeDrop {
   /** Take the pods away now without calling done (a wave jump away from the
    *  drop; the director has already dropped its pending steps). */
   cancel(): void {
-    this.done = null;
     this.park();
   }
 
@@ -168,31 +165,38 @@ export class UpgradeDrop {
     this.kinds = [];
     this.picks = {};
     for (const pod of this.pods) {
-      pod.setVisible(false).setActive(false).setAlpha(1);
+      pod.setVisible(false).setActive(false);
       (pod.body as Phaser.Physics.Arcade.Body).enable = false;
     }
-    this.gfx.clear().setAlpha(1);
+    for (const g of this.icons) g.clear();
+    this.setAlpha(1);
   }
 
-  /** Bob each pod about its spot (the two out of phase). */
+  /** The pods and their icons together (blink, fade, reset). */
+  private setAlpha(alpha: number): void {
+    for (const pod of this.pods) pod.setAlpha(alpha);
+    for (const g of this.icons) g.setAlpha(alpha);
+  }
+
+  /** Bob each pod (and its icon) about its spot, the two out of phase. */
   private place(): void {
     const w = (Math.PI * 2) / PODS.bobMs;
     this.pods.forEach((pod, i) => {
       pod.setPosition(PODS.xs[i], PODS.y + Math.sin(this.elapsed * w + i * Math.PI) * PODS.bobPx);
+      this.icons[i].setPosition(pod.x, pod.y);
     });
   }
 
-  /** Each pod's upgrade icon, plus a ring in each seat's colour round the pod it took. */
+  /** Each pod's upgrade icon, plus a ring in each seat's colour round the pod
+   *  it took (P1's inside P2's). Only on start and a pick: place() moves them. */
   private draw(): void {
-    const g = this.gfx;
-    g.clear();
     this.kinds.forEach((kind, i) => {
-      const { x, y } = this.pods[i];
-      SPECIALS[kind].drawIcon(g, x, y, PODS.r * PODS.iconFrac, COLORS.ink);
-      (['p1', 'p2'] as const).forEach((seat, s) => {
-        if (this.picks[seat] !== i) return;
-        g.lineStyle(2.5, SEAT_COLOR[seat], 1);
-        g.strokeCircle(x, y, PODS.r + PODS.pickRingGap[s]);
+      const g = this.icons[i].clear();
+      SPECIALS[kind].drawIcon(g, 0, 0, PODS.r * PODS.iconFrac, COLORS.ink);
+      SEAT_DEFS.forEach(({ player, color }, s) => {
+        if (this.picks[player] !== i) return;
+        g.lineStyle(2.5, color, 1);
+        g.strokeCircle(0, 0, PODS.r + PODS.pickRingGap[s]);
       });
     });
   }

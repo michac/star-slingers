@@ -4,7 +4,7 @@
  * the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, JOIN_SCENE, gotoGame, stepGame, stepUntil, sceneActive, loseShips, loseRun, tryAgain, type Page } from './helpers';
+import { test, expect, debug, gotoGame, stepGame, stepUntil, loseShips, loseRun, tryAgain, winToFreshRun, type Page } from './helpers';
 import { ACT_TRANSITION, AMMO_REGEN_MS, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
@@ -23,8 +23,6 @@ import {
 } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-const debug = <T>(page: Page, call: string) => page.evaluate(`${SCENE}.__debug.${call}`) as Promise<T>;
 
 /** The run's position and the fail card, read in one round-trip. */
 const runState = (page: Page) =>
@@ -267,14 +265,7 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
   // A win after that retry goes back to the join screen (#20), and the next run
   // starts fresh at wave 1, not at the retry wave (Phaser keeps the last
   // restart's data unless given new data).
-  await debug(page, 'jumpToWave(10)');
-  await debug(page, 'clearWave()');
-  expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
-  await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
-  await stepGame(page, 16, 2);
-  expect(await sceneActive(page, 'Join')).toBe(true);
-  await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
-  await stepGame(page, 16, 2);
+  await winToFreshRun(page);
   expect(await runState(page)).toMatchObject({ wave: 1, act: 1, state: 'live' });
 });
 

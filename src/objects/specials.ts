@@ -24,11 +24,12 @@ export interface SpecialDef {
 /** The seat's special at boot, and always its first mode. */
 export const DEFAULT_SPECIAL: SpecialKind = 'missile';
 
-/** A small rocket, nose along −y in its local frame, rotated by `angle`
- *  (clockwise) and scaled by `s`, with its origin at (ox, oy). */
-function drawRocket(g: Phaser.GameObjects.Graphics, ox: number, oy: number, r: number, angle: number, s: number, color: number): (x: number, y: number) => { x: number; y: number } {
+/** A small rocket, nose along −y in its local frame (units of `size`),
+ *  rotated by `angle` (clockwise), with its origin at (ox, oy). Returns the
+ *  local→world point map, for anything drawn alongside it. */
+function drawRocket(g: Phaser.GameObjects.Graphics, ox: number, oy: number, size: number, angle: number, color: number): (x: number, y: number) => { x: number; y: number } {
   const cos = Math.cos(angle), sin = Math.sin(angle);
-  const pt = (x: number, y: number) => ({ x: ox + (x * cos - y * sin) * r * s, y: oy + (x * sin + y * cos) * r * s });
+  const pt = (x: number, y: number) => ({ x: ox + (x * cos - y * sin) * size, y: oy + (x * sin + y * cos) * size });
   const tri = (p: [number, number], q: [number, number], t: [number, number]) => {
     const P = pt(...p), Q = pt(...q), T = pt(...t);
     g.fillTriangle(P.x, P.y, Q.x, Q.y, T.x, T.y);
@@ -49,7 +50,7 @@ export const SPECIALS: Record<SpecialKind, SpecialDef> = {
   missile: {
     drawIcon(g, cx, cy, r, color) {
       // Nudged so the trail fits too; rotated 45° clockwise (pointing up-right).
-      const pt = drawRocket(g, cx + r * 0.08, cy - r * 0.08, r, Math.PI / 4, 1, color);
+      const pt = drawRocket(g, cx + r * 0.08, cy - r * 0.08, r, Math.PI / 4, color);
       // Curved dotted trail, bending away below the tail.
       g.fillStyle(COLORS.charge, 0.9);
       const trail: [number, number, number][] = [[0, 0.36, 0.09], [-0.12, 0.54, 0.075], [-0.32, 0.66, 0.06]];
@@ -69,7 +70,7 @@ export const SPECIALS: Record<SpecialKind, SpecialDef> = {
       for (const a of [-spread, 0, spread]) {
         // Rocket origin out along its heading, so its fins sit near the hub.
         const d = r * (0.28 * s + 0.12);
-        drawRocket(g, fx + Math.sin(a) * d, fy - Math.cos(a) * d, r, a, s, color);
+        drawRocket(g, fx + Math.sin(a) * d, fy - Math.cos(a) * d, r * s, a, color);
       }
     },
   },

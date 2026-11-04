@@ -118,7 +118,7 @@ textures, tokens).
   `upgrades.spec.ts` (boss upgrade pods, the SPECIAL swipe between modes, triple missile, detonator, Try again's kept
   specials) and `haptics.spec.ts`. The shared harness is `e2e/helpers.ts`: `gotoGame` (by default it skips the
   join screen with both seats Normal; pass a lineup, or `'join'` to stop on it), `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
-  `loseRun`/`tryAgain`,
+  `loseRun`/`tryAgain`/`winToFreshRun`, `debug`,
   the `__debug` wrappers (e.g. `shieldLinks`), `mirrored` for the top seat and the CDP `touchscreen`.
   Its exported `test` carries the zero-console-error gate as an auto fixture, so **specs import
   `test`/`expect` from `./helpers`, never from `@playwright/test`**

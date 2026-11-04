@@ -25,7 +25,7 @@ import { Escort } from './Escort';
 import { ShieldWeb } from './ShieldWeb';
 import { Fleet } from './Fleet';
 import { Overlay } from './Overlay';
-import { specialCanHit, type HomingTarget } from './HomingTarget';
+import { inBlast, type HomingTarget } from './HomingTarget';
 import type { PlayerId } from './Rocket';
 
 type BossPhase = 'idle' | 'charging' | 'won' | 'lost';
@@ -127,10 +127,7 @@ export class BossEncounter {
    *  among them: only charged FIRE rounds hurt it. */
   blastEscorts(x: number, y: number, radius: number, player: PlayerId): void {
     if (this.phaseState !== 'charging') return;
-    for (const e of this.escorts) {
-      if (!specialCanHit(e)) continue;
-      if (Phaser.Math.Distance.Between(x, y, e.sprite.x, e.sprite.y) <= radius + e.radius) e.takeHit(player);
-    }
+    for (const e of this.escorts) if (inBlast(e, x, y, radius)) e.takeHit(player);
   }
 
   /** DEV/test: contribute both colors to escort i (used for cycle setup). */

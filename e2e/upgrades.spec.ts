@@ -10,7 +10,8 @@ import {
   test,
   expect,
   SCENE,
-  JOIN_SCENE,
+  debug,
+  fire,
   gotoGame,
   fieldRock,
   stepGame,
@@ -23,7 +24,8 @@ import {
   escortLocks,
   loseRun,
   tryAgain,
-  sceneActive,
+  winToFreshRun,
+  liveShots,
   touchscreen,
   v2Layout,
   type Page,
@@ -35,7 +37,6 @@ import { BOSS, BOSS_DROPS } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const debug = <T>(page: Page, call: string) => page.evaluate(`${SCENE}.__debug.${call}`) as Promise<T>;
 type Modes = { modes: string[]; current: string };
 const modes = (page: Page, player: 1 | 2) => debug<Modes>(page, `modes(${player})`);
 type PodState = { phase: string; kinds: string[]; picks: Record<string, number>; elapsedMs: number; pods: { x: number; y: number; alpha: number }[] };
@@ -50,11 +51,7 @@ async function dropPods(page: Page): Promise<void> {
 }
 
 /** Launch a shot for a seat through the public pool (its texture, its seat id). */
-const shoot = (page: Page, player: 'p1' | 'p2', from: Pt, vx: number, vy: number, opts = '{}') =>
-  page.evaluate(`void ${SCENE}.rockets.fire('rocket-${player}', ${from.x}, ${from.y}, ${vx}, ${vy}, '${player}', ${opts})`);
-
-const liveRockets = (page: Page) =>
-  page.evaluate(`${SCENE}.rockets.group.getChildren().filter((r) => r.active).map((r) => ({ x: r.x, y: r.y }))`) as Promise<Pt[]>;
+const shoot = (page: Page, player: 'p1' | 'p2', from: Pt, vx: number, vy: number, opts = '{}') => fire(page, from.x, from.y, vx, vy, opts, player);
 
 /** A press on SPECIAL that drags by (dx, dy) world units in `steps` moves, then lifts. */
 async function dragSpecial(page: Page, t: Touchscreen, at: Pt, dx: number, dy: number, steps = 4): Promise<void> {
@@ -79,7 +76,7 @@ test('a boss wave drops two pods with distinct icons, and the flyby waits for th
     expect(Math.abs(pod.y - PODS.y)).toBeLessThanOrEqual(PODS.bobPx);
   }
   // Each pod draws its own upgrade's icon (no text anywhere).
-  expect(await page.evaluate(`${SCENE}.upgradeDrop.gfx.commandBuffer.length`)).toBeGreaterThan(0);
+  expect(await page.evaluate(`${SCENE}.upgradeDrop.icons.every((g) => g.commandBuffer.length > 0)`)).toBe(true);
   expect(await page.evaluate(`${SCENE}.children.list.some((o) => o.type === 'Text' && o.visible && o.y > 200 && o.y < 540)`)).toBe(false);
 
   // The run holds while the pods are up: no flyby, no banner.
@@ -106,7 +103,7 @@ test('a FIRE round takes a pod for its seat only, and a seat takes one pod per d
   await shoot(page, 'p2', { x: PODS.xs[0], y: 600 }, 0, -SLING.maxSpeed);
   expect((await stepUntil(page, 's.__debug.pods().picks.p2 !== undefined', 60)).done).toBe(true);
   expect(await pods(page)).toMatchObject({ phase: 'live', picks: { p2: 0 } });
-  expect(await liveRockets(page)).toEqual([]); // the pick spent the round
+  expect(await liveShots(page)).toEqual([]); // the pick spent the round
   expect(await modes(page, 2)).toEqual({ modes: ['missile', 'triple'], current: 'triple' });
   expect(await debug(page, 'special(2)')).toEqual({ control: 'triple', hud: 'triple' });
   expect(await modes(page, 1)).toEqual({ modes: ['missile'], current: 'missile' }); // P1 untouched
@@ -316,7 +313,7 @@ test('a bomb also blows up on touching a rock, and at the screen edge (AC4)', as
   await stepGame(page, 16, 1);
   expect(await debug(page, 'bomb(2)')).not.toBeNull();
   expect((await stepUntil(page, 's.__debug.bomb(2) === null', 200)).done).toBe(true);
-  expect(await liveRockets(page)).toEqual([]);
+  expect(await liveShots(page)).toEqual([]);
 });
 
 test('boss fight: a blast takes each escort it reaches as that seat\'s lock and never hurts the boss (AC4)', async ({ page }) => {
@@ -350,13 +347,6 @@ test('Try again keeps the specials the seats had when the act began; a fresh run
   expect(await debug(page, 'special(2)')).toEqual({ control: 'detonator', hud: 'detonator' });
 
   // A win goes back to the join screen, and the next run starts with only the missile.
-  await debug(page, 'jumpToWave(10)');
-  await debug(page, 'clearWave()');
-  expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
-  await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
-  await stepGame(page, 16, 2);
-  expect(await sceneActive(page, 'Join')).toBe(true);
-  await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
-  await stepGame(page, 16, 2);
+  await winToFreshRun(page);
   for (const player of [1, 2] as const) expect(await modes(page, player)).toEqual({ modes: ['missile'], current: 'missile' });
 });
