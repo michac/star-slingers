@@ -36,7 +36,7 @@
  */
 import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND } from '../src/waves';
-import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
+import { FLEET, GAME_HEIGHT, GAME_WIDTH, sublaneCenterY } from '../src/layout';
 import type { Lineup } from '../src/lineup';
 import type { ShipState } from '../src/objects/Fleet';
 
@@ -229,6 +229,22 @@ export const loseShips = (page: Page, ...ships: number[]) =>
   page.evaluate(
     `(() => { const f = ${SCENE}.fleet; for (const i of ${JSON.stringify(ships)}) while (f.isLive(i)) f.onEnemyReached(i); })()`
   );
+/** Lose the current wave through the real fleet-contact path: lose ships 1-3
+ *  and pop ship 0's shield, then field a rock at ship 0's bare hull and step
+ *  it into contact. */
+export async function loseRun(page: Page): Promise<void> {
+  await loseShips(page, 1, 2, 3);
+  await page.evaluate(`${SCENE}.fleet.onEnemyReached(0)`);
+  await fieldRock(page, { x: FLEET.noseX, y: sublaneCenterY(0) });
+  await stepGame(page, 16, 2);
+  expect(await failVisible(page)).toBe(true);
+}
+
+/** Tap the fail card (its full-field zone) and step the scene restart through. */
+export async function tryAgain(page: Page): Promise<void> {
+  await page.evaluate(`${SCENE}.failOverlay.tapZone.emit('pointerdown')`);
+  await stepGame(page, 16, 2);
+}
 export const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
 export const failVisible = (page: Page) => page.evaluate(`${SCENE}.failOverlay.visible`) as Promise<boolean>;
 /** Take every rock off the field at once (no score), so a case owns the field. */
