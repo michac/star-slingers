@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, STARFIELD } from '../layout';
 import { drawDashedLine } from './draw';
-import { ASTEROID_KIND, type AsteroidKind } from '../waves';
+import type { AsteroidKind } from '../waves';
 
 export const TEX = {
   rocketP1: 'rocket-p1',
@@ -60,11 +60,8 @@ const ROCKET_H = 14;
 export function generateTextures(scene: Phaser.Scene): void {
   makeRocket(scene, TEX.rocketP1, COLORS.p1);
   makeRocket(scene, TEX.rocketP2, COLORS.p2);
-  // Every lane-rock kind at its own radius up front (a spec with another
-  // radius makes its texture on reconfigure, via ensureAsteroidTexture).
-  for (const [kind, { radius }] of Object.entries(ASTEROID_KIND)) {
-    ensureAsteroidTexture(scene, kind as AsteroidKind, radius);
-  }
+  // Lane rocks are made on demand, per kind and radius: each Asteroid wrapper
+  // calls ensureAsteroidTexture when it's built and when it's reconfigured.
   makeGiantAsteroid(scene);
   makeBoss(scene);
   makeEscort(scene);
@@ -176,8 +173,7 @@ export function ensureAsteroidTexture(scene: Phaser.Scene, kind: AsteroidKind, r
   const key = TEX.asteroid(kind, r);
   if (scene.textures.exists(key)) return; // survives scene.restart()
   const g = scene.make.graphics({}, false);
-  if (kind === 'tough') drawAsteroid(g, r, COLORS.rockToughFill, COLORS.rockToughRim, STROKES.rockTough.width);
-  else drawAsteroid(g, r);
+  drawAsteroid(g, r, ROCK_PAINT[kind]);
   g.generateTexture(key, r * 2, r * 2);
   g.destroy();
 }
@@ -188,20 +184,22 @@ function makeGiantAsteroid(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.giantAsteroid)) return;
   const r = GIANT_LAYOUT.radius;
   const g = scene.make.graphics({}, false);
-  drawAsteroid(g, r, COLORS.rockFill, COLORS.danger, STROKES.rockGiant.width);
+  drawAsteroid(g, r, { ...ROCK_PAINT.standard, rimWidth: STROKES.rockGiant.width });
   g.lineStyle(STROKES.crater.width, COLORS.crater, 1);
   for (const [cx, cy, cr] of GIANT_LAYOUT.extraCraters) g.strokeCircle(r + cx * r, r + cy * r, cr * r);
   g.generateTexture(TEX.giantAsteroid, r * 2, r * 2);
   g.destroy();
 }
 
-function drawAsteroid(
-  g: Phaser.GameObjects.Graphics,
-  r: number,
-  fill: number = COLORS.rockFill,
-  rim: number = COLORS.danger,
-  rimWidth: number = STROKES.rock.width
-): void {
+/** A lane rock's paint by kind: a tough rock (#25) is denser, with a heavier, deeper rim. */
+type RockPaint = { fill: number; rim: number; rimWidth: number };
+const ROCK_PAINT: Record<AsteroidKind, RockPaint> = {
+  standard: { fill: COLORS.rockFill, rim: COLORS.danger, rimWidth: STROKES.rock.width },
+  tough: { fill: COLORS.rockToughFill, rim: COLORS.rockToughRim, rimWidth: STROKES.rockTough.width },
+  splitter: { fill: COLORS.rockFill, rim: COLORS.danger, rimWidth: STROKES.rock.width },
+};
+
+function drawAsteroid(g: Phaser.GameObjects.Graphics, r: number, { fill, rim, rimWidth }: RockPaint): void {
   // Dark interior fill so the rock reads as a solid body, not a ring.
   g.fillStyle(fill, 1);
   g.fillCircle(r, r, r - rimWidth / 2);

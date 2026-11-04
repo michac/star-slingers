@@ -37,7 +37,7 @@ import { Escort } from '../objects/Escort';
 import { HealthBars, type HealthBarTarget } from '../objects/HealthBars';
 import type { HomingTarget } from '../objects/HomingTarget';
 import type { SpecialKind } from '../objects/specials';
-import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, GIANT, RUN, startWaveFromQuery } from '../waves';
+import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
 import { shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
@@ -151,14 +151,12 @@ export class SandboxScene extends Phaser.Scene {
 
     // The giant asteroid (#25), act 1's boss: its sprite is built once,
     // parked, like the command ship's. Popping it bursts it through the
-    // director; reaching the fleet loses the whole fleet.
+    // director; reaching the fleet loses the whole fleet (then the fail card).
     this.giant = new GiantAsteroid(
       this,
+      this.fleet,
       players === 1,
-      () => {
-        this.fleet.loseAll();
-        this.showFail();
-      },
+      () => this.showFail(),
       (x, y) => {
         this.explosions.boom(x, y, this.giant.radius);
         this.waveDirector.burstBoss(x, y);
@@ -181,9 +179,8 @@ export class SandboxScene extends Phaser.Scene {
           actTransition: (from, to, done) => this.actTransition.start(from, to, done),
         },
         startEncounter: (boss) => {
-          if (boss !== 'giantAsteroid') return this.bossEncounter.start();
-          this.fleet.setShieldRegenMs(GIANT.shieldRegenMs);
-          this.giant.start();
+          if (boss === 'giantAsteroid') this.giant.start();
+          else this.bossEncounter.start();
         },
         stopEncounter: () => {
           this.bossEncounter.stop();
@@ -323,7 +320,6 @@ export class SandboxScene extends Phaser.Scene {
         }),
         hitGiant: (player: PlayerId, charged: boolean) => this.giant.takeHit(player, charged),
         setGiantX: (x: number) => this.giant.debugSetX(x),
-        giantWave: () => RUN.findIndex((w) => w.boss === 'giantAsteroid') + 1,
         // The fleet, top to bottom: 'shielded' | 'exposed' | 'lost' per ship (#19).
         fleet: () => this.fleet.states(),
         starOffsets: () => this.starfield.offsets,

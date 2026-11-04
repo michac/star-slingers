@@ -8,6 +8,7 @@
 import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, type Page } from './helpers';
 import { FLEET, GAME_WIDTH, GIANT_LAYOUT } from '../src/layout';
 import { ASTEROID_KIND, GIANT, RUN } from '../src/waves';
+import type { Lineup } from '../src/lineup';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -19,7 +20,7 @@ const state = (page: Page) => page.evaluate(`${SCENE}.__debug.state()`) as Promi
 
 /** Boot at the giant's wave (both seats by default; `{ p1: 'normal' }` for solo)
  *  and move it on-screen at x, still drifting. */
-async function bootGiant(page: Page, x = 220, lineup?: { p1?: 'normal'; p2?: 'normal' }): Promise<void> {
+async function bootGiant(page: Page, x = 220, lineup?: Partial<Lineup>): Promise<void> {
   await gotoGame(page, '?wave=3', lineup);
   await page.evaluate(`${SCENE}.__debug.setGiantX(${x})`);
   await stepGame(page, 16, 1);
@@ -125,11 +126,10 @@ test('the giant reaching the fleet loses the whole fleet and shows the fail card
 
 test('popping it bursts it into one-hit rocks; the wave clears once they are gone, then the boss drop runs', async ({ page }) => {
   await bootGiant(page);
-  const results: string[] = [];
-  for (let i = 0; i < GIANT.hp; i++) {
-    await hitGiant(page, 'p1');
-    results.push(await hitGiant(page, 'p2'));
-  }
+  // Every pair in one evaluate: P1 locks, P2 takes the point.
+  const results = (await page.evaluate(
+    `(() => { const d = ${SCENE}.__debug, r = []; for (let i = 0; i < ${GIANT.hp}; i++) { d.hitGiant('p1', true); r.push(d.hitGiant('p2', true)); } return r; })()`
+  )) as string[];
   expect(results).toEqual([...Array(GIANT.hp - 1).fill('damaged'), 'popped']);
   expect(await giant(page)).toMatchObject({ active: false, hp: 0 });
   const burst = (await page.evaluate(

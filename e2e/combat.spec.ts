@@ -269,30 +269,30 @@ test('a two-hit rock looks tougher, takes two plain hits and scores 20; a charge
   // #25: a tough rock is bigger than a standard (smaller than a splitter) and
   // drawn in its own darker shade, so it reads as tough before it's hit.
   await fieldRock(page, { x: 250, y: 300, kind: 'tough' });
-  const rock = () =>
+  const toughRock = () =>
     page.evaluate(`(() => { const a = ${SCENE}.asteroids[0]; return { hp: a.hp, maxHp: a.maxHp, r: a.radius, tex: a.sprite.texture.key, live: a.isActive && !a.isPopping }; })()`) as Promise<{ hp: number; maxHp: number; r: number; tex: string; live: boolean }>;
-  const before = await rock();
+  const before = await toughRock();
   expect(before).toMatchObject({ hp: 2, maxHp: 2, r: ASTEROID_KIND.tough.radius, tex: 'asteroid-tough-15', live: true });
   expect(ASTEROID_KIND.tough.radius).toBeGreaterThan(ASTEROID_KIND.standard.radius);
   expect(ASTEROID_KIND.tough.radius).toBeLessThan(ASTEROID_KIND.splitter.radius);
 
   const hitsBefore = await hits(page);
-  await fire(page, 170, 300, 400, 0);
+  await fireRound(page, false);
   expect((await stepUntil(page, `s.__debug.hits() >= ${hitsBefore + 1}`, 120)).done).toBe(true);
-  expect(await rock()).toMatchObject({ hp: 1, live: true });
+  expect(await toughRock()).toMatchObject({ hp: 1, live: true });
   expect(await score(page)).toBe(0);
   const bars = await healthBars(page);
   expect(bars).toHaveLength(1);
   expect(bars[0].frac).toBeCloseTo(0.5, 5);
 
-  await fire(page, 170, 300, 400, 0);
+  await fireRound(page, false);
   expect((await stepUntil(page, `s.__debug.score() >= 20`, 120)).done).toBe(true);
   expect(await score(page)).toBe(20);
   expect(await healthBars(page)).toEqual([]);
 
   // A charged round (2 damage) pops a fresh tough rock in one hit.
   await fieldRock(page, { x: 250, y: 300, kind: 'tough' });
-  await fire(page, 170, 300, 400, 0, '{ charged: true }');
+  await fireRound(page, true);
   expect((await stepUntil(page, `s.__debug.score() >= 40`, 120)).done).toBe(true);
 });
 

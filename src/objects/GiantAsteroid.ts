@@ -16,8 +16,8 @@
  * HealthBarTarget shape).
  *
  * At 0 hp it pops (`onPopped(x, y)`: the WaveDirector bursts it into
- * GIANT.burstCount one-hit rocks); reaching the fleet calls `onReachedFleet`
- * (the scene loses the whole fleet). Every timer runs on update()'s delta, so
+ * GIANT.burstCount one-hit rocks); reaching the fleet loses the whole fleet
+ * and calls `onFleetLost` (the scene's fail card). Every timer runs on update()'s delta, so
  * it steps in lockstep with the e2e fixed clock; the only tween is the
  * cosmetic pop fade, after the logic has already moved on.
  *
@@ -28,6 +28,7 @@ import Phaser from 'phaser';
 import { FLEET, GAME_WIDTH, GIANT_LAYOUT } from '../layout';
 import { COLORS } from '../tokens';
 import { GIANT } from '../waves';
+import type { Fleet } from './Fleet';
 import { TEX } from './textures';
 import type { PlayerId } from './Rocket';
 
@@ -52,10 +53,11 @@ export class GiantAsteroid {
 
   constructor(
     private readonly scene: Phaser.Scene,
+    private readonly fleet: Fleet,
     /** One joined seat: every charged hit counts on its own. */
     private readonly solo: boolean,
-    /** Its leading edge reached the fleet's bubble fronts. */
-    private readonly onReachedFleet: () => void,
+    /** Its leading edge reached the fleet's bubble fronts, and the fleet is lost. */
+    private readonly onFleetLost: () => void,
     /** Its last point went: burst it here. */
     private readonly onPopped: (x: number, y: number) => void
   ) {
@@ -65,7 +67,7 @@ export class GiantAsteroid {
     body.setAllowGravity(false);
     body.setCircle(this.radius); // the texture is exactly 2r × 2r
     this.ring = scene.add.graphics().setDepth(1);
-    this.park();
+    this.stop();
   }
 
   get hp(): number {
@@ -87,24 +89,25 @@ export class GiantAsteroid {
     return this.lockSeat;
   }
 
-  /** The wave starts: enter just off the right edge, at full hp, drifting left. */
+  /** The wave starts: enter just off the right edge, at full hp, drifting
+   *  left, with the wave's shield regen on the fleet. */
   start(): void {
     this.scene.tweens.killTweensOf(this.sprite);
+    this.fleet.setShieldRegenMs(GIANT.shieldRegenMs);
     this.active = true;
     this.hpLeft = GIANT.hp;
     this.clearLock();
     this.flashMs = 0;
-    const x = GAME_WIDTH + this.radius;
-    this.sprite.setVisible(true).setScale(1).setAlpha(1).clearTint().setPosition(x, GIANT_LAYOUT.y);
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.reset(x, GIANT_LAYOUT.y); // zeroes velocity: set it after
-    body.enable = true;
-    body.setVelocityX(-SPEED);
+    this.sprite.setVisible(true).setScale(1).setAlpha(1).clearTint();
+    (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
+    this.placeAt(GAME_WIDTH + this.radius);
   }
 
-  /** Off the field (a wave jump away from it). */
+  /** Off the field, parked (a wave jump away from it, and at build). */
   stop(): void {
-    this.park();
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.halt();
+    this.sprite.setVisible(false);
   }
 
   update(delta: number): void {
@@ -116,16 +119,13 @@ export class GiantAsteroid {
     if (this.lockSeat) {
       this.lockMs -= delta;
       if (this.lockMs <= 0) this.clearLock();
+      else this.drawRing();
     }
-    this.drawRing();
     if (this.sprite.x - this.radius <= FLEET.bubbleFrontX) {
-      // It got there: freeze it where it hit and hand over to the scene.
-      this.active = false;
-      this.clearLock();
-      const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-      body.stop();
-      body.enable = false;
-      this.onReachedFleet();
+      // It got there: freeze it where it hit, lose the fleet, hand over to the scene.
+      this.halt();
+      this.fleet.loseAll();
+      this.onFleetLost();
     }
   }
 
@@ -134,9 +134,9 @@ export class GiantAsteroid {
     if (!this.active || !charged) return 'refused';
     if (!this.solo && this.lockSeat !== (player === 'p1' ? 'p2' : 'p1')) {
       // First of a pair (or the same seat again): light/relight this seat's ring.
+      // update() draws the ring, before this frame renders.
       this.lockSeat = player;
       this.lockMs = GIANT.pairWindowMs;
-      this.drawRing();
       return 'locked';
     }
     this.clearLock();
@@ -159,22 +159,31 @@ export class GiantAsteroid {
 
   /** DEV/test: put it at x (its centre), still drifting. */
   debugSetX(x: number): void {
-    if (!this.active) return;
-    this.sprite.setPosition(x, this.sprite.y);
+    if (this.active) this.placeAt(x);
+  }
+
+  /** Centre it at x on its row, drifting left. */
+  private placeAt(x: number): void {
+    this.sprite.setPosition(x, GIANT_LAYOUT.y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.reset(x, this.sprite.y);
+    body.reset(x, GIANT_LAYOUT.y); // zeroes velocity: set it after
     body.setVelocityX(-SPEED);
+  }
+
+  /** Out of play where it stands: no lock, no flash, body stopped and off. */
+  private halt(): void {
+    this.active = false;
+    this.clearLock();
+    this.flashMs = 0;
+    this.sprite.clearTint();
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.stop();
+    body.enable = false;
   }
 
   private pop(): void {
     const { x, y } = this.sprite;
-    this.active = false;
-    this.clearLock();
-    this.flashMs = 0;
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.stop();
-    body.enable = false;
-    this.sprite.clearTint();
+    this.halt();
     this.onPopped(x, y);
     // Cosmetic only: the boulder swells and fades under the burst.
     this.scene.tweens.add({
@@ -203,16 +212,5 @@ export class GiantAsteroid {
     const color = this.lockSeat === 'p1' ? COLORS.p1 : COLORS.p2;
     this.ring.lineStyle(width, color, alpha * Math.max(0.25, this.lockMs / GIANT.pairWindowMs));
     this.ring.strokeCircle(this.sprite.x, this.sprite.y, this.radius + pad);
-  }
-
-  private park(): void {
-    this.scene.tweens.killTweensOf(this.sprite);
-    this.active = false;
-    this.clearLock();
-    this.flashMs = 0;
-    this.sprite.setVisible(false).clearTint();
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.stop();
-    body.enable = false;
   }
 }
