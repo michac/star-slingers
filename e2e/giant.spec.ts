@@ -7,7 +7,7 @@
  */
 import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, type Page } from './helpers';
 import { FLEET, GAME_WIDTH, GIANT_LAYOUT, LANE, SUBLANE_H } from '../src/layout';
-import { ASTEROID_KIND, GIANT, RUN } from '../src/waves';
+import { ASTEROID_KIND, BOSS_DROPS, GIANT, RUN } from '../src/waves';
 import type { Lineup } from '../src/lineup';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -116,6 +116,38 @@ test('missiles never home on the giant', async ({ page }) => {
   expect(await page.evaluate(`${SCENE}.pickMissileTarget(60, ${GIANT_LAYOUT.y}, 1, 0)`)).toBeNull();
 });
 
+/** Fire the seat's current SPECIAL from (x, y) along (dirx, diry), through the
+ *  scene's real shot path (fireShot: the triple's fan, the bomb's bookkeeping). */
+const fireSpecial = (page: Page, player: 'p1' | 'p2', x: number, y: number, dirx: number, diry: number) =>
+  page.evaluate(`${SCENE}.fireShot('rocket-${player}', '${player}', ${x}, ${y}, ${dirx}, ${diry}, { button: 'special', charged: false })`);
+
+test('#26 specials: a triple missile never takes the giant and breaks harmlessly on it', async ({ page }) => {
+  await bootGiant(page);
+  await page.evaluate(`${SCENE}.__debug.setSpecial(1, 'triple')`);
+  await fireSpecial(page, 'p1', 60, GIANT_LAYOUT.y, 1, 0);
+  const missiles = (await page.evaluate(
+    `${SCENE}.rockets.group.getChildren().filter((r) => r.active && r.getData('missile')).map((r) => r.getData('target'))`
+  )) as unknown[];
+  expect(missiles).toEqual([null, null, null]); // three missiles, none locked on the giant
+  // They fly on (re-acquiring along their headings: never the giant) and are spent on it or the edge.
+  expect((await stepUntil(page, "!s.rockets.group.getChildren().some((r) => r.active && r.getData('missile'))", 200)).done).toBe(true);
+  expect(await giant(page)).toMatchObject({ active: true, hp: GIANT.hp, lock: null });
+});
+
+test('#26 specials: a detonator bomb blows up on the giant without hurting it, and the seat can bomb again', async ({ page }) => {
+  await bootGiant(page);
+  await page.evaluate(`${SCENE}.__debug.setSpecial(1, 'detonator')`);
+  // Straight down onto its top rim: the bomb touches it and blows up there,
+  // with the giant well inside the blast.
+  await fireSpecial(page, 'p1', 220, LANE.top + 10, 0, 1);
+  expect(await page.evaluate(`${SCENE}.__debug.bomb(1)`)).not.toBeNull();
+  expect((await stepUntil(page, 's.__debug.bomb(1) === null', 60)).done).toBe(true);
+  expect(await giant(page)).toMatchObject({ active: true, hp: GIANT.hp, lock: null });
+  // The seat's bomb is spent (not stuck "in flight"), so its next SPECIAL sends another.
+  await fireSpecial(page, 'p1', 220, LANE.top + 10, 0, 1);
+  expect(await page.evaluate(`${SCENE}.__debug.bomb(1)`)).not.toBeNull();
+});
+
 test('the giant reaching the fleet loses the whole fleet and shows the fail card', async ({ page }) => {
   await bootGiant(page, FLEET.bubbleFrontX + GIANT_LAYOUT.radius + 4);
   expect(await fleetStates(page)).toEqual(['shielded', 'shielded', 'shielded', 'shielded']);
@@ -124,7 +156,7 @@ test('the giant reaching the fleet loses the whole fleet and shows the fail card
   expect(await failVisible(page)).toBe(true);
 });
 
-test('popping it bursts it into one-hit rocks; the wave clears once they are gone, then the boss drop runs', async ({ page }) => {
+test('popping it bursts it into one-hit rocks; the wave clears once they are gone, then its upgrade pods drop', async ({ page }) => {
   await bootGiant(page);
   // Every pair in one evaluate: P1 locks, P2 takes the point.
   const results = (await page.evaluate(
@@ -146,6 +178,8 @@ test('popping it bursts it into one-hit rocks; the wave clears once they are gon
   await clearField(page);
   expect((await stepUntil(page, "s.__debug.state() === 'between'", 5)).done).toBe(true);
   expect((await page.evaluate(`${SCENE}.__debug.interludes()`) as string[])[0]).toBe('drop:3');
+  // AC3: the giant's two upgrade pods (#26) are up.
+  expect(await page.evaluate(`${SCENE}.__debug.pods()`)).toMatchObject({ phase: 'live', kinds: [...BOSS_DROPS.giantAsteroid] });
 });
 
 test('the burst spreads over all four sublanes, and the charged round that popped the giant spares its rocks', async ({ page }) => {

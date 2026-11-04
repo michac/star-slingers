@@ -9,17 +9,20 @@
  * also owns the shot rules (#22): FIRE rounds and SPECIAL missiles (fireShot,
  * pickMissileTarget) and what each does on a hit (handleHit, handleBossHit,
  * handleGiantHit), and what an enemy reaching the fleet does
- * (checkFleetContacts; the giant wipes the fleet itself). Everything
- * else lives in objects/.
+ * (checkFleetContacts; the giant wipes the fleet itself). And the upgrades
+ * (#26): a boss wave's pod drop (UpgradeDrop, taken by FIRE rounds in
+ * handlePodHit), the triple missile and the detonator's bomb + blast
+ * (fireShot, detonate), and carrying each seat's special modes through Try
+ * again (actStartSpecials). Everything else lives in objects/.
  */
 import Phaser from 'phaser';
-import { CONTROLS_V2, GAME_WIDTH, MISSILE, seatPoint, SLING, sublaneOf, type SeatEdge } from '../layout';
+import { BOMB, CONTROLS_V2, GAME_WIDTH, HAPTICS, MISSILE, seatPoint, SLING, sublaneOf, TRIPLE, type SeatEdge } from '../layout';
 import { isLefty, leftySetting, setSeatLefty } from '../controlsVariant';
 import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
 import { generateTextures } from '../objects/textures';
 import { drawLane, rejectSpark } from '../objects/draw';
 import { Starfield } from '../objects/Starfield';
-import { TwoThumbControl, type ShotKind } from '../objects/TwoThumbControl';
+import { TwoThumbControl, type SeatSpecials, type ShotKind } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
 import { Explosions } from '../objects/Explosions';
 import { Asteroid } from '../objects/Asteroid';
@@ -28,17 +31,18 @@ import { ScoreKeeper } from '../objects/Score';
 import { Fleet } from '../objects/Fleet';
 import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
-import { NO_INTERLUDES, WaveDirector } from '../objects/WaveDirector';
+import { WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
 import { GiantAsteroid } from '../objects/GiantAsteroid';
 import { ActTransition } from '../objects/ActTransition';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
 import { HealthBars, type HealthBarTarget } from '../objects/HealthBars';
-import type { HomingTarget } from '../objects/HomingTarget';
+import { inBlast, specialCanHit, type HomingTarget } from '../objects/HomingTarget';
 import type { SpecialKind } from '../objects/specials';
-import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
-import { shotBuzz } from '../haptics';
+import { UpgradeDrop } from '../objects/UpgradeDrop';
+import { actStartWave, BOSS_DROPS, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
+import { buzz, shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
  *  order for group-vs-array overlaps, so go by the rocket flag. */
@@ -59,6 +63,9 @@ interface Seat extends SeatDef {
  *  any other number is no seat. */
 const seatId = (player: number): PlayerId | undefined => (player === 1 ? 'p1' : player === 2 ? 'p2' : undefined);
 
+/** Each seat's special modes (#26), by seat. */
+type SeatSpecialsMap = Partial<Record<PlayerId, SeatSpecials>>;
+
 /** The missile's targeting cone (#22), as tan(half-angle) for the perpendicular test. */
 const MISSILE_CONE_TAN = Math.tan(Phaser.Math.DegToRad(MISSILE.coneHalfAngleDeg));
 
@@ -67,6 +74,15 @@ export class SandboxScene extends Phaser.Scene {
   private controls: TwoThumbControl[] = [];
   /** HUDs, index-aligned with `controls` (each seat's two ammo pools live here). */
   private huds: PlayerHud[] = [];
+  /** Each live seat's control, by seat (pod picks and bombs are per seat). */
+  private seatControls: Partial<Record<PlayerId, TwoThumbControl>> = {};
+  /** A boss wave's upgrade pods (#26). */
+  private upgradeDrop!: UpgradeDrop;
+  /** Each seat's detonator bomb while it's in flight (#26: one per seat). */
+  private bombs: Partial<Record<PlayerId, Phaser.Physics.Arcade.Sprite>> = {};
+  /** Each seat's special modes when the current act began: what Try again
+   *  restarts the act with (#26). */
+  private actStartSpecials: SeatSpecialsMap = {};
   private asteroids: Asteroid[] = [];
   private rockets!: RocketPool;
   private explosions!: Explosions;
@@ -90,8 +106,10 @@ export class SandboxScene extends Phaser.Scene {
   /** `data.lineup`: the join screen's seats + difficulties (#20); Try again
    *  passes it back unchanged. `data.startWave`: a Try again retry's wave (the
    *  fail card passes it); absent on a run from the join screen, which starts
-   *  from the query. */
-  create(data: { lineup: Lineup; startWave?: number }): void {
+   *  from the query. `data.specials`: a Try again retry's special modes per
+   *  seat, as they were when the lost act began (#26); absent on a run from
+   *  the join screen, so a fresh run has only the missile. */
+  create(data: { lineup: Lineup; startWave?: number; specials?: SeatSpecialsMap }): void {
     generateTextures(this);
     // Backdrop first (construction order = depth): stars, the lane band, then
     // the fleet, all under the asteroids and rockets (rockets fly over ships).
@@ -99,7 +117,13 @@ export class SandboxScene extends Phaser.Scene {
     drawLane(this);
     this.fleet = new Fleet(this, (x, y, r) => this.explosions.boom(x, y, r));
 
-    this.rockets = new RocketPool(this);
+    this.rockets = new RocketPool(this, (bomb) => this.detonate(bomb));
+    // Phaser reuses this instance on restart: drop the last run's controls
+    // before the director's starting wave reaches onWaveStart below.
+    this.controls = [];
+    this.seatControls = {};
+    this.bombs = {};
+    this.actStartSpecials = { ...data.specials };
     this.explosions = new Explosions(this); // one shared burst system (B29)
     const run = data.lineup;
     const live = liveSeats(run);
@@ -133,7 +157,11 @@ export class SandboxScene extends Phaser.Scene {
     // a shortcut's wave, so a shortcut's wave retries itself until the players
     // pass it. It keeps the lineup (#20).
     this.failOverlay = new Overlay(this, FAIL_CONFIG, live, () =>
-      this.scene.restart({ lineup: run, startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)) })
+      this.scene.restart({
+        lineup: run,
+        startWave: Math.max(queryWave, actStartWave(this.waveDirector.waveNumber)),
+        specials: this.actStartSpecials,
+      })
     );
     // A win ends the run and goes back to the join screen for a fresh lineup
     // (#20), which starts the next run with new data.
@@ -166,6 +194,9 @@ export class SandboxScene extends Phaser.Scene {
     // Between acts the fleet flies across (#29), on the scene's update clock.
     this.actTransition = new ActTransition(this.fleet, this.starfield);
 
+    // A boss wave's upgrade pods (#26): sprites created once, parked.
+    this.upgradeDrop = new UpgradeDrop(this);
+
     // The director creates the asteroid wrappers and starts the first wave live.
     this.waveDirector = new WaveDirector(
       this,
@@ -175,7 +206,8 @@ export class SandboxScene extends Phaser.Scene {
       {
         startWave: data.startWave ?? queryWave,
         hooks: {
-          ...NO_INTERLUDES, // #26 boss drops
+          // #26: the popped boss's two pods; the flyby and banner wait until they're gone.
+          bossDrop: (wave, done) => (wave.boss ? this.upgradeDrop.start(BOSS_DROPS[wave.boss], live, done) : done()),
           actTransition: (from, to, done) => this.actTransition.start(from, to, done),
         },
         startEncounter: (boss) => {
@@ -186,8 +218,18 @@ export class SandboxScene extends Phaser.Scene {
           this.bossEncounter.stop();
           this.giant.stop();
         },
-        stopInterludes: () => this.actTransition.cancel(),
+        stopInterludes: () => {
+          this.actTransition.cancel();
+          this.upgradeDrop.cancel();
+        },
         onRunWon: () => this.victoryOverlay.show(),
+        // Try again restarts an act with the specials its seats had when it
+        // began (#26). Drops only come between acts, so that is every upgrade
+        // picked so far. The starting wave runs before the controls exist; its
+        // snapshot is the create data's, set above.
+        onWaveStart: (n) => {
+          if (n === actStartWave(n) && this.controls.length > 0) this.snapshotSpecials();
+        },
       },
       (x, y, r) => this.explosions.boom(x, y, r),
       () => this.explosions.starShower(), // B7: wave-clear celebration
@@ -224,8 +266,15 @@ export class SandboxScene extends Phaser.Scene {
             this.fireShot(tex, player, x, y, dirx, diry, kind);
           },
           specialTargetAt: (ox, oy, dx, dy) => this.missileMarker(ox, oy, dx, dy),
+          specials: data.specials?.[player],
+          onSpecialChange: (kind) => hud.setSpecial(kind),
+          detonate: () => {
+            const bomb = this.bombs[player];
+            if (bomb) this.detonate(bomb);
+          },
         })
     );
+    seats.forEach((seat, i) => (this.seatControls[seat.player] = this.controls[i]));
     this.wireInput();
 
     // Built ONCE over the wrappers' sprites — the wrappers are mutated in
@@ -249,6 +298,10 @@ export class SandboxScene extends Phaser.Scene {
 
     // Third, built ONCE over the giant asteroid's sprite (#25).
     this.physics.add.overlap(this.rockets.group, this.giant.sprite, this.handleGiantHit);
+
+    // Fourth, also built ONCE over the two pod sprites (#26): a FIRE round from a
+    // seat that hasn't picked yet takes the pod; anything else passes through.
+    this.physics.add.overlap(this.rockets.group, this.upgradeDrop.sprites, this.handlePodHit, this.processPodHit);
 
     // Deterministic handle for the headless e2e suite (e2e/).
     if (import.meta.env.DEV) {
@@ -292,7 +345,25 @@ export class SandboxScene extends Phaser.Scene {
           const i = seatIndex(player);
           return i < 0 ? undefined : { control: this.controls[i].special, hud: this.huds[i].special };
         },
-        setSpecial: (player: number, kind: SpecialKind) => this.setSpecial(seatIndex(player), kind),
+        // A seat's special modes (#26), and a direct grant (as if picked).
+        modes: (player: number) => this.controls[seatIndex(player)]?.specials,
+        setSpecial: (player: number, kind: SpecialKind) => this.controls[seatIndex(player)]?.grant(kind),
+        // Upgrade pods (#26): the drop's state, skipping it, and a pick
+        // through the same path a FIRE round's pod hit takes.
+        pods: () => this.upgradeDrop.state,
+        skipDrop: () => this.upgradeDrop.skip(),
+        pickPod: (player: number, i: number) => {
+          const id = seatId(player);
+          return id ? this.pickPod(id, i) : false;
+        },
+        // The seat's bomb in flight (#26), or null.
+        bomb: (player: number) => {
+          const id = seatId(player);
+          const b = id && this.bombs[id];
+          if (!b) return null;
+          const v = (b.body as Phaser.Physics.Arcade.Body).velocity;
+          return { x: b.x, y: b.y, vx: v.x, vy: v.y };
+        },
         setUnlimitedAmmo: (player: number, on: boolean) => hud(player)?.setUnlimitedAmmo(on),
         v2Layout: (player: number) => this.controls[seatIndex(player)]?.worldLayout() ?? null,
         startBoss: () => this.waveDirector.jumpTo(COMMAND_SHIP_WAVE),
@@ -342,6 +413,7 @@ export class SandboxScene extends Phaser.Scene {
     if (this.failOverlay.visible || this.victoryOverlay.visible) return;
     for (const control of this.controls) control.update(delta);
     for (const asteroid of this.asteroids) asteroid.update(delta);
+    this.upgradeDrop.update(delta); // pods bob, time out and leave (#26)
     // Steer in-flight missiles (#22; they re-acquire through the same picker),
     // then advance + redraw every shot's exhaust trail.
     this.rockets.steer(delta, this.pickMissileTarget);
@@ -351,8 +423,9 @@ export class SandboxScene extends Phaser.Scene {
     this.actTransition.update(delta); // the between-acts flyby (idle otherwise)
     this.giant.update(delta); // act 1's boss (no-op outside wave 3)
     this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
-    // Global web line collision (B34): a shot crossing a live link is spent.
-    this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
+    // Global web line collision (B34): a shot crossing a live link is spent
+    // (a bomb blows up there, #26: RocketPool.end).
+    this.rockets.endWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
     this.checkFleetContacts();
   }
 
@@ -387,23 +460,88 @@ export class SandboxScene extends Phaser.Scene {
   /** Fire one seat's shot along the unit direction (dirx, diry). FIRE sends a
    *  round at SLING.maxSpeed, charged if FIRE was held to a full charge (the
    *  bright trail tier; its hit rule is in handleHit). SPECIAL sends the seat's
-   *  current special (the homing missile) at MISSILE.speed, taking the enemy
-   *  pickMissileTarget finds along the aim; with none it flies straight and
-   *  keeps looking (Rocket.steer). Only FIRE charges, so a shot is never both. */
+   *  current special (#26): the homing missile at MISSILE.speed, taking the
+   *  enemy pickMissileTarget finds along the aim (with none it flies straight
+   *  and keeps looking, Rocket.steer); the triple, three of them fanned
+   *  ±TRIPLE.fanDeg, each taking a different enemy where there are enough; or
+   *  the detonator's bomb, straight at BOMB.speed. Only FIRE charges, so a
+   *  shot is never both. The HUD has already spent one round of the pool. */
   private fireShot(tex: string, player: PlayerId, x: number, y: number, dirx: number, diry: number, kind: ShotKind): void {
     const charged = kind.charged;
-    const special = kind.button === 'special';
-    const speed = special ? MISSILE.speed : SLING.maxSpeed;
-    const opts = special ? { missile: true, target: this.pickMissileTarget(x, y, dirx, diry) } : { charged };
+    let sent = false;
+    if (kind.button === 'fire') {
+      sent = !!this.rockets.fire(tex, x, y, dirx * SLING.maxSpeed, diry * SLING.maxSpeed, player, { charged });
+    } else {
+      const special = this.seatControls[player]?.special ?? 'missile';
+      if (special === 'detonator') {
+        const bomb = this.rockets.fire(tex, x, y, dirx * BOMB.speed, diry * BOMB.speed, player, { bomb: true });
+        if (bomb) {
+          this.bombs[player] = bomb;
+          this.seatControls[player]?.setBombInFlight(true);
+        }
+        sent = !!bomb;
+      } else {
+        const fan = special === 'triple' ? [0, -TRIPLE.fanDeg, TRIPLE.fanDeg] : [0];
+        const taken = new Set<HomingTarget>();
+        for (const deg of fan) {
+          const a = Phaser.Math.DegToRad(deg);
+          const dx = dirx * Math.cos(a) - diry * Math.sin(a);
+          const dy = dirx * Math.sin(a) + diry * Math.cos(a);
+          const target = this.pickMissileTarget(x, y, dx, dy, taken);
+          if (target) taken.add(target);
+          if (this.rockets.fire(tex, x, y, dx * MISSILE.speed, dy * MISSILE.speed, player, { missile: true, target })) sent = true;
+        }
+      }
+    }
     // Every seat's shot lands here, so this one buzz (#3) covers them all.
-    if (this.rockets.fire(tex, x, y, dirx * speed, diry * speed, player, opts)) shotBuzz({ charged, special });
+    if (sent) shotBuzz({ charged, special: kind.button === 'special' });
   }
 
-  /** Change a seat's current special (#26 upgrades): the SPECIAL button and
-   *  the HUD's special row change together. `seat` indexes controls/huds. */
-  private setSpecial(seat: number, kind: SpecialKind): void {
-    this.controls[seat]?.setSpecial(kind);
-    this.huds[seat]?.setSpecial(kind);
+  /** Blow up a seat's detonator bomb where it is (#26): its next SPECIAL
+   *  press, touching an enemy or the shield web, or the world bounds. Every
+   *  enemy a SPECIAL can hurt (specialCanHit) whose body reaches inside
+   *  BOMB.blastRadius takes DAMAGE.blast: rocks through takeHit (score + splits
+   *  exactly as a shot's kill), escorts that seat's lock
+   *  (BossEncounter.blastEscorts). The boss is never hurt by it. */
+  private detonate(bomb: Phaser.Physics.Arcade.Sprite): void {
+    const player = bomb.getData('player') as PlayerId;
+    const { x, y } = bomb;
+    if (this.bombs[player] === bomb) {
+      delete this.bombs[player];
+      this.seatControls[player]?.setBombInFlight(false);
+    }
+    this.rockets.recycle(bomb);
+    const r = BOMB.blastRadius;
+    this.explosions.boom(x, y, r);
+    buzz(HAPTICS.blastMs);
+    for (const asteroid of this.asteroids) {
+      const s = asteroid.sprite;
+      // A rock still waiting off the right edge isn't in play yet (the
+      // missile picker's rule too): a blast at the edge can't reach it.
+      if (s.x - asteroid.radius >= GAME_WIDTH || !inBlast(asteroid, x, y, r)) continue;
+      const pts = asteroid.takeHit(DAMAGE.blast);
+      if (pts > 0) {
+        this.scoreKeeper.add(pts, s.x, s.y);
+        this.waveDirector.spawnChildren(asteroid);
+      }
+    }
+    this.bossEncounter.blastEscorts(x, y, r, player);
+  }
+
+  /** Record each live seat's special modes as the act's starting point (Try again, #26). */
+  private snapshotSpecials(): void {
+    const snap: SeatSpecialsMap = {};
+    for (const [player, control] of Object.entries(this.seatControls) as [PlayerId, TwoThumbControl][]) snap[player] = control.specials;
+    this.actStartSpecials = snap;
+  }
+
+  /** `player` takes pod `i` (#26): the upgrade joins that seat's modes and
+   *  becomes its current one. False if the seat can't pick it now. */
+  private pickPod(player: PlayerId, i: number): boolean {
+    const kind = this.upgradeDrop.pick(player, i);
+    if (!kind) return false;
+    this.seatControls[player]?.grant(kind);
+    return true;
   }
 
   /** The missile's target (#22): the live enemy nearest the line from
@@ -411,7 +549,7 @@ export class SandboxScene extends Phaser.Scene {
    *  Used at launch, for the aim preview while SPECIAL is held (missileMarker),
    *  and by an in-flight missile re-acquiring along its heading. Null when
    *  nothing qualifies. An arrow property so Rocket.steer can call it unbound. */
-  private readonly pickMissileTarget = (ox: number, oy: number, dirx: number, diry: number): HomingTarget | null => {
+  private readonly pickMissileTarget = (ox: number, oy: number, dirx: number, diry: number, exclude?: ReadonlySet<HomingTarget>): HomingTarget | null => {
     const len = Math.hypot(dirx, diry);
     if (len === 0) return null;
     const ux = dirx / len;
@@ -422,7 +560,7 @@ export class SandboxScene extends Phaser.Scene {
     // Two plain loops — this runs every frame while a seat holds SPECIAL and
     // for every target-less missile, so no merged array.
     const consider = (cand: HomingTarget) => {
-      if (!cand.isActive || cand.isPopping) return;
+      if (!specialCanHit(cand) || exclude?.has(cand)) return;
       const s = cand.sprite;
       // A stream rock is fielded (active) just off the right edge before it
       // drifts in: never take one the players can't see yet.
@@ -473,6 +611,9 @@ export class SandboxScene extends Phaser.Scene {
     const asteroid = pair?.other.getData('ref') as Asteroid | undefined;
     if (!pair || !asteroid) return;
     const { rocket } = pair;
+    this.hitCount += 1;
+    // A bomb touching a rock blows up there (#26); the blast does the damage.
+    if (rocket.getData('bomb')) return this.detonate(rocket);
 
     // Shot rules (#22): a plain FIRE round or a missile deals its damage; a
     // charged round deals double. Read the shot type BEFORE spendShot (recycle
@@ -488,7 +629,6 @@ export class SandboxScene extends Phaser.Scene {
       // now — the pop tween only scales/fades the sprite, never moves it.
       this.waveDirector.spawnChildren(asteroid);
     }
-    this.hitCount += 1;
   };
 
   /** Rocket vs boss/escort (B5). The wrapper's takeHit() decides what a hit
@@ -502,6 +642,9 @@ export class SandboxScene extends Phaser.Scene {
     const ref = pair?.other.getData('ref') as Boss | Escort | undefined;
     if (!pair || !ref) return;
     const { rocket } = pair;
+    // A bomb touching the boss or an escort blows up there (#26); the blast
+    // locks escorts and never hurts the boss.
+    if (rocket.getData('bomb')) return this.detonate(rocket);
     const charged = rocket.getData('charged') === true;
     const player = rocket.getData('player') as PlayerId;
     if (ref instanceof Boss) {
@@ -515,11 +658,13 @@ export class SandboxScene extends Phaser.Scene {
   /** Rocket vs the giant asteroid (#25). GiantAsteroid.takeHit holds the rule
    *  (only charged rounds count; paired across seats in two-player); a refused
    *  hit throws a grey spark where the shot landed. Every hit spends the shot,
-   *  except a charged round that popped it, which carries on (#22). */
+   *  except a charged round that popped it, which carries on (#22). A bomb
+   *  touching it blows up there (#26); the blast never hurts it (chargedOnly). */
   private readonly handleGiantHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
     const pair = splitPair(a, b);
     if (!pair) return;
     const { rocket } = pair;
+    if (rocket.getData('bomb')) return this.detonate(rocket);
     const charged = rocket.getData('charged') === true;
     const result = this.giant.takeHit(rocket.getData('player') as PlayerId, charged);
     if (result === 'refused') rejectSpark(this, rocket.x, rocket.y);
@@ -541,7 +686,25 @@ export class SandboxScene extends Phaser.Scene {
     const pair = splitPair(a, b);
     if (!pair) return false;
     if (!this.bossEncounter.blocksRocket(pair.rocket)) return true;
-    this.rockets.recycle(pair.rocket);
+    this.rockets.end(pair.rocket);
     return false;
+  };
+
+  /** Rocket vs pod (#26): only a FIRE round (plain or charged, never a missile
+   *  or a bomb) from a seat that hasn't picked this drop takes a pod; anything
+   *  else flies on through. */
+  private readonly processPodHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
+    const pair = splitPair(a, b);
+    if (!pair) return false;
+    const { rocket, other } = pair;
+    if (rocket.getData('missile') || rocket.getData('bomb')) return false;
+    return this.upgradeDrop.canPick(rocket.getData('player') as PlayerId, other.getData('podIndex') as number);
+  };
+
+  /** A FIRE round took a pod: the seat gets the upgrade, the round is spent. */
+  private readonly handlePodHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
+    const pair = splitPair(a, b);
+    if (!pair) return;
+    if (this.pickPod(pair.rocket.getData('player') as PlayerId, pair.other.getData('podIndex') as number)) this.rockets.recycle(pair.rocket);
   };
 }

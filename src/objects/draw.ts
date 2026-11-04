@@ -1,13 +1,25 @@
 /**
  * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl)
- * and the fleet textures, the enemy lane's static band, and the small grey
- * "that did nothing" spark a refused hit throws.
+ * and the fleet textures, star corners for the icons, the enemy lane's static
+ * band, and the small grey "that did nothing" spark a refused hit throws.
  * Phaser Graphics has no native dash, so dashes are walked by hand; solid arcs
  * are one stroked path.
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { GAME_WIDTH, LANE } from '../layout';
+
+/** The corners of an n-point star centred on (cx, cy), outer point first at
+ *  the top, alternating outer and inner radius: fill or stroke them closed. */
+export function starPoints(cx: number, cy: number, outer: number, inner: number, points: number): Phaser.Types.Math.Vector2Like[] {
+  const out: Phaser.Types.Math.Vector2Like[] = [];
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = -Math.PI / 2 + (i * Math.PI) / points;
+    out.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  }
+  return out;
+}
 
 /** The enemy lane (#19): a faint violet band with brighter top and bottom
  *  edges, so the players can see where enemies live. One static Graphics,

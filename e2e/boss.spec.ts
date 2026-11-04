@@ -170,7 +170,7 @@ test('boss shield web blocks rockets at the drawn edge', async ({ page }) => {
   // the link normal) but only 4 side-on (long axis along the link). Each group
   // fields real rockets on BOTH sides of all four links, rotated nose-on or
   // side-on to that link, and runs ONE real frame; the scene's own global web
-  // check (recycleWhere -> BossEncounter.blocksRocket -> ShieldWeb.blocks) must
+  // check (endWhere -> BossEncounter.blocksRocket -> ShieldWeb.blocks) must
   // spend exactly the probes marked blocked:
   //  - clear / touch: stationary nose-on, 0.5 outside / inside reach. Both
   //    sides of every diagonal link means some probe sits where a mis-anchored

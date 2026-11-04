@@ -36,9 +36,10 @@
  */
 import { test as base, expect, type Page } from '@playwright/test';
 import { ASTEROID_KIND, type AsteroidKind } from '../src/waves';
-import { GAME_HEIGHT, GAME_WIDTH } from '../src/layout';
+import { FLEET, GAME_HEIGHT, GAME_WIDTH, sublaneCenterY } from '../src/layout';
 import type { Lineup } from '../src/lineup';
 import type { ShipState } from '../src/objects/Fleet';
+import type { PlayerId } from '../src/objects/Rocket';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -199,10 +200,13 @@ export async function fieldRock(
 }
 
 // --- thin wrappers over the scene's DEV __debug surface + public fields ---
-/** Fire a P1 rocket through the public pool: plain by default, or with the
- *  pool's shot options as a JS literal (e.g. `'{ charged: true }'`). */
-export const fire = (page: Page, x: number, y: number, vx: number, vy: number, opts = '{}') =>
-  page.evaluate(`void ${SCENE}.rockets.fire('rocket-p1', ${x}, ${y}, ${vx}, ${vy}, 'p1', ${opts})`);
+/** Call `${SCENE}.__debug.<call>` (a JS expression, e.g. `'jumpToWave(3)'`). */
+export const debug = <T>(page: Page, call: string) => page.evaluate(`${SCENE}.__debug.${call}`) as Promise<T>;
+/** Fire a seat's rocket (P1 by default) through the public pool: plain by
+ *  default, or with the pool's shot options as a JS literal (e.g.
+ *  `'{ charged: true }'`). */
+export const fire = (page: Page, x: number, y: number, vx: number, vy: number, opts = '{}', player: PlayerId = 'p1') =>
+  page.evaluate(`void ${SCENE}.rockets.fire('rocket-${player}', ${x}, ${y}, ${vx}, ${vy}, '${player}', ${opts})`);
 /** Count every shot the pool launches from now on; read it with fired(). */
 export const countShots = (page: Page) =>
   page.evaluate(() => {
@@ -229,6 +233,35 @@ export const loseShips = (page: Page, ...ships: number[]) =>
   page.evaluate(
     `(() => { const f = ${SCENE}.fleet; for (const i of ${JSON.stringify(ships)}) while (f.isLive(i)) f.onEnemyReached(i); })()`
   );
+/** Lose the current wave through the real fleet-contact path: lose ships 1-3
+ *  and pop ship 0's shield, then field a rock at ship 0's bare hull and step
+ *  it into contact. */
+export async function loseRun(page: Page): Promise<void> {
+  await loseShips(page, 1, 2, 3);
+  await page.evaluate(`${SCENE}.fleet.onEnemyReached(0)`);
+  await fieldRock(page, { x: FLEET.noseX, y: sublaneCenterY(0) });
+  await stepGame(page, 16, 2);
+  expect(await failVisible(page)).toBe(true);
+}
+
+/** Tap the fail card (its full-field zone) and step the scene restart through. */
+export async function tryAgain(page: Page): Promise<void> {
+  await page.evaluate(`${SCENE}.failOverlay.tapZone.emit('pointerdown')`);
+  await stepGame(page, 16, 2);
+}
+
+/** Win the run (jump to wave 10 and clear it), tap the victory card back to
+ *  the join screen, and start a fresh two-seat Normal run from there. */
+export async function winToFreshRun(page: Page): Promise<void> {
+  await page.evaluate(`${SCENE}.__debug.jumpToWave(10)`);
+  await page.evaluate(`${SCENE}.__debug.clearWave()`);
+  expect((await stepUntil(page, 's.victoryOverlay.visible', 200)).done).toBe(true);
+  await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
+  await stepGame(page, 16, 2);
+  expect(await sceneActive(page, 'Join')).toBe(true);
+  await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
+  await stepGame(page, 16, 2);
+}
 export const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;
 export const failVisible = (page: Page) => page.evaluate(`${SCENE}.failOverlay.visible`) as Promise<boolean>;
 /** Take every rock off the field at once (no score), so a case owns the field. */
@@ -246,10 +279,10 @@ export async function enterBoss(page: Page): Promise<void> {
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
 }
-/** End the giant-asteroid wave (#25) at once: pop the giant through its real
- *  pop path (it bursts into one-hit rocks), then take those off the field, so
- *  the wave clears on the next step like a drained field. */
-export const clearGiantWave = (page: Page) =>
+/** End the giant-asteroid wave (wave 3, #25) at once: pop the giant through
+ *  its real pop path (it bursts into one-hit rocks), then take those off the
+ *  field, so the wave clears on the next step into its pod drop (#26). */
+export const clearGiantField = (page: Page) =>
   page.evaluate(`(() => { const d = ${SCENE}.__debug; d.defeatBoss(); d.clearWave(); })()`);
 /** The health bars (#23) drawn on the latest frame: centre + remaining fraction
  *  (HealthBars' DrawnHealthBar; not imported, because that module reads

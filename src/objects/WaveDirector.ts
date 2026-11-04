@@ -52,7 +52,7 @@ import { WaveBanner } from './WaveBanner';
 type WaveState = 'live' | 'boss' | 'between' | 'won';
 
 /** The between-wave seams later act issues fill in. Each must call `done()`
- *  exactly once when it has finished (straight away by default). */
+ *  exactly once when it has finished. */
 export interface RunHooks {
   /** A boss wave just ended (#26: the boss's upgrade pods). Call `done` only
    *  once every pod is collected or gone: the act transition runs after it. */
@@ -61,11 +61,6 @@ export interface RunHooks {
    *  ActTransition.ts). Never runs after the last act: the run is won instead. */
   actTransition(from: Act, to: Act, done: () => void): void;
 }
-
-export const NO_INTERLUDES: RunHooks = {
-  bossDrop: (_wave, done) => done(),
-  actTransition: (_from, _to, done) => done(),
-};
 
 export interface RunOptions {
   /** 1-based wave the run starts at (no banner). */
@@ -77,11 +72,14 @@ export interface RunOptions {
   /** Stop the encounter (a wave jump away from it). */
   stopEncounter: () => void;
   /** Stop the interludes' own work if one is still playing (a wave jump
-   *  during it): the act transition's flyby today, and #26's pods once the
-   *  boss drop has some. Its `done` is dropped by the run token anyway. */
+   *  during it): the act transition's flyby and the boss drop's pods (#26).
+   *  Its `done` is dropped by the run token anyway. */
   stopInterludes: () => void;
   /** Wave 10 is cleared: the scene shows the victory card. */
   onRunWon: () => void;
+  /** A wave (1-based) just started, the starting wave included (#26: the
+   *  scene snapshots each seat's specials at an act's start for Try again). */
+  onWaveStart: (wave: number) => void;
 }
 
 export class WaveDirector {
@@ -283,6 +281,7 @@ export class WaveDirector {
     this.runToken += 1;
     this.waveIndex = index;
     for (const hud of this.huds) hud.setWave(this.waveNumber);
+    this.run.onWaveStart(this.waveNumber);
     const { field } = this.wave;
     if (!field) {
       // A boss with its own encounter: no stream rocks; the encounter owns the

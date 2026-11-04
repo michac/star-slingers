@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, STARFIELD } from '../layout';
+import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, PODS, STARFIELD } from '../layout';
 import { drawDashedLine } from './draw';
 import { ASTEROID_KIND, type AsteroidKind } from '../waves';
 
@@ -26,6 +26,7 @@ export const TEX = {
   fleetShipLost: 'fleet-ship-lost', // #19 a lost ship's faint dashed outline
   /** One tiling texture per starfield layer (#19), index into STARFIELD.layers. */
   starLayer: (i: number) => `star-layer-${i}`,
+  pod: 'upgrade-pod', // #26 boss-drop pod shell (its upgrade icon is drawn on top)
 } as const;
 
 /** Where a ship's local origin (left wall, sublane centre) sits inside the
@@ -76,6 +77,28 @@ export function generateTextures(scene: Phaser.Scene): void {
   makeFleetShip(scene);
   makeFleetShipLost(scene);
   STARFIELD.layers.forEach((_layer, i) => makeStarLayer(scene, i));
+  makePod(scene);
+}
+
+/** #26 upgrade pod: a dark capsule-bubble with a violet rim and a faint cyan
+ *  halo, so it reads as a pickup, not an enemy (no magenta). The scene draws
+ *  the upgrade's icon over it. */
+function makePod(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.pod)) return;
+  const r = PODS.r;
+  const pad = 3;
+  const c = r + pad;
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(COLORS.shieldOuter, 0.12);
+  g.fillCircle(c, c, r + pad);
+  g.fillStyle(COLORS.sceneBg, 0.9);
+  g.fillCircle(c, c, r);
+  g.fillStyle(COLORS.shieldMid, 0.18);
+  g.fillCircle(c, c, r * 0.8);
+  g.lineStyle(STROKES.bubble.width, COLORS.shieldMid, 0.95);
+  g.strokeCircle(c, c, r - STROKES.bubble.width / 2);
+  g.generateTexture(TEX.pod, c * 2, c * 2);
+  g.destroy();
 }
 
 /** Hull points shifted into texture space. */

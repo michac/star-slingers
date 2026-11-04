@@ -71,6 +71,34 @@ export const SPECIAL = {
   regenMs: 3000, // one missile back every this many ms
 } as const;
 
+/** Triple missile (#26 D7): one SPECIAL press fires three homing missiles,
+ *  the aim line and this many degrees either side of it. */
+export const TRIPLE = { fanDeg: 12 } as const;
+
+/** Detonator (#26 D8): a straight, slower bomb that blows up on the seat's
+ *  next SPECIAL press, on touching an enemy (or the boss's shield web), or at
+ *  the screen edge. The blast hurts every enemy whose body reaches inside
+ *  `blastRadius` (damage is `DAMAGE.blast` in waves.ts). */
+export const BOMB = { speed: 300, blastRadius: 45 } as const;
+
+/**
+ * Rotating a seat's special modes (#26 D2): an upward swipe on SPECIAL (seat
+ * frame: toward the field) rotates to the next mode at the moment it crosses
+ * `minUpPx` while staying within `maxOffDeg` of straight up; that press then
+ * fires nothing. Less travel, or a sideways drift, is still a tap that fires.
+ * The icons slide carousel-style over `carouselMs`; pips under the button (one
+ * per mode, the current one filled) show only once the seat has two modes.
+ */
+export const SPECIAL_SWIPE = {
+  minUpPx: 28,
+  maxOffDeg: 35,
+  carouselMs: 180,
+  slidePx: 18, // how far an icon slides in/out of the button
+  pipR: 2.5,
+  pipGap: 8, // centre-to-centre
+  pipBelow: 8, // pips' centre line, this far below the button's bottom edge
+} as const;
+
 /**
  * Starfield (#19): three parallax layers streaming right to left behind
  * everything, ported from the v6 mock. Each layer is one tiling texture
@@ -112,6 +140,27 @@ export function sublaneOf(y: number): number {
   const i = Math.floor((y - LANE.top) / SUBLANE_H);
   return Math.max(0, Math.min(LANE.sublanes - 1, i));
 }
+
+/**
+ * Upgrade pods (#26): a boss drop puts two pods side by side across the middle
+ * of the lane, the same distance from both launchers, bobbing gently. Each
+ * live seat takes one with a FIRE round; the pods leave once every live seat
+ * has picked or after `timeoutMs`, blinking for the last `blinkMs`. All of it
+ * runs on the scene's update delta (no tweens), so the e2e stepper drives it.
+ */
+export const PODS = {
+  xs: [130, 230] as readonly number[],
+  y: (LANE.top + LANE.bottom) / 2,
+  r: 22,
+  bobPx: 4,
+  bobMs: 1600, // one full bob cycle
+  timeoutMs: 12000,
+  blinkMs: 3000,
+  blinkPeriodMs: 250,
+  /** A picking seat's colour ring sits this far outside the pod (P1 inside P2's). */
+  pickRingGap: [4, 8] as readonly number[],
+  iconFrac: 0.62, // the upgrade icon's radius, as a share of r
+} as const;
 
 /** A fleet ship's shield bubble: an ellipse centred on the hull (local x).
  *  ry stays under SUBLANE_H / 2, so neighbouring bubbles never touch. */
@@ -493,6 +542,7 @@ export const CONTROLS_V2 = {
  *  with ammo to fire. Pulses of 15ms or less can be imperceptible on some
  *  Android motors. See src/haptics.ts. */
 export const HAPTICS = {
+  blastMs: 40, // a detonator's blast (#26)
   shotMs: 20,
   missileMs: 25,
   chargedMs: 40,
