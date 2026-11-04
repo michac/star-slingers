@@ -7,8 +7,9 @@
  *
  * Only charged FIRE rounds hurt it (the scene's handleGiantHit routes every
  * rocket here; plain rounds and missiles are refused with a grey spark, a
- * detonator bomb blows up on it without hurting it, and it's chargedOnly, so
- * no SPECIAL ever targets or damages it). Solo: each charged hit is one point. Two
+ * detonator bomb blows up on it without hurting it (the blast damages rocks
+ * and locks escorts only), and it's chargedOnly, so the missile picker, which
+ * considers it, never takes it). Solo: each charged hit is one point. Two
  * seats: a charged hit from one seat lights a ring round it in that seat's
  * colour for GIANT.pairWindowMs; the OTHER seat's charged hit while it's lit
  * is the point (the escorts' two-lock idea, in time). The same seat again
@@ -44,8 +45,8 @@ export class GiantAsteroid {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
   readonly radius = GIANT_LAYOUT.radius;
   readonly maxHp: number = GIANT.hp;
-  /** Only charged FIRE rounds hurt it: no SPECIAL (missile, triple, the
-   *  detonator's blast, #26) takes or damages it (HomingTarget.specialCanHit). */
+  /** Only charged FIRE rounds hurt it: no missile (single or triple, #26)
+   *  takes it (the scene's picker considers it, and specialCanHit refuses it). */
   readonly chargedOnly = true;
   private hpLeft: number = GIANT.hp;
   private active = false;

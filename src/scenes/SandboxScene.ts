@@ -578,6 +578,7 @@ export class SandboxScene extends Phaser.Scene {
     };
     for (const cand of this.asteroids) consider(cand);
     for (const cand of this.bossEncounter.missileTargets()) consider(cand);
+    consider(this.giant); // never taken: it's chargedOnly (specialCanHit)
     return best;
   };
 

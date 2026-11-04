@@ -13,7 +13,8 @@ export interface HomingTarget {
   readonly isPopping: boolean;
   readonly radius: number;
   /** Set on a target only charged FIRE rounds may hurt, so no SPECIAL takes
-   *  or damages it (see specialCanHit): the giant asteroid (#25). */
+   *  or damages it (see specialCanHit): the giant asteroid (#25), which the
+   *  missile picker considers and this keeps it from taking. */
   readonly chargedOnly?: boolean;
 }
 

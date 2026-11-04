@@ -30,7 +30,7 @@
  * the wave that restart begins at.
  */
 import Phaser from 'phaser';
-import { GIANT_LAYOUT, LANE, SPLITTER_CHILDREN, SUBLANE_H, sublaneCenterY } from '../layout';
+import { GIANT_LAYOUT, LANE, SPLITTER_CHILDREN, SUBLANE_H, sublaneCenterY, type ChildMotion } from '../layout';
 import {
   asteroidsFor,
   BREATHER,
@@ -216,7 +216,13 @@ export class WaveDirector {
   spawnChildren(origin: Asteroid): void {
     if (origin.spec.kind !== 'splitter') return;
     const { x, y } = origin.sprite;
-    if (this.scatterChildren(x, y, SPLITTER_CHILDREN.count, SPLITTER_CHILDREN.scatterConeDeg, SPLITTER_CHILDREN.scatterCenterDeg) > 0) {
+    const half = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterConeDeg) / 2;
+    const center = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterCenterDeg);
+    const fielded = this.fieldChildren(x, y, SPLITTER_CHILDREN.count, SPLITTER_CHILDREN, (t) => {
+      const angle = center - half + 2 * half * t; // evenly across the leftward cone
+      return [Math.cos(angle) * SPLITTER_CHILDREN.launchSpeed, Math.sin(angle) * SPLITTER_CHILDREN.launchSpeed];
+    });
+    if (fielded > 0) {
       this.splitCount += 1;
     }
   }
@@ -229,31 +235,22 @@ export class WaveDirector {
   burstBoss(x: number, y: number): void {
     if (this.state !== 'boss') return;
     const { burst } = GIANT_LAYOUT;
-    const free = this.childPool.filter((child) => !child.isActive);
-    const count = Math.min(GIANT.burstCount, free.length);
     const spreadSec = (burst.scatterMs - burst.spawnGraceMs) / 1000; // they're still during the grace
-    for (let i = 0; i < count; i++) {
-      const t = count > 1 ? i / (count - 1) : 0.5;
-      free[i].spawnChild(x, y, -burst.driftX / spreadSec, ((2 * t - 1) * burst.spreadY) / spreadSec, burst);
-    }
+    this.fieldChildren(x, y, GIANT.burstCount, burst, (t) => [-burst.driftX / spreadSec, ((2 * t - 1) * burst.spreadY) / spreadSec]);
     this.quotaRemaining = 0;
     this.state = 'live';
   }
 
-  /** Field up to n one-hit children at (x, y), spread evenly across a cone
-   *  (degrees; a single child goes dead centre). Returns how many went out:
-   *  fewer if the pool runs short, which degrades gracefully. */
-  private scatterChildren(x: number, y: number, n: number, coneDeg: number, centerDeg: number): number {
+  /** Field up to n one-hit children at (x, y) on `motion`, each launched at
+   *  `velocityAt(t)` for its place t in 0..1 across the spread (a single child
+   *  is t = 0.5, dead centre). Returns how many went out: fewer if the pool
+   *  runs short, which degrades gracefully. */
+  private fieldChildren(x: number, y: number, n: number, motion: ChildMotion, velocityAt: (t: number) => [number, number]): number {
     const free = this.childPool.filter((child) => !child.isActive);
     const count = Math.min(n, free.length);
-    const half = Phaser.Math.DegToRad(coneDeg) / 2;
-    const center = Phaser.Math.DegToRad(centerDeg);
     for (let i = 0; i < count; i++) {
-      const t = count > 1 ? i / (count - 1) : 0.5;
-      const angle = center - half + 2 * half * t;
-      const vx = Math.cos(angle) * SPLITTER_CHILDREN.launchSpeed;
-      const vy = Math.sin(angle) * SPLITTER_CHILDREN.launchSpeed;
-      free[i].spawnChild(x, y, vx, vy);
+      const [vx, vy] = velocityAt(count > 1 ? i / (count - 1) : 0.5);
+      free[i].spawnChild(x, y, vx, vy, motion);
     }
     return count;
   }

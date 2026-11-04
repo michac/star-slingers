@@ -410,7 +410,7 @@ export const GIANT_LAYOUT = {
    *  outlasts the trip to the fleet from a pop at the right edge (~8 s at the
    *  cruise speed). */
   burst: {
-    spreadY: 128,
+    spreadY: 1.5 * SUBLANE_H, // the outer sublanes' centres, from the lane's centre line
     driftX: 40,
     childSpeed: 45, // SPLITTER_CHILDREN's cruise
     scatterMs: 1000,

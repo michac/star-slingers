@@ -7,14 +7,6 @@
 import { test, expect, SCENE, debug, clearGiantField, gotoGame, stepGame, stepUntil, loseShips, loseRun, tryAgain, winToFreshRun, type Page } from './helpers';
 import { ACT_TRANSITION, AMMO_REGEN_MS, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 
-/** Get past the giant-asteroid wave (#25) at once: end it (clearGiantField),
- *  step until it clears into its pod drop (#26), and skip the drop, so the run
- *  moves straight on (the act 1→2 flyby comes next). */
-async function clearGiantWave(page: Page): Promise<void> {
-  await clearGiantField(page);
-  expect((await stepUntil(page, "s.__debug.pods().phase === 'live'", 5)).done).toBe(true);
-  await debug(page, 'skipDrop()');
-}
 import {
   actStartWave,
   asteroidsFor,
@@ -32,6 +24,15 @@ import {
   startWaveFromQuery,
   waveTarget,
 } from '../src/waves';
+
+/** Get past the giant-asteroid wave (#25) at once: end it (clearGiantField),
+ *  step until it clears into its pod drop (#26), and skip the drop, so the run
+ *  moves straight on (the act 1→2 flyby comes next). */
+async function clearGiantWave(page: Page): Promise<void> {
+  await clearGiantField(page);
+  expect((await stepUntil(page, "s.__debug.pods().phase === 'live'", 5)).done).toBe(true);
+  await debug(page, 'skipDrop()');
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
