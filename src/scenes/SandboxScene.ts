@@ -3,12 +3,13 @@
  * the enemy lane, the colony fleet (#19), a TwoThumbControl per joined seat (multitouch; the seats and their
  * Easy/Normal come from the join screen via lineup.ts; each seat's lefty swap
  * mirrors it and is remembered in controlsVariant.ts), the rocket pool, the WaveDirector
- * (which owns the asteroids and the 10-wave run), the command-ship boss
- * encounter, the between-acts fleet flyby (#29), per-player HUDs, the wave
+ * (which owns the asteroids and the 10-wave run), the two boss encounters
+ * (the giant asteroid, #25, and the command ship), the between-acts fleet flyby (#29), per-player HUDs, the wave
  * banner, damaged enemies' health bars, and the fail/victory overlays. It
  * also owns the shot rules (#22): FIRE rounds and SPECIAL missiles (fireShot,
- * pickMissileTarget) and what each does on a hit (handleHit, handleBossHit),
- * and what an enemy reaching the fleet does (checkFleetContacts). Everything
+ * pickMissileTarget) and what each does on a hit (handleHit, handleBossHit,
+ * handleGiantHit), and what an enemy reaching the fleet does
+ * (checkFleetContacts; the giant wipes the fleet itself). Everything
  * else lives in objects/.
  */
 import Phaser from 'phaser';
@@ -16,7 +17,7 @@ import { CONTROLS_V2, GAME_WIDTH, MISSILE, seatPoint, SLING, sublaneOf, type Sea
 import { isLefty, leftySetting, setSeatLefty } from '../controlsVariant';
 import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
 import { generateTextures } from '../objects/textures';
-import { drawLane } from '../objects/draw';
+import { drawLane, rejectSpark } from '../objects/draw';
 import { Starfield } from '../objects/Starfield';
 import { TwoThumbControl, type ShotKind } from '../objects/TwoThumbControl';
 import { RocketPool, type PlayerId } from '../objects/Rocket';
@@ -29,13 +30,14 @@ import { FAIL_CONFIG, Overlay, VICTORY_CONFIG } from '../objects/Overlay';
 import { WaveBanner } from '../objects/WaveBanner';
 import { NO_INTERLUDES, WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
+import { GiantAsteroid } from '../objects/GiantAsteroid';
 import { ActTransition } from '../objects/ActTransition';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
-import { HealthBars } from '../objects/HealthBars';
+import { HealthBars, type HealthBarTarget } from '../objects/HealthBars';
 import type { HomingTarget } from '../objects/HomingTarget';
 import type { SpecialKind } from '../objects/specials';
-import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
+import { actStartWave, COMMAND_SHIP_WAVE, DAMAGE, GIANT, RUN, startWaveFromQuery } from '../waves';
 import { shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
@@ -73,6 +75,7 @@ export class SandboxScene extends Phaser.Scene {
   private scoreKeeper!: ScoreKeeper;
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
+  private giant!: GiantAsteroid;
   private actTransition!: ActTransition;
   private healthBars!: HealthBars;
   private failOverlay!: Overlay;
@@ -146,6 +149,22 @@ export class SandboxScene extends Phaser.Scene {
       players
     );
 
+    // The giant asteroid (#25), act 1's boss: its sprite is built once,
+    // parked, like the command ship's. Popping it bursts it through the
+    // director; reaching the fleet loses the whole fleet.
+    this.giant = new GiantAsteroid(
+      this,
+      players === 1,
+      () => {
+        this.fleet.loseAll();
+        this.showFail();
+      },
+      (x, y) => {
+        this.explosions.boom(x, y, this.giant.radius);
+        this.waveDirector.burstBoss(x, y);
+      }
+    );
+
     // Between acts the fleet flies across (#29), on the scene's update clock.
     this.actTransition = new ActTransition(this.fleet, this.starfield);
 
@@ -161,8 +180,15 @@ export class SandboxScene extends Phaser.Scene {
           ...NO_INTERLUDES, // #26 boss drops
           actTransition: (from, to, done) => this.actTransition.start(from, to, done),
         },
-        startEncounter: () => this.bossEncounter.start(),
-        stopEncounter: () => this.bossEncounter.stop(),
+        startEncounter: (boss) => {
+          if (boss !== 'giantAsteroid') return this.bossEncounter.start();
+          this.fleet.setShieldRegenMs(GIANT.shieldRegenMs);
+          this.giant.start();
+        },
+        stopEncounter: () => {
+          this.bossEncounter.stop();
+          this.giant.stop();
+        },
         stopInterludes: () => this.actTransition.cancel(),
         onRunWon: () => this.victoryOverlay.show(),
       },
@@ -176,7 +202,8 @@ export class SandboxScene extends Phaser.Scene {
     // to its body (registered on scene START, so it runs before this listener),
     // so a bar sits on its rock's current-frame position.
     this.healthBars = new HealthBars(this);
-    const drawHealthBars = () => this.healthBars.draw(this.asteroids);
+    const barTargets: HealthBarTarget[] = [...this.asteroids, this.giant];
+    const drawHealthBars = () => this.healthBars.draw(barTargets);
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, drawHealthBars);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.POST_UPDATE, drawHealthBars));
 
@@ -223,6 +250,9 @@ export class SandboxScene extends Phaser.Scene {
       this.processBossHit
     );
 
+    // Third, built ONCE over the giant asteroid's sprite (#25).
+    this.physics.add.overlap(this.rockets.group, this.giant.sprite, this.handleGiantHit);
+
     // Deterministic handle for the headless e2e suite (e2e/).
     if (import.meta.env.DEV) {
       // Seat lookups take the player number (1 = top, 2 = bottom). controls is
@@ -238,7 +268,8 @@ export class SandboxScene extends Phaser.Scene {
         waveKind: () => this.waveDirector.wave.boss ?? this.waveDirector.wave.kind,
         jumpToWave: (n: number) => this.waveDirector.jumpTo(n),
         interludes: () => [...this.waveDirector.interludes],
-        defeatBoss: () => this.bossEncounter.debugDefeat(),
+        // Defeat the current wave's boss: the giant pops (and bursts), the command ship goes down.
+        defeatBoss: () => (this.waveDirector.wave.boss === 'giantAsteroid' ? this.giant.debugDefeat() : this.bossEncounter.debugDefeat()),
         hits: () => this.hitCount,
         score: () => this.scoreKeeper.value,
         childrenAlive: () => this.asteroids.filter((a) => a.isChild && a.isActive).length,
@@ -279,6 +310,20 @@ export class SandboxScene extends Phaser.Scene {
         bossCharge: () => this.bossEncounter.chargeFraction,
         webBlocks: (ax: number, ay: number, bx: number, by: number) => this.bossEncounter.debugWebBlocks(ax, ay, bx, by),
         webLinks: () => this.bossEncounter.debugWebLinks(),
+        // The giant asteroid (#25): its state, a hit through its real rule, and a move.
+        giant: () => ({
+          active: this.giant.isActive,
+          hp: this.giant.hp,
+          maxHp: this.giant.maxHp,
+          lock: this.giant.lock,
+          x: this.giant.sprite.x,
+          y: this.giant.sprite.y,
+          r: this.giant.radius,
+          visible: this.giant.sprite.visible,
+        }),
+        hitGiant: (player: PlayerId, charged: boolean) => this.giant.takeHit(player, charged),
+        setGiantX: (x: number) => this.giant.debugSetX(x),
+        giantWave: () => RUN.findIndex((w) => w.boss === 'giantAsteroid') + 1,
         // The fleet, top to bottom: 'shielded' | 'exposed' | 'lost' per ship (#19).
         fleet: () => this.fleet.states(),
         starOffsets: () => this.starfield.offsets,
@@ -308,6 +353,7 @@ export class SandboxScene extends Phaser.Scene {
     this.fleet.update(delta); // bubble pulse + each ship's shield regen
     this.waveDirector.update(delta); // wave-clear check
     this.actTransition.update(delta); // the between-acts flyby (idle otherwise)
+    this.giant.update(delta); // act 1's boss (no-op outside wave 3)
     this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent.
     this.rockets.recycleWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
@@ -330,11 +376,16 @@ export class SandboxScene extends Phaser.Scene {
       const result = this.fleet.onEnemyReached(ship);
       asteroid.consume();
       if (result === 'fleetLost') {
-        this.physics.pause(); // freeze the field behind the overlay
-        this.failOverlay.show();
+        this.showFail();
         return;
       }
     }
+  }
+
+  /** The fleet is lost: freeze the field behind the fail card. */
+  private showFail(): void {
+    this.physics.pause();
+    this.failOverlay.show();
   }
 
   /** Fire one seat's shot along the unit direction (dirx, diry). FIRE sends a
@@ -463,6 +514,20 @@ export class SandboxScene extends Phaser.Scene {
       return;
     }
     this.spendShot(rocket, charged, ref.takeHit(player));
+  };
+
+  /** Rocket vs the giant asteroid (#25). GiantAsteroid.takeHit holds the rule
+   *  (only charged rounds count; paired across seats in two-player); a refused
+   *  hit throws a grey spark where the shot landed. Every hit spends the shot,
+   *  except a charged round that popped it, which carries on (#22). */
+  private readonly handleGiantHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
+    const pair = splitPair(a, b);
+    if (!pair) return;
+    const { rocket } = pair;
+    const charged = rocket.getData('charged') === true;
+    const result = this.giant.takeHit(rocket.getData('player') as PlayerId, charged);
+    if (result === 'refused') rejectSpark(this, rocket.x, rocket.y);
+    this.spendShot(rocket, charged, result === 'popped');
   };
 
   /** The charged round's pass-through rule (#22), for rocks and escorts alike:

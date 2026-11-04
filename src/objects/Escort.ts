@@ -10,6 +10,7 @@ import Phaser from 'phaser';
 import { COLORS } from '../tokens';
 import { BOSS_LAYOUT } from '../layout';
 import { BOSS } from '../waves';
+import { rejectSpark } from './draw';
 import { TEX } from './textures';
 import type { PlayerId } from './Rocket';
 
@@ -84,7 +85,7 @@ export class Escort {
     let bit = player === 'p1' ? 1 : 2;
     if (this.solo && this.contributions & bit) bit ^= 3; // credit the absent seat's lock
     if (this.contributions & bit) {
-      this.rejectSpark();
+      rejectSpark(this.scene, this.sprite.x, this.sprite.y);
       return false;
     }
     this.contributions |= bit;
@@ -123,14 +124,6 @@ export class Escort {
       duration: 220,
       onComplete: () => g.destroy(),
     });
-  }
-
-  private rejectSpark(): void {
-    const g = this.scene.add.graphics({ x: this.sprite.x, y: this.sprite.y }).setDepth(3);
-    g.lineStyle(2, COLORS.chromeMuted, 0.75);
-    g.lineBetween(-5, -5, 5, 5);
-    g.lineBetween(-5, 5, 5, -5);
-    this.scene.tweens.add({ targets: g, scale: 1.5, alpha: 0, duration: 100, onComplete: () => g.destroy() });
   }
 
   /** Off the field: invisible, body off (the encounter's end and its skips). */

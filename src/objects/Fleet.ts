@@ -191,6 +191,14 @@ export class Fleet {
     return this.ships.every((s) => s.state === 'lost') ? 'fleetLost' : 'shipLost';
   }
 
+  /** Lose every ship at once (the giant asteroid reached the fleet, #25):
+   *  each live ship takes hits until it's lost, with its usual pop and boom. */
+  loseAll(): void {
+    this.ships.forEach((_, i) => {
+      while (this.isLive(i)) this.onEnemyReached(i);
+    });
+  }
+
   setShieldRegenMs(ms: number): void {
     this.shieldRegenMs = ms;
   }

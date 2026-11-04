@@ -139,7 +139,7 @@ export interface RunWave {
 export const RUN: readonly RunWave[] = [
   { act: 1, kind: 'asteroid', field: { required: 0.3, quota: 8, shieldRegenMs: 10000, topKind: 'standard' } },
   { act: 1, kind: 'asteroid', field: { required: 0.45, quota: 10, shieldRegenMs: 11000, topKind: 'tough' } },
-  { act: 1, kind: 'boss', boss: 'giantAsteroid', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
+  { act: 1, kind: 'boss', boss: 'giantAsteroid' },
   { act: 2, kind: 'ship', placeholder: true, field: { required: 0.45, quota: 10, shieldRegenMs: 11000 } },
   { act: 2, kind: 'ship', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
   { act: 2, kind: 'boss', boss: 'commandShip' },

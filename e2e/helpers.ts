@@ -246,6 +246,11 @@ export async function enterBoss(page: Page): Promise<void> {
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
 }
+/** End the giant-asteroid wave (#25) at once: pop the giant through its real
+ *  pop path (it bursts into one-hit rocks), then take those off the field, so
+ *  the wave clears on the next step like a drained field. */
+export const clearGiantWave = (page: Page) =>
+  page.evaluate(`(() => { const d = ${SCENE}.__debug; d.defeatBoss(); d.clearWave(); })()`);
 /** The health bars (#23) drawn on the latest frame: centre + remaining fraction
  *  (HealthBars' DrawnHealthBar; not imported, because that module reads
  *  import.meta.env, which the Node-typed e2e project doesn't declare). */

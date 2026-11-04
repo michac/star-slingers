@@ -1,6 +1,7 @@
 /**
  * draw.ts — Graphics stroke helpers for the seat controls (TwoThumbControl)
- * and the fleet textures, plus the enemy lane's static band.
+ * and the fleet textures, the enemy lane's static band, and the small grey
+ * "that did nothing" spark a refused hit throws.
  * Phaser Graphics has no native dash, so dashes are walked by hand; solid arcs
  * are one stroked path.
  */
@@ -82,6 +83,17 @@ export function drawDashedArc(
       cy + r * Math.sin(a1)
     );
   }
+}
+
+/** A hit that did nothing (an escort's duplicate lock, a plain shot on the
+ *  giant asteroid): a small muted cross at (x, y) that pops and fades. A
+ *  throwaway Graphics; its fade is a cosmetic tween. */
+export function rejectSpark(scene: Phaser.Scene, x: number, y: number): void {
+  const g = scene.add.graphics({ x, y }).setDepth(3);
+  g.lineStyle(2, COLORS.chromeMuted, 0.75);
+  g.lineBetween(-5, -5, 5, 5);
+  g.lineBetween(-5, 5, 5, -5);
+  scene.tweens.add({ targets: g, scale: 1.5, alpha: 0, duration: 100, onComplete: () => g.destroy() });
 }
 
 /** Homing lock ring (B14): glow fill + bold ring on the locked rock, so the

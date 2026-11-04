@@ -4,7 +4,7 @@
  * the wave solver and solo target scaling.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, loseShips, failVisible, type Page } from './helpers';
+import { test, expect, SCENE, clearGiantWave, JOIN_SCENE, gotoGame, fieldRock, stepGame, stepUntil, sceneActive, loseShips, failVisible, type Page } from './helpers';
 import { ACT_TRANSITION, AMMO_REGEN_MS, FLEET, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 import {
   actStartWave,
@@ -46,8 +46,11 @@ test('the run is one table of 10 waves in 4 acts', () => {
   ]);
   expect(RUN.filter((w) => w.kind === 'boss').map((w) => RUN.indexOf(w) + 1)).toEqual([3, 6, 9]);
   expect(COMMAND_SHIP_WAVE).toBe(6);
-  // Only the command ship is played by its encounter; every other wave is a solver field.
-  expect(RUN.filter((w) => !w.field).map((w) => w.boss)).toEqual(['commandShip']);
+  // The giant asteroid (#25) and the command ship are played by their own
+  // encounters; every other wave is a solver field.
+  expect(RUN.filter((w) => !w.field).map((w) => w.boss)).toEqual(['giantAsteroid', 'commandShip']);
+  // Act 1's solver lever, one new rock per wave (#25): none in wave 1, two-hit rocks in wave 2.
+  expect(RUN.slice(0, 2).map((w) => w.field?.topKind)).toEqual(['standard', 'tough']);
   // Try again's target: each act's first wave.
   expect(RUN.map((_, i) => actStartWave(i + 1))).toEqual([1, 1, 1, 4, 4, 4, 7, 7, 7, 10]);
 });
@@ -66,8 +69,8 @@ test('the start wave comes from ?wave, else ?boss, else wave 1', () => {
 test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ page }) => {
   await gotoGame(page);
   // The whole run in ONE evaluate on the fixed-timestep clock: clear each wave
-  // (clearWave empties the field at once; the command ship is snapped in and
-  // defeated), read the banner, then step through the breather to the next wave.
+  // (clearWave empties the field at once; a boss is snapped in and defeated,
+  // and the giant's burst rocks cleared), read the banner, then step through the breather to the next wave.
   const run = await page.evaluate(() => {
     const w = window as any;
     const s = w.__game.scene.keys['Sandbox'];
@@ -84,6 +87,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
         d.snapBossIn();
         w.__step();
         d.defeatBoss();
+        if (d.state() === 'live') d.clearWave(); // the giant burst into rocks: clear them too
         row.afterBoss = { escorts: d.escortsAlive(), links: d.shieldLinks(), bossActive: s.bossEncounter.boss.active };
       } else {
         d.clearWave();
@@ -126,7 +130,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
  *  speed, whether the banner shows, and the run's state. */
 async function flyAct1To2(page: Page) {
   await debug(page, 'jumpToWave(3)');
-  await debug(page, 'clearWave()');
+  await clearGiantWave(page);
   return page.evaluate(() => {
     const w = window as any;
     const s = w.__game.scene.keys['Sandbox'];
@@ -174,7 +178,7 @@ test('a fleet still being rebuilt finishes before it takes off (#29)', async ({ 
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
   await loseShips(page, 0, 1, 2); // three rebuilds, staggered past the lead-in
-  await debug(page, 'clearWave()');
+  await clearGiantWave(page);
   const { done, steps } = await stepUntil(page, "s.__debug.transition().phase === 'out'", 300);
   expect(done).toBe(true);
   // The last ship reappears 2 staggers after the clear, then its bubble settles in.
@@ -185,7 +189,7 @@ test('a fleet still being rebuilt finishes before it takes off (#29)', async ({ 
 test('the flyby can be skipped, and a wave jump cancels it (#29)', async ({ page }) => {
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
-  await debug(page, 'clearWave()');
+  await clearGiantWave(page);
   expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 50", 300)).done).toBe(true);
   await debug(page, 'skipTransition()');
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, starScale: STARFIELD.speedScale });
@@ -215,7 +219,7 @@ test('the flyby waits for the boss drop to finish (#29 AC3)', async ({ page }) =
     };
   });
   await debug(page, 'jumpToWave(3)');
-  await debug(page, 'clearWave()');
+  await clearGiantWave(page);
   await stepGame(page, 16, 300);
   expect(await debug(page, 'transition()')).toMatchObject({ phase: 'idle', offsetX: 0, flights: [] });
   expect(await debug(page, 'state()')).toBe('between');
@@ -226,7 +230,7 @@ test('the flyby waits for the boss drop to finish (#29 AC3)', async ({ page }) =
 test('shots fired during the flyby hit nothing and break nothing (#29)', async ({ page }) => {
   await gotoGame(page);
   await debug(page, 'jumpToWave(3)');
-  await debug(page, 'clearWave()');
+  await clearGiantWave(page);
   expect((await stepUntil(page, "s.__debug.transition().phase === 'out' && s.__debug.transition().offsetX > 100", 300)).done).toBe(true);
   const hits = await debug<number>(page, 'hits()');
   // A FIRE round straight through the moving fleet's row, and a SPECIAL
