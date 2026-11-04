@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, STARFIELD } from '../layout';
 import { drawDashedLine } from './draw';
-import type { AsteroidKind } from '../waves';
+import { ASTEROID_KIND, type AsteroidKind } from '../waves';
 
 export const TEX = {
   rocketP1: 'rocket-p1',
@@ -60,8 +60,12 @@ const ROCKET_H = 14;
 export function generateTextures(scene: Phaser.Scene): void {
   makeRocket(scene, TEX.rocketP1, COLORS.p1);
   makeRocket(scene, TEX.rocketP2, COLORS.p2);
-  // Lane rocks are made on demand, per kind and radius: each Asteroid wrapper
-  // calls ensureAsteroidTexture when it's built and when it's reconfigured.
+  // Every lane-rock kind at its own radius up front, so wave 2's first two-hit
+  // rock doesn't draw and upload its texture mid-play (a spec with another
+  // radius still makes its own on reconfigure, via ensureAsteroidTexture).
+  for (const [kind, { radius }] of Object.entries(ASTEROID_KIND)) {
+    ensureAsteroidTexture(scene, kind as AsteroidKind, radius);
+  }
   makeGiantAsteroid(scene);
   makeBoss(scene);
   makeEscort(scene);

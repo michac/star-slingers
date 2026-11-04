@@ -6,7 +6,7 @@
  * drop runs) once they're gone. Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, type Page } from './helpers';
-import { FLEET, GAME_WIDTH, GIANT_LAYOUT } from '../src/layout';
+import { FLEET, GAME_WIDTH, GIANT_LAYOUT, LANE, SUBLANE_H } from '../src/layout';
 import { ASTEROID_KIND, GIANT, RUN } from '../src/waves';
 import type { Lineup } from '../src/lineup';
 
@@ -146,4 +146,31 @@ test('popping it bursts it into one-hit rocks; the wave clears once they are gon
   await clearField(page);
   expect((await stepUntil(page, "s.__debug.state() === 'between'", 5)).done).toBe(true);
   expect((await page.evaluate(`${SCENE}.__debug.interludes()`) as string[])[0]).toBe('drop:3');
+});
+
+test('the burst spreads over all four sublanes, and the charged round that popped the giant spares its rocks', async ({ page }) => {
+  await bootGiant(page, 220, { p1: 'normal' });
+  // Solo, down to its last point, then a real 560 px/s charged round from the
+  // top seat straight down through it: it pops the giant and carries on.
+  for (let i = 0; i < GIANT.hp - 1; i++) await hitGiant(page, 'p1');
+  const fired = (await page.evaluate(
+    `(() => {
+      const w = window, s = w.__game.scene.keys['Sandbox'];
+      const r = s.rockets.fire('rocket-p1', 220, ${LANE.top}, 0, 560, 'p1', { charged: true });
+      let n = 0;
+      for (; n < 120 && r.active; n++) w.__step();
+      return { popped: !s.giant.isActive, steps: n };
+    })()`
+  )) as { popped: boolean; steps: number };
+  expect(fired.popped).toBe(true);
+  const live = `${SCENE}.asteroids.filter((a) => a.isActive && a.isChild && !a.isPopping)`;
+  expect(await page.evaluate(`${live}.length`)).toBe(GIANT.burstCount); // none died to the popping round
+  expect(await page.evaluate(`${SCENE}.__debug.score()`)).toBe(0);
+  // After the scatter the rocks sit across every sublane, so every ship is threatened.
+  await stepGame(page, 16, Math.ceil(GIANT_LAYOUT.burst.scatterMs / 16) + 2);
+  const sublanes = (await page.evaluate(`${live}.map((a) => Math.floor((a.sprite.y - ${LANE.top}) / ${SUBLANE_H}))`)) as number[];
+  expect(new Set(sublanes)).toEqual(new Set([0, 1, 2, 3]));
+  // And they outlive the trip to the fleet, even from a pop at the right edge.
+  const tripMs = ((GAME_WIDTH + GIANT_LAYOUT.radius - FLEET.bubbleFrontX) / GIANT_LAYOUT.burst.childSpeed) * 1000;
+  expect(GIANT_LAYOUT.burst.lifetimeMs).toBeGreaterThan(tripMs);
 });

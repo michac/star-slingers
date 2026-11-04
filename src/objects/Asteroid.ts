@@ -16,7 +16,7 @@
  * Between waves the director reconfigure()s the same wrappers in place.
  */
 import Phaser from 'phaser';
-import { GAME_WIDTH, LANE, SCORE, SPLITTER_CHILDREN } from '../layout';
+import { GAME_WIDTH, LANE, SCORE, SPLITTER_CHILDREN, type ChildMotion } from '../layout';
 import { COLORS } from '../tokens';
 import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
 import { ensureAsteroidTexture, TEX } from './textures';
@@ -40,8 +40,10 @@ export class Asteroid {
   /** Child spawn grace: body stays off until aliveMs passes this. */
   private graceUntilMs = 0;
   /** Child still in its scatter burst (it turns straight left after
-   *  SPLITTER_CHILDREN.scatterMs). */
+   *  motion.scatterMs). */
   private scattering = false;
+  /** A child's scatter, grace and lifetime dials (a splitter's or the giant's burst). */
+  private motion: ChildMotion = SPLITTER_CHILDREN;
   /** Current hp; reset to the spec's max on every (re)field. */
   private _hp = 1;
   /** Remaining white hit-flash time (non-lethal hits only). */
@@ -133,20 +135,21 @@ export class Asteroid {
    *  (vx,vy) — a one-shot standard rock. Sibling to spawn(): same wrapper, but
    *  positioned in-field with a scatter burst rather than off the right edge,
    *  and its onWantRespawn returns false so pop/exit/expire just parks it.
-   *  After SPLITTER_CHILDREN.scatterMs (update) it turns from the fast
-   *  launchSpeed scatter to straight left at the calmer childSpeed. */
-  spawnChild(x: number, y: number, vx: number, vy: number): void {
+   *  After motion.scatterMs (update) it turns from the fast launchSpeed
+   *  scatter to straight left at the calmer childSpeed. */
+  spawnChild(x: number, y: number, vx: number, vy: number, motion: ChildMotion = SPLITTER_CHILDREN): void {
+    this.motion = motion;
     this._spec = {
       kind: 'standard',
       radius: ASTEROID_KIND.standard.radius,
-      speed: SPLITTER_CHILDREN.childSpeed, // the straight-left cruise after the scatter
+      speed: motion.childSpeed, // the straight-left cruise after the scatter
     };
     this.child = true;
     this.active = true;
     this.popping = false;
     this.scattering = true;
     this.aliveMs = 0;
-    this.graceUntilMs = SPLITTER_CHILDREN.spawnGraceMs;
+    this.graceUntilMs = motion.spawnGraceMs;
     this.resetHp();
     this.sprite.setVisible(true).setScale(1).setAlpha(1).setPosition(x, y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
@@ -171,7 +174,7 @@ export class Asteroid {
       // Hard lifetime cap: a child counts toward field-empty, so this
       // guarantees the wave can always clear even if one never reaches the
       // fleet or an edge. Parks (onWantRespawn is false).
-      if (this.aliveMs >= SPLITTER_CHILDREN.lifetimeMs) {
+      if (this.aliveMs >= this.motion.lifetimeMs) {
         this.respawnOrPark();
         return;
       }
@@ -187,7 +190,7 @@ export class Asteroid {
   /** A child's scatter burst: it may not drift out of the enemy lane, and once
    *  the burst is over it turns straight left at its cruise speed. */
   private scatter(body: Phaser.Physics.Arcade.Body): void {
-    if (this.aliveMs >= SPLITTER_CHILDREN.scatterMs) {
+    if (this.aliveMs >= this.motion.scatterMs) {
       this.scattering = false;
       body.setVelocity(-this._spec.speed, 0);
       return;

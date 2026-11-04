@@ -350,9 +350,35 @@ export const GIANT_LAYOUT = {
    *  a circle just outside the rim in that seat's colour, fading as its window runs out. */
   ring: { pad: 7, width: 4, alpha: 0.95 },
   hitFlashMs: 90, // a damaging hit flashes it white this long (counted on update's delta)
-  /** The burst: its rocks fly out across this leftward cone, then drift left like a splitter's children. */
-  burst: { coneDeg: 150, centerDeg: 180 },
+  /** The burst: its rocks fan out evenly up and down the lane (the outer pair
+   *  spreadY above and below the giant's row, on the outer sublanes' ships, so
+   *  every ship is threatened), easing only driftX to the left as they spread,
+   *  then drift left like a splitter's children. Their own ChildMotion: a
+   *  no-hit grace long enough for the 560 px/s charged round that popped the
+   *  giant to carry on clear of them (they sit still under the boom meanwhile:
+   *  a body that's off doesn't move, so scatterMs counts the grace too, and
+   *  they spread over scatterMs − spawnGraceMs); and a lifetime cap that
+   *  outlasts the trip to the fleet from a pop at the right edge (~8 s at the
+   *  cruise speed). */
+  burst: {
+    spreadY: 128,
+    driftX: 40,
+    childSpeed: 45, // SPLITTER_CHILDREN's cruise
+    scatterMs: 1000,
+    spawnGraceMs: 400,
+    lifetimeMs: 10000,
+  },
 } as const;
+
+/** How a scatter child moves once launched: its cruise, scatter time, spawn
+ *  grace and lifetime cap (SPLITTER_CHILDREN for a splitter's,
+ *  GIANT_LAYOUT.burst for the giant's). */
+export type ChildMotion = {
+  readonly childSpeed: number;
+  readonly scatterMs: number;
+  readonly spawnGraceMs: number;
+  readonly lifetimeMs: number;
+};
 
 /**
  * Final boss (B5) GEOMETRY. The boss slides in from the right and parks at

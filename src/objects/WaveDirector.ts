@@ -9,6 +9,7 @@
  * field. State machine:
  *
  *   live | boss → between → (next wave) live | boss … → won
+ *   boss → live (the giant's burst: no field, quota 0, clears on field-empty)
  *
  * Between waves (`between`): the fleet is restored (lost ships rebuilt, every
  * shield back), the star-shower plays, then the interlude hooks run in order:
@@ -223,12 +224,20 @@ export class WaveDirector {
   }
 
   /** The giant asteroid popped at (x, y) (#25): it bursts into
-   *  GIANT.burstCount one-hit rocks across a wide leftward cone, and its wave
+   *  GIANT.burstCount one-hit rocks fanned evenly up and down the lane (on
+   *  the burst's own motion, GIANT_LAYOUT.burst), and its wave
    *  turns into a drained field: it clears (then the boss drop runs) once
    *  they're gone. */
   burstBoss(x: number, y: number): void {
     if (this.state !== 'boss') return;
-    this.scatterChildren(x, y, GIANT.burstCount, GIANT_LAYOUT.burst.coneDeg, GIANT_LAYOUT.burst.centerDeg);
+    const { burst } = GIANT_LAYOUT;
+    const free = this.childPool.filter((child) => !child.isActive);
+    const count = Math.min(GIANT.burstCount, free.length);
+    const spreadSec = (burst.scatterMs - burst.spawnGraceMs) / 1000; // they're still during the grace
+    for (let i = 0; i < count; i++) {
+      const t = count > 1 ? i / (count - 1) : 0.5;
+      free[i].spawnChild(x, y, -burst.driftX / spreadSec, ((2 * t - 1) * burst.spreadY) / spreadSec, burst);
+    }
     this.quotaRemaining = 0;
     this.state = 'live';
   }
