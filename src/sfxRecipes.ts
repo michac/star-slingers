@@ -1,13 +1,10 @@
 /**
- * Sound Lab synth (#3) — every proposed game sound, synthesized with Web Audio
- * at play time: no audio files. Each recipe is a few oscillators and filtered
- * noise with short envelopes. A prototype for Michael to audition on the
- * Pixel 6; if the approach is agreed, this becomes the game's src/sfx.ts.
- *
- * Kid-friendly loudness: every voice goes through one master gain, a
- * compressor (so stacked booms can't spike) and a lowpass that takes the
- * harsh top off. A per-sound voice cap and minimum gap keep two players'
- * rapid fire from piling up into a wall of noise.
+ * sfxRecipes.ts — every game sound (#3), synthesized with Web Audio at play
+ * time: no audio files, like the code-drawn textures. Each recipe is a few
+ * oscillators and filtered noise with short envelopes, started at `v.t0` into
+ * `v.out` (the voice's own bus, see sfx.ts). The numbers here ARE the sounds;
+ * the mix dials (volume, limiter, caps) are SFX in layout.ts. Audition them
+ * all in the Sound Lab (prototype/sound-lab.html).
  */
 
 export type SoundName =
@@ -22,8 +19,8 @@ export type SoundName =
   | 'joinBlip' | 'countBeep' | 'countGo';
 
 /** One voice's timing context: where it starts and its random pitch factor. */
-interface V {
-  ac: AudioContext;
+export interface V {
+  ac: BaseAudioContext;
   out: AudioNode;
   t0: number;
   k: number;
@@ -148,7 +145,7 @@ function bigBoom(v: V): void {
 }
 
 /** Each recipe plays its sound starting at v.t0 and returns its length (s). */
-const RECIPES: Record<SoundName, (v: V) => number> = {
+export const RECIPES: Record<SoundName, (v: V) => number> = {
   thwip: (v) => {
     tone(v, 'triangle', 1400, 260, { dur: 0.11, gain: 0.35, attack: 0.003 });
     noise(v, { dur: 0.03, gain: 0.08 }, { type: 'highpass', f0: 3000 });
@@ -272,11 +269,8 @@ const RECIPES: Record<SoundName, (v: V) => number> = {
     noise(v, { dur: 0.2, gain: 0.2 }, { type: 'bandpass', f0: 2000, f1: 500 });
     return 0.27;
   },
-  bossDefeated: (v) => {
-    bigBoom(v);
-    RECIPES.runWon(later(v, 0.6));
-    return 2.3;
-  },
+  // No fanfare: the boss wave's clear plays waveClear straight after.
+  bossDefeated: (v) => (bigBoom(v), 1.35),
   giantThump: (v) => {
     tone(v, 'sine', 95, 40, { dur: 0.25, gain: 0.6 });
     noise(v, { dur: 0.12, gain: 0.3 }, { type: 'lowpass', f0: 400 });
@@ -300,90 +294,3 @@ const RECIPES: Record<SoundName, (v: V) => number> = {
     return 0.42;
   },
 };
-
-/** Voices of one sound allowed at once, and the minimum gap between starts (ms). */
-const CAPS: Partial<Record<SoundName, { max: number; gapMs: number }>> = {
-  thwip: { max: 3, gapMs: 35 },
-  charged: { max: 2, gapMs: 60 },
-  rockBreak: { max: 3, gapMs: 40 },
-  toughDent: { max: 2, gapMs: 40 },
-  refused: { max: 2, gapMs: 60 },
-  flyby: { max: 1, gapMs: 0 },
-  bossEnter: { max: 1, gapMs: 0 },
-  beamCharge: { max: 1, gapMs: 0 },
-};
-const DEFAULT_CAP = { max: 4, gapMs: 20 };
-
-export class Synth {
-  private ac: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private noiseBuf: AudioBuffer | null = null;
-  private readonly active = new Map<SoundName, number>();
-  private readonly lastAt = new Map<SoundName, number>();
-  private volume = 0.6;
-  private muted = false;
-  /** ± fraction of random pitch per play, so repeats don't sound robotic. */
-  jitter = 0.04;
-  capOn = true;
-
-  /** Build the audio graph. Call from a tap: browsers keep audio locked until one. */
-  unlock(): void {
-    if (!this.ac) {
-      const ac = new AudioContext();
-      const master = ac.createGain();
-      const comp = ac.createDynamicsCompressor();
-      comp.threshold.value = -18;
-      comp.ratio.value = 6;
-      const tame = ac.createBiquadFilter();
-      tame.type = 'lowpass';
-      tame.frequency.value = 8000;
-      master.connect(comp).connect(tame).connect(ac.destination);
-      const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      this.ac = ac;
-      this.master = master;
-      this.noiseBuf = buf;
-      this.applyVolume();
-    }
-    void this.ac.resume();
-  }
-
-  setVolume(v: number): void {
-    this.volume = v;
-    this.applyVolume();
-  }
-  setMuted(m: boolean): void {
-    this.muted = m;
-    this.applyVolume();
-  }
-  private applyVolume(): void {
-    if (this.ac && this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ac.currentTime, 0.02);
-  }
-
-  /** Play a sound now, or `delay` seconds from now. Returns false if it was capped. */
-  play(name: SoundName, delay = 0): boolean {
-    const { ac, master, noiseBuf } = this;
-    if (!ac || !master || !noiseBuf) return false;
-    const now = performance.now() + delay * 1000;
-    const cap = CAPS[name] ?? DEFAULT_CAP;
-    const live = this.active.get(name) ?? 0;
-    if (this.capOn && (live >= cap.max || now - (this.lastAt.get(name) ?? -1e9) < cap.gapMs)) return false;
-    this.lastAt.set(name, now);
-    const k = 1 + (Math.random() * 2 - 1) * this.jitter;
-    const len = RECIPES[name]({ ac, out: master, t0: ac.currentTime + delay + 0.005, k, noise: noiseBuf });
-    this.active.set(name, live + 1);
-    setTimeout(() => this.active.set(name, (this.active.get(name) ?? 1) - 1), (delay + len) * 1000);
-    return true;
-  }
-}
-
-/** Render one sound into any context (an OfflineAudioContext for level checks). Returns its length (s). */
-export function renderOn(ac: BaseAudioContext, out: AudioNode, name: SoundName): number {
-  const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-  return RECIPES[name]({ ac: ac as AudioContext, out, t0: 0, k: 1, noise: buf });
-}
-
-export const SOUND_NAMES = Object.keys(RECIPES) as SoundName[];

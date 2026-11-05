@@ -1,12 +1,13 @@
 /**
  * Sound Lab (#3): a soundboard for every proposed game sound, synthesized in
- * code (sound-lab-synth.ts). Tap a button to hear one; the demos play them
+ * code (the game's own src/sfx.ts + src/sfxRecipes.ts). Tap a button to hear one; the demos play them
  * the way the game would, so the mix can be judged in context.
  */
+import { SFX } from '../src/layout';
 import { CSS } from '../src/tokens';
-import { Synth, type SoundName } from './sound-lab-synth';
+import { Sfx, type SoundName } from '../src/sfx';
 
-const synth = new Synth();
+const synth = new Sfx(false); // the game's sound player, without saving the mute
 
 const GROUPS: { title: string; sounds: [SoundName, string][] }[] = [
   { title: 'Shots', sounds: [['thwip', 'FIRE · thwip'], ['charged', 'Charged · thwoom'], ['missile', 'Missile · fwoosh'], ['bombLaunch', 'Bomb · bloop'], ['detonate', 'Bomb blows']] },
@@ -55,7 +56,7 @@ function bossDemo(): Script {
   return [
     [0, 'bossEnter'], [2.4, 'thwip'], [2.7, 'escortClunk'], [3.1, 'thwip'], [3.3, 'refused'],
     [3.6, 'beamCharge'], [4.0, 'thwip'], [4.3, 'escortClunk'], [5.45, 'beamZap'], [5.6, 'shieldPop'],
-    [6.2, 'charged'], [6.45, 'bossHit'], [7.0, 'charged'], [7.25, 'bossHit'], [7.8, 'charged'], [8.05, 'bossDefeated'],
+    [6.2, 'charged'], [6.45, 'bossHit'], [7.0, 'charged'], [7.25, 'bossHit'], [7.8, 'charged'], [8.05, 'bossDefeated'], [9.2, 'waveClear'],
     [10.5, 'podsAppear'], [11.6, 'thwip'], [11.85, 'podPickup'],
   ];
 }
@@ -114,14 +115,14 @@ function build(): void {
   vol.type = 'range';
   vol.min = '0';
   vol.max = '100';
-  vol.value = '60';
+  vol.value = String(SFX.masterVolume * 100);
   vol.addEventListener('input', () => synth.setVolume(Number(vol.value) / 100));
   const volLabel = document.createElement('label');
   volLabel.append('Volume ', vol);
   let muted = false;
   const mute = button('🔊', (b) => {
     muted = !muted;
-    synth.setMuted(muted);
+    synth.muted = muted;
     b.textContent = muted ? '🔇' : '🔊';
   }, 'icon');
   let capped = true;
@@ -133,7 +134,7 @@ function build(): void {
   let varied = true;
   const vary = button('Pitch variation: on', (b) => {
     varied = !varied;
-    synth.jitter = varied ? 0.04 : 0;
+    synth.jitter = varied ? SFX.pitchJitter : 0;
     b.textContent = `Pitch variation: ${varied ? 'on' : 'off'}`;
   }, 'toggle');
   ctl.append(mute, volLabel, cap, vary);
