@@ -37,6 +37,8 @@ import type { PlayerId } from './Rocket';
 type BossPhase = 'idle' | 'charging' | 'won' | 'lost';
 
 const NO_TARGETS: readonly HomingTarget[] = [];
+/** The crosshair's four ticks, as unit directions (drawn every charging frame: built once). */
+const MARK_TICKS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 export class BossEncounter {
   private readonly boss: Boss;
@@ -139,7 +141,7 @@ export class BossEncounter {
     const { x, y } = this.fleet.shipPoint(this.markedShip);
     g.lineStyle(width, COLORS.danger, minAlpha + (1 - minAlpha) * pulse);
     g.strokeCircle(x, y, r);
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (const [dx, dy] of MARK_TICKS) {
       g.lineBetween(x + dx * (r - tick / 2), y + dy * (r - tick / 2), x + dx * (r + tick), y + dy * (r + tick));
     }
   }

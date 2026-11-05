@@ -268,14 +268,20 @@ function makeBoss(scene: Phaser.Scene): void {
   g.destroy();
 }
 
+/** The dart hull the escort and the enemy ship share (#27: one navy), nose
+ *  up, in a 2R × 2R canvas. */
+function dartHull(R: number): Phaser.Geom.Point[] {
+  return [
+    new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
+    new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
+  ];
+}
+
 /** B33 escort ship: directional hull with a cyan and amber lock-fin. All three
  * state textures share the same canvas/body so lock changes never shift orbit. */
 function makeEscort(scene: Phaser.Scene): void {
   const R = BOSS_LAYOUT.escort.radius;
-  const hull = [
-    new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
-    new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
-  ];
+  const hull = dartHull(R);
   const drawShip = (g: Phaser.GameObjects.Graphics, p1: boolean, p2: boolean) => {
     // Nose points up; Escort.place rotates it toward the fleet.
     g.fillStyle(COLORS.rockFill, 1);
@@ -315,10 +321,7 @@ function makeEscort(scene: Phaser.Scene): void {
 function makeEnemyShip(scene: Phaser.Scene): void {
   if (scene.textures.exists(TEX.enemyShip)) return;
   const R = ENEMY_SHIP.radius;
-  const hull = [
-    new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
-    new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
-  ];
+  const hull = dartHull(R);
   const g = scene.make.graphics({}, false);
   g.fillStyle(COLORS.accent, 0.7); // exhaust, under the tail notch
   g.fillTriangle(R * 0.78, R * 1.66, R * 1.22, R * 1.66, R, R * 1.98);

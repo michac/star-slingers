@@ -45,8 +45,7 @@ export class EnemyBolt {
     this.vx = ((toX - x) / len) * ENEMY_BOLT.speed;
     this.vy = ((toY - y) / len) * ENEMY_BOLT.speed;
     this.targetIndex = target;
-    this.active = true;
-    this.fizzleMs = -1;
+    this.active = true; // fizzleMs is already -1: only a parked bolt launches
     this.image.setPosition(x, y).setVisible(true).setAlpha(1).setScale(1);
   }
 

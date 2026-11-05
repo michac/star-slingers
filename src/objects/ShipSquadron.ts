@@ -28,7 +28,6 @@ export class ShipSquadron {
   private readonly bolts: EnemyBolt[];
   private config: ShipWaveConfig | null = null;
   private quotaRemaining = 0;
-  private fielded = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -53,7 +52,6 @@ export class ShipSquadron {
     this.stop();
     this.config = config;
     this.quotaRemaining = config.quota;
-    this.fielded = 0;
     for (let i = 0; i < config.onScreen; i++) this.spawn();
   }
 
@@ -68,7 +66,7 @@ export class ShipSquadron {
 
   /** The quota is spent and no ship is in play (or popping). True when idle. */
   get isClear(): boolean {
-    return this.quotaRemaining === 0 && !this.ships.some((s) => s.isActive || s.isPopping);
+    return this.quotaRemaining === 0 && this.ships.every((s) => s.phase === 'parked');
   }
 
   update(deltaMs: number): void {
@@ -79,12 +77,6 @@ export class ShipSquadron {
         return;
       }
     }
-  }
-
-  /** DEV/test: field pool ship i at (x, y), holding still and never firing on
-   *  its own (EnemyShip.debugPlace). It isn't counted against any quota. */
-  debugPlace(i: number, x: number, y: number, shielded: boolean): void {
-    this.ships[i]?.debugPlace(x, y, shielded);
   }
 
   /** DEV/test: the bolts in flight (position + the fleet ship each is at). */
@@ -121,8 +113,8 @@ export class ShipSquadron {
     const ship = this.ships.find((s) => s.phase === 'parked');
     if (!ship) return;
     this.quotaRemaining -= 1;
-    this.fielded += 1;
-    const shielded = config.shieldedEvery > 0 && this.fielded % config.shieldedEvery === 0;
+    const fielded = config.quota - this.quotaRemaining; // this wave's ships so far, this one included
+    const shielded = config.shieldedEvery > 0 && fielded % config.shieldedEvery === 0;
     ship.field(shielded, config.fireEveryMs - ENEMY_SHIP.holdMs);
   }
 

@@ -18,7 +18,7 @@
  * again (actStartSpecials). Everything else lives in objects/.
  */
 import Phaser from 'phaser';
-import { BOMB, CONTROLS_V2, GAME_WIDTH, HAPTICS, MISSILE, seatPoint, SLING, sublaneOf, TRIPLE, type SeatEdge } from '../layout';
+import { BOMB, CONTROLS_V2, HAPTICS, MISSILE, seatPoint, SLING, sublaneOf, TRIPLE, type SeatEdge } from '../layout';
 import { isLefty, leftySetting, setSeatLefty } from '../controlsVariant';
 import { liveSeats, SEAT_DEFS, type Lineup, type SeatDef } from '../lineup';
 import { generateTextures } from '../objects/textures';
@@ -58,11 +58,11 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   return null;
 }
 
-/** A rocket's damage on a hit (#22): a plain FIRE round or a missile deals its
- *  own, a charged round double. (A bomb's damage is its blast's.) */
-function shotDamage(rocket: Phaser.Physics.Arcade.Sprite): number {
-  if (rocket.getData('charged') === true) return DAMAGE.charged;
-  return rocket.getData('missile') ? DAMAGE.missile : DAMAGE.fire;
+/** What a FIRE round, a missile or a blast can hurt and score (a rock, an enemy ship). */
+interface Shootable {
+  readonly sprite: Phaser.Physics.Arcade.Sprite;
+  /** Deal `damage`; the points on a kill, else 0. */
+  takeHit(damage: number): number;
 }
 
 /** A seat in play: its fixed wiring plus the HUD built for it. */
@@ -423,13 +423,13 @@ export class SandboxScene extends Phaser.Scene {
             phase: ship.phase,
             x: ship.sprite.x,
             y: ship.sprite.y,
-            r: ship.radius,
             shielded: ship.shielded,
             warning: ship.warning,
             target: ship.target,
           })),
         bolts: () => this.squadron.debugBolts,
-        fieldShip: (i: number, x: number, y: number, shielded = false) => this.squadron.debugPlace(i, x, y, shielded),
+        // fieldShip places pool ship i held still, never firing on its own and outside any quota.
+        fieldShip: (i: number, x: number, y: number, shielded = false) => this.squadron.ships[i]?.debugPlace(x, y, shielded),
         shipFire: (i: number) => this.squadron.ships[i]?.debugFire(),
         // The fleet, top to bottom: 'shielded' | 'exposed' | 'lost' per ship (#19).
         fleet: () => this.fleet.states(),
@@ -556,24 +556,10 @@ export class SandboxScene extends Phaser.Scene {
     const r = BOMB.blastRadius;
     this.explosions.boom(x, y, r);
     buzz(HAPTICS.blastMs);
-    for (const asteroid of this.asteroids) {
-      const s = asteroid.sprite;
-      // A rock still waiting off the right edge isn't in play yet (the
-      // missile picker's rule too): a blast at the edge can't reach it.
-      if (s.x - asteroid.radius >= GAME_WIDTH || !inBlast(asteroid, x, y, r)) continue;
-      const pts = asteroid.takeHit(DAMAGE.blast);
-      if (pts > 0) {
-        this.scoreKeeper.add(pts, s.x, s.y);
-        this.waveDirector.spawnChildren(asteroid);
-      }
-    }
-    for (const ship of this.squadron.ships) {
-      const s = ship.sprite;
-      // A ship still entering from off the right edge isn't in play yet.
-      if (s.x - ship.radius >= GAME_WIDTH || !inBlast(ship, x, y, r)) continue;
-      const pts = ship.takeHit(DAMAGE.blast);
-      if (pts > 0) this.scoreKeeper.add(pts, s.x, s.y);
-    }
+    // inBlast skips anything still off the right edge (specialCanHit).
+    const blast = (t: Shootable & HomingTarget) => (inBlast(t, x, y, r) ? this.scoreHit(t, t.takeHit(DAMAGE.blast)) : 0);
+    for (const asteroid of this.asteroids) if (blast(asteroid) > 0) this.waveDirector.spawnChildren(asteroid);
+    for (const ship of this.squadron.ships) blast(ship);
     this.bossEncounter.blastEscorts(x, y, r, player);
   }
 
@@ -609,11 +595,8 @@ export class SandboxScene extends Phaser.Scene {
     // Two plain loops — this runs every frame while a seat holds SPECIAL and
     // for every target-less missile, so no merged array.
     const consider = (cand: HomingTarget) => {
-      if (!specialCanHit(cand) || exclude?.has(cand)) return;
+      if (!specialCanHit(cand) || exclude?.has(cand)) return; // also never one still off the right edge
       const s = cand.sprite;
-      // A stream rock is fielded (active) just off the right edge before it
-      // drifts in: never take one the players can't see yet.
-      if (s.x - cand.radius >= GAME_WIDTH) return;
       const dx = s.x - ox;
       const dy = s.y - oy;
       const proj = dx * ux + dy * uy; // distance along the line (forward only)
@@ -666,19 +649,32 @@ export class SandboxScene extends Phaser.Scene {
     // A bomb touching a rock blows up there (#26); the blast does the damage.
     if (rocket.getData('bomb')) return this.detonate(rocket);
 
-    // Shot rules (#22): read the shot type BEFORE spendShot (recycle clears
-    // the rocket's flags).
-    const charged = rocket.getData('charged') === true;
-    const pts = asteroid.takeHit(shotDamage(rocket));
-    this.spendShot(rocket, charged, pts > 0);
-    if (pts > 0) {
-      this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
-      // pts > 0 means a rocket-KILL (B30 splits only on a rocket-kill; a
+    if (this.resolveShot(rocket, asteroid) > 0) {
+      // Points mean a rocket-KILL (B30 splits only on a rocket-kill; a
       // fleet consume() never scores, so it never splits). Read position
       // now — the pop tween only scales/fades the sprite, never moves it.
       this.waveDirector.spawnChildren(asteroid);
     }
   };
+
+  /** Shot rules (#22): a plain FIRE round or a missile deals its own damage, a
+   *  charged round double, through the target's takeHit; then the shot is
+   *  spent (a charged kill carries on) and a kill scores where it was. Reads
+   *  the shot type BEFORE spendShot (recycle clears the rocket's flags).
+   *  Returns the points. */
+  private resolveShot(rocket: Phaser.Physics.Arcade.Sprite, target: Shootable): number {
+    const charged = rocket.getData('charged') === true;
+    const damage = charged ? DAMAGE.charged : rocket.getData('missile') ? DAMAGE.missile : DAMAGE.fire;
+    const pts = target.takeHit(damage);
+    this.spendShot(rocket, charged, pts > 0);
+    return this.scoreHit(target, pts);
+  }
+
+  /** A hit's points (if any) pop up and count where the target is; returns them. */
+  private scoreHit(target: Shootable, pts: number): number {
+    if (pts > 0) this.scoreKeeper.add(pts, target.sprite.x, target.sprite.y);
+    return pts;
+  }
 
   /** Rocket vs an enemy ship (#27). EnemyShip.takeHit holds the rule (a
    *  wave-5 bubble soaks one point, the hull has 1 hp). A charged round that
@@ -691,10 +687,7 @@ export class SandboxScene extends Phaser.Scene {
     if (!pair || !ship) return;
     const { rocket } = pair;
     if (rocket.getData('bomb')) return this.detonate(rocket);
-    const charged = rocket.getData('charged') === true;
-    const pts = ship.takeHit(shotDamage(rocket));
-    this.spendShot(rocket, charged, pts > 0);
-    if (pts > 0) this.scoreKeeper.add(pts, ship.sprite.x, ship.sprite.y);
+    this.resolveShot(rocket, ship);
   };
 
   /** Rocket vs boss/escort (B5). The wrapper's takeHit() decides what a hit

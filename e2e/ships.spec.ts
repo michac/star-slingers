@@ -14,7 +14,7 @@ import { RUN } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-type Ship = { phase: string; x: number; y: number; r: number; shielded: boolean; warning: boolean; target: number };
+type Ship = { phase: string; x: number; y: number; shielded: boolean; warning: boolean; target: number };
 type Bolt = { x: number; y: number; target: number };
 const ships = (page: Page) => debug<Ship[]>(page, 'ships()');
 const bolts = (page: Page) => debug<Bolt[]>(page, 'bolts()');
@@ -147,8 +147,9 @@ test('nothing can shoot a bolt down: a rocket flies through it', async ({ page }
 test('a ship re-targets when the fleet ship it is warning at is lost', async ({ page }) => {
   await gotoGame(page, '?wave=4');
   expect((await stepUntil(page, 's.__debug.ships().some((sh) => sh.warning)', 800)).done).toBe(true);
-  const k = (await ships(page)).findIndex((sh) => sh.warning);
-  const before = (await ships(page))[k].target;
+  const field = await ships(page);
+  const k = field.findIndex((sh) => sh.warning);
+  const before = field[k].target;
   expect(before).toBeGreaterThanOrEqual(0);
   await loseShips(page, before);
   await stepGame(page, 16, 1);
@@ -191,9 +192,7 @@ test('the bubble: a plain round or a missile pops it, a charged round or a bombâ
 
   // A missile also only pops it.
   await placeShip(page, 0, at.x, at.y, true);
-  await page.evaluate(
-    `void ${SCENE}.rockets.fire('rocket-p2', ${at.x}, 600, 0, -${MISSILE.speed}, 'p2', { missile: true, target: ${SCENE}.squadron.ships[0] })`
-  );
+  await fire(page, at.x, 600, 0, -MISSILE.speed, `{ missile: true, target: ${SCENE}.squadron.ships[0] }`, 'p2');
   expect((await stepUntil(page, `!s.__debug.ships()[0].shielded`, 120)).done).toBe(true);
   expect((await ship0()).phase).toBe('holding');
 

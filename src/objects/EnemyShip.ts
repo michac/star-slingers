@@ -45,7 +45,7 @@ export interface ShipOrders {
   boom(x: number, y: number, r: number): void;
 }
 
-const smoothstep = (u: number) => u * u * (3 - 2 * u);
+const { Linear: lerp, SmoothStep } = Phaser.Math;
 
 export class EnemyShip implements HomingTarget {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -55,16 +55,15 @@ export class EnemyShip implements HomingTarget {
   private shieldUp = false;
   /** It was fielded with a bubble (the score for a kill). */
   private woreShield = false;
-  private x = 0;
-  private y = 0;
   /** The nose's direction (radians, 0 = right). */
   private heading = Math.PI;
   private fromX = 0;
   private fromY = 0;
   private toX = 0;
   private toY = 0;
-  private glideMs = 0;
-  private glideLeftMs = 0;
+  private glideMs = 1;
+  /** The glide's heading (radians), fixed for the whole glide. */
+  private glideHeading = Math.PI;
   private t = 0; // ms into the current glide, hold or pop
   private fired = false;
   private targetIndex = -1;
@@ -84,6 +83,14 @@ export class EnemyShip implements HomingTarget {
     this.park();
   }
 
+  /** Where it is: the sprite is the one copy (motion is kinematic: setPosition). */
+  private get x(): number {
+    return this.sprite.x;
+  }
+  private get y(): number {
+    return this.sprite.y;
+  }
+
   get phase(): ShipPhase {
     return this.phaseState;
   }
@@ -98,7 +105,7 @@ export class EnemyShip implements HomingTarget {
   }
   /** Its nose is glowing: it's in the hold, about to fire. */
   get warning(): boolean {
-    return this.phaseState === 'holding' && !this.fired && !this.frozen;
+    return this.phaseState === 'holding' && !this.fired; // a placed ship is held with fired set
   }
   /** The fleet ship it's warning (or last fired) at, -1 for none. */
   get target(): number {
@@ -110,10 +117,8 @@ export class EnemyShip implements HomingTarget {
   field(shielded: boolean, glideMs: number): void {
     const { roam } = ENEMY_SHIP;
     this.reset(shielded);
-    this.glideMs = glideMs;
-    this.frozen = false;
-    this.moveTo(ENEMY_SHIP.entryX, Phaser.Math.FloatBetween(roam.minY, roam.maxY));
-    this.heading = Math.PI; // nose left, into the lane
+    this.glideMs = Math.max(1, glideMs);
+    this.sprite.setPosition(ENEMY_SHIP.entryX, Phaser.Math.FloatBetween(roam.minY, roam.maxY));
     this.startGlide();
   }
 
@@ -133,11 +138,10 @@ export class EnemyShip implements HomingTarget {
     this.t += deltaMs;
     let desired = this.heading;
     if (this.phaseState === 'gliding') {
-      const u = Math.min(1, this.t / this.glideLeftMs);
-      const e = smoothstep(u);
-      this.moveTo(this.fromX + (this.toX - this.fromX) * e, this.fromY + (this.toY - this.fromY) * e);
-      desired = Math.atan2(this.toY - this.fromY, this.toX - this.fromX);
-      if (u >= 1) this.startHold();
+      const e = SmoothStep(this.t, 0, this.glideMs);
+      this.sprite.setPosition(lerp(this.fromX, this.toX, e), lerp(this.fromY, this.toY, e));
+      desired = this.glideHeading;
+      if (e >= 1) this.startHold();
     } else {
       if (!this.fired) {
         this.targetIndex = this.orders.pickTarget(this.x, this.y);
@@ -182,8 +186,7 @@ export class EnemyShip implements HomingTarget {
     this.frozen = true;
     this.phaseState = 'holding';
     this.fired = true; // a placed ship fires only through debugFire
-    this.moveTo(x, y);
-    this.heading = Math.PI;
+    this.sprite.setPosition(x, y);
     this.draw();
   }
 
@@ -200,6 +203,7 @@ export class EnemyShip implements HomingTarget {
     this.targetIndex = -1;
     this.fired = false;
     this.t = 0;
+    this.heading = Math.PI; // nose left, into the lane
     this.sprite.setVisible(true).setScale(1).setAlpha(1);
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
   }
@@ -222,9 +226,7 @@ export class EnemyShip implements HomingTarget {
     const d = Phaser.Math.FloatBetween(hopMax * 0.4, hopMax);
     this.toX = Phaser.Math.Clamp(this.x + Math.cos(a) * d, roam.minX, roam.maxX);
     this.toY = Phaser.Math.Clamp(this.y + Math.sin(a) * d, roam.minY, roam.maxY);
-    // The entry glide comes in from off-screen: it may need the whole hop just to
-    // reach the box, so it always starts with the full glide time.
-    this.glideLeftMs = Math.max(1, this.glideMs);
+    this.glideHeading = Math.atan2(this.toY - this.fromY, this.toX - this.fromX);
   }
 
   private startHold(): void {
@@ -237,12 +239,6 @@ export class EnemyShip implements HomingTarget {
   private turnToward(angle: number, deltaMs: number): void {
     const step = Phaser.Math.DegToRad(ENEMY_SHIP.turnRateDeg) * (deltaMs / 1000);
     this.heading = Phaser.Math.Angle.RotateTo(this.heading, angle, step);
-  }
-
-  private moveTo(x: number, y: number): void {
-    this.x = x;
-    this.y = y;
-    this.sprite.setPosition(x, y);
   }
 
   /** The hull's rotation, the bubble ring and the warning glow at the nose. */
@@ -282,7 +278,7 @@ export class EnemyShip implements HomingTarget {
     this.frozen = false;
     this.art.clear();
     this.sprite.setVisible(false).setScale(1).setAlpha(1);
-    this.moveTo(ENEMY_SHIP.entryX, ENEMY_SHIP.roam.minY);
+    this.sprite.setPosition(ENEMY_SHIP.entryX, ENEMY_SHIP.roam.minY);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.stop();
     body.enable = false;
