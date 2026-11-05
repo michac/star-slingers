@@ -16,6 +16,7 @@ export type SoundName =
   | 'podsAppear' | 'podPickup' | 'podTimeout' | 'modeSwipe'
   | 'flyby'
   | 'bossEnter' | 'bossHit' | 'escortClunk' | 'beamCharge' | 'beamZap' | 'bossDefeated'
+  | 'shipShot'
   | 'giantThump' | 'giantBurst'
   | 'joinBlip' | 'countBeep' | 'countGo';
 
@@ -265,6 +266,12 @@ export const RECIPES: Record<SoundName, (v: V) => void> = {
   },
   // No fanfare: the boss wave's clear plays waveClear straight after.
   bossDefeated: bigBoom,
+  shipShot: (v) => {
+    // An enemy ship's bolt (#27): a small cousin of the beam's zap, soft and low,
+    // since two or three ships each fire every few seconds.
+    tone(v, 'sawtooth', 700, 160, { dur: 0.22, gain: 0.12 }, { type: 'lowpass', f0: 1800, f1: 400 });
+    tone(v, 'sine', 260, 110, { dur: 0.25, gain: 0.2 });
+  },
   giantThump: (v) => {
     tone(v, 'sine', 95, 40, { dur: 0.25, gain: 0.6 });
     noise(v, { dur: 0.12, gain: 0.3 }, { type: 'lowpass', f0: 400 });

@@ -240,6 +240,7 @@ Waves 4 and 5, act 2's waves (§3). Decided by Michael (recorded in #27).
   - **Waves:** a wave clear plays a short fanfare with the star shower; winning the run a longer fanfare; the Try again card a soft, sad-cute "wah-wah".
   - **Upgrades:** pods appear with a rising sparkle, a pod taken plays a power-up jingle, pods timing out fade with a falling tone; a swipe between SPECIAL modes clicks.
   - **Between acts:** the flyby's engine swell, rising as the fleet speeds off the right edge and falling as it comes back from the left, panned with it.
+  - **Enemy ships (§11):** a soft, low zap when a ship fires a bolt. A bolt reaching the fleet sounds like a rock reaching it (the shield pop, or a ship lost). Popping a wave-5 bubble without the kill "tonks" (the two-hit rock's sound: hit, not down yet), and a ship downed booms like a rock.
   - **Command ship:** a low rumble as it slides in; a "clunk" when an escort takes a lock or goes down; a rising whine over the **last 1.8 s of the beam's charge** (`SFX.beamWhineMs`, measured from the charge's own length), cut off if an escort kill resets the charge; a "zap" when the beam fires; a metallic "clang" on a hit that counts; a big boom when it's beaten (the boss wave's clear then plays the fanfare).
   - **Giant asteroid:** a deep thump on a hit that counts; a huge boom when it bursts.
   - **Join screen:** a blip when a seat joins; a beep on each 3-2-1 numeral and a higher "go".

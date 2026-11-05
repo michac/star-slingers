@@ -20,6 +20,7 @@ import type { ShipWaveConfig } from '../waves';
 import { EnemyBolt } from './EnemyBolt';
 import { EnemyShip, type ShipOrders } from './EnemyShip';
 import type { Fleet } from './Fleet';
+import { sfx } from '../sfx';
 
 export class ShipSquadron {
   /** The ship pool (parked when not in play). The scene's collider, the
@@ -105,6 +106,7 @@ export class ShipSquadron {
     if (!bolt) return; // pool exhausted: that shot is skipped
     const p = this.fleet.shipPoint(i);
     bolt.launch(x, y, i, p.x, p.y);
+    sfx.play('shipShot');
   }
 
   private spawn(): void {

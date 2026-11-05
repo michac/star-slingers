@@ -624,6 +624,7 @@ export const SFX = {
     flyby: { max: 1, gapMs: 0 },
     bossEnter: { max: 1, gapMs: 0 },
     beamCharge: { max: 1, gapMs: 0 },
+    shipShot: { max: 2, gapMs: 80 },
   },
   /** The command ship's beam whine starts when this much of its charge is
    *  left; the beamCharge recipe lasts exactly this long. */

@@ -32,7 +32,7 @@ import {
   type Pt,
   type Touchscreen,
 } from './helpers';
-import { FLEET, GIANT_LAYOUT, HAPTICS, PODS, SFX, SPECIAL_SWIPE, sublaneCenterY } from '../src/layout';
+import { FLEET, GIANT_LAYOUT, HAPTICS, PODS, SFX, SLING, SPECIAL_SWIPE, sublaneCenterY } from '../src/layout';
 import { BOSS } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -250,6 +250,38 @@ test('the beam whines over the last of its charge and zaps when it fires; a rese
   await stepGame(page, 16, 1);
   await debug(page, 'killEscort(0)');
   expect(await takeLog(page)).toEqual(['escortClunk', 'escortClunk', '-beamCharge']);
+});
+
+test('enemy ships: a shot zaps, its bolt pops the shield, a bubble hit tonks, a kill booms', async ({ page }) => {
+  await gotoGame(page);
+  await clearField(page);
+  await stepGame(page, 16, 1);
+  const place = (shielded: boolean) => debug(page, `fieldShip(0, 180, 380, ${shielded})`);
+  const up = (opts = '{}') => fire(page, 180, 600, 0, -SLING.maxSpeed, opts, 'p2');
+  const until = async (cond: string) => expect((await stepUntil(page, cond, 400)).done).toBe(true);
+  await place(false);
+  await clearSfxLog(page);
+
+  await debug(page, 'shipFire(0)');
+  expect(await takeLog(page)).toEqual(['shipShot']);
+  await until("s.__debug.bolts().length === 0");
+  expect(await takeLog(page)).toEqual(['shieldPop']);
+
+  // A bubbled ship: a plain round only pops the bubble; the next one downs it.
+  await place(true);
+  await up();
+  await until('!s.__debug.ships()[0].shielded');
+  expect(await takeLog(page)).toEqual(['toughDent']);
+  await stepGame(page, 16, 10);
+  await up();
+  await until("s.__debug.ships()[0].phase !== 'holding'");
+  expect(await takeLog(page)).toEqual(['rockBreak']);
+
+  // A charged round through a bubble kills in one: only the boom.
+  await place(true);
+  await up('{ charged: true }');
+  await until("s.__debug.ships()[0].phase !== 'holding'");
+  expect(await takeLog(page)).toEqual(['rockBreak']);
 });
 
 test('the giant: a refused round tinks, a counted hit thumps and buzzes, the popping hit buzzes and bursts', async ({ page }) => {

@@ -17,6 +17,7 @@ const GROUPS: { title: string; sounds: [SoundName, string][] }[] = [
   { title: 'Upgrades', sounds: [['podsAppear', 'Pods appear'], ['podPickup', 'Pod taken'], ['podTimeout', 'Pods time out'], ['modeSwipe', 'SPECIAL swipe']] },
   { title: 'Between acts', sounds: [['flyby', 'Colony ship flyby (pans L→R)']] },
   { title: 'Command ship', sounds: [['bossEnter', 'Slides in · rumble'], ['bossHit', 'Hit · clang'], ['escortClunk', 'Escort · clunk'], ['beamCharge', 'Beam charging'], ['beamZap', 'Beam fires · zap'], ['bossDefeated', 'Beaten']] },
+  { title: 'Enemy ships', sounds: [['shipShot', 'Ship fires a bolt'], ['toughDent', 'Bubble pops · tonk'], ['rockBreak', 'Ship down']] },
   { title: 'Giant asteroid', sounds: [['giantThump', 'Hit · thump'], ['giantBurst', 'Bursts']] },
   { title: 'Join screen', sounds: [['joinBlip', 'Seat joins'], ['countBeep', '3 · 2 · 1'], ['countGo', 'Go']] },
 ];
