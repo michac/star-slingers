@@ -37,7 +37,7 @@ versions. Exact installed versions are in `package-lock.json` (check with
 | Package (installed) | Types — grep, don't read whole | Source / extras | Web |
 |---|---|---|---|
 | **phaser 3.90.0** (runtime) | `node_modules/phaser/types/phaser.d.ts` (~119k lines, full JSDoc) | `node_modules/phaser/src/<area>/` (e.g. `gameobjects/particles/`, `physics/arcade/`, `tweens/`); release notes in `node_modules/phaser/changelog/3.90/` | Source at tag [`v3.90.0`](https://github.com/phaserjs/phaser/tree/v3.90.0); examples at [phaserjs/examples](https://github.com/phaserjs/examples) |
-| **typescript 6.0** | `node_modules/typescript/lib/*.d.ts` | — | typescriptlang.org |
+| **typescript 7.0** (native compiler; typecheck only, Vite strips types) | `node_modules/@typescript/typescript-<platform>/lib/*.d.ts` (e.g. `typescript-linux-x64`; the `typescript` package itself is a launcher with no JS API) | — | typescriptlang.org |
 | **vite 8.3** (dev server, build, `prototype-gallery` plugin in `vite.config.ts`) | `node_modules/vite/types/`, `node_modules/vite/dist/node/index.d.ts` | — | vite.dev (tracks the latest major) |
 | **@playwright/test 1.64** (e2e) | `node_modules/playwright/types/test.d.ts` (runner), `node_modules/playwright-core/types/types.d.ts` (Page/Locator API) | — | playwright.dev |
 

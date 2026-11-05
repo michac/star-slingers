@@ -1,6 +1,6 @@
 {
   // Node-side code: the e2e suite and the Playwright and Vite configs.
-  // TS 6 loads no @types by default, so Node's are named here.
+  // TypeScript (6 and later) loads no @types by default, so Node's are named here.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["node"]
