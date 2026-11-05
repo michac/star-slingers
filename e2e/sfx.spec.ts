@@ -26,6 +26,8 @@ import {
   touchscreen,
   v2Layout,
   sceneActive,
+  stubVibrate,
+  vibes,
   type Page,
   type Pt,
   type Touchscreen,
@@ -37,24 +39,16 @@ import { BOSS } from '../src/waves';
 
 const sfxLog = (page: Page) => page.evaluate(() => [...(window as any).__sfx.log]) as Promise<string[]>;
 const clearSfxLog = (page: Page) => page.evaluate(() => void ((window as any).__sfx.log.length = 0));
-/** The log since it was last cleared, then clear it again. */
-async function takeLog(page: Page): Promise<string[]> {
-  const log = await sfxLog(page);
-  await clearSfxLog(page);
-  return log;
-}
+/** The log since it was last cleared, then clear it again (one round-trip). */
+const takeLog = (page: Page) => page.evaluate(() => (window as any).__sfx.log.splice(0)) as Promise<string[]>;
 
-/** Record navigator.vibrate calls (window.__vibes) and count AudioContexts made
+/** Record navigator.vibrate calls (stubVibrate) and count AudioContexts made
  *  (window.__contexts) and oscillators started (window.__oscillators), from
  *  before boot. `noAudio` removes Web Audio entirely instead. */
 async function instrument(page: Page, noAudio = false): Promise<void> {
+  await stubVibrate(page);
   await page.addInitScript((none) => {
     const w = window as any;
-    w.__vibes = [];
-    Object.defineProperty(Navigator.prototype, 'vibrate', {
-      configurable: true,
-      value: (ms: number) => (w.__vibes.push(ms), true),
-    });
     if (none) {
       delete w.AudioContext;
       delete w.webkitAudioContext;
@@ -76,9 +70,15 @@ async function instrument(page: Page, noAudio = false): Promise<void> {
     };
   }, noAudio);
 }
-const vibes = (page: Page) => page.evaluate(() => (window as any).__vibes) as Promise<number[]>;
+const clearVibes = (page: Page) => page.evaluate(() => void ((window as any).__vibes.length = 0));
 const contexts = (page: Page) => page.evaluate(() => (window as any).__contexts) as Promise<number>;
 const oscillators = (page: Page) => page.evaluate(() => (window as any).__oscillators) as Promise<number>;
+
+/** A P1 round from the left edge straight along row `y`, stepped until it's spent. */
+async function shootAcross(page: Page, y: number, opts = '{}', frames = 40): Promise<void> {
+  await fire(page, 60, y, 350, 0, opts);
+  expect((await stepUntil(page, 's.rockets.group.countActive(true) === 0', frames)).done).toBe(true);
+}
 
 /** A tap on a button: down, a few frames, up. */
 async function press(page: Page, t: Touchscreen, at: Pt, frames = 3): Promise<void> {
@@ -114,16 +114,12 @@ test('rocks: a kill booms, a two-hit rock\'s first hit tonks, and a rock reachin
   await gotoGame(page);
   await clearField(page);
   const y = sublaneCenterY(1);
-  const shootRock = async () => {
-    await fire(page, 60, y, 350, 0);
-    expect((await stepUntil(page, 's.rockets.group.countActive(true) === 0', 40)).done).toBe(true);
-  };
   await clearSfxLog(page);
 
   await fieldRock(page, { x: 200, y, kind: 'tough' });
-  await shootRock();
+  await shootAcross(page, y);
   expect(await takeLog(page)).toEqual(['toughDent']);
-  await shootRock();
+  await shootAcross(page, y);
   expect(await takeLog(page)).toEqual(['rockBreak']);
 
   await fieldRock(page, { x: FLEET.bubbleFrontX + 30, y: sublaneCenterY(2), speed: 300 });
@@ -223,11 +219,8 @@ test('the command ship: rumble in, clunks on escorts, tinks off the web and its 
   await stepGame(page, 16, 1);
 
   // Through the gap along y=370: a plain round only tinks off the hull; a charged one counts.
-  const shoot = async (opts: string) => {
-    await page.evaluate(`${SCENE}.rockets.fire('rocket-p1', 60, 370, 350, 0, 'p1', ${opts})`);
-    expect((await stepUntil(page, 's.rockets.group.countActive(true) === 0', 40)).done).toBe(true);
-  };
-  await page.evaluate(() => void ((window as any).__vibes.length = 0));
+  const shoot = (opts: string) => shootAcross(page, 370, opts);
+  await clearVibes(page);
   await shoot('{}');
   expect(await takeLog(page)).toEqual(['refused']);
   await shoot('{ charged: true }');
@@ -264,10 +257,7 @@ test('the giant: a refused round tinks, a counted hit thumps and buzzes, the pop
   await gotoGame(page, '?wave=3', { p1: 'normal' }); // solo: every charged round counts
   await page.evaluate(`${SCENE}.__debug.setGiantX(220)`);
   await stepGame(page, 16, 1);
-  const shoot = async (opts: string) => {
-    await page.evaluate(`${SCENE}.rockets.fire('rocket-p1', 60, ${GIANT_LAYOUT.y}, 350, 0, 'p1', ${opts})`);
-    expect((await stepUntil(page, 's.rockets.group.countActive(true) === 0', 60)).done).toBe(true);
-  };
+  const shoot = (opts: string) => shootAcross(page, GIANT_LAYOUT.y, opts, 60);
   await clearSfxLog(page);
   await shoot('{}');
   expect(await takeLog(page)).toEqual(['refused']);
@@ -318,7 +308,7 @@ test('the speaker on the join screen\'s centre line mutes sound (only), and is r
   await stepGame(page, 16, 1);
   const L = await v2Layout(page, 2);
   const before = await oscillators(page);
-  await page.evaluate(() => void ((window as any).__vibes.length = 0));
+  await clearVibes(page);
   await clearSfxLog(page);
   await press(page, t, L.fire);
   expect(await sfxLog(page)).toEqual(['thwip']);

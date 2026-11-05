@@ -427,7 +427,7 @@ export class SandboxScene extends Phaser.Scene {
     this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent
     // (a bomb blows up there, #26: RocketPool.end).
-    if (this.rockets.endWhere((rocket) => this.bossEncounter.blocksRocket(rocket)) > 0) sfx.play('refused');
+    this.rockets.endWhere(this.blockedByWeb);
     this.checkFleetContacts();
   }
 
@@ -658,11 +658,7 @@ export class SandboxScene extends Phaser.Scene {
     const player = rocket.getData('player') as PlayerId;
     if (ref instanceof Boss) {
       this.rockets.recycle(rocket);
-      // A hit that counts clangs and buzzes (#3 D6); a plain round, or one during the slide-in, only tinks.
-      if (ref.takeHit(charged)) {
-        sfx.play('bossHit');
-        buzz(HAPTICS.bossHitMs);
-      } else sfx.play('refused');
+      ref.takeHit(charged);
       return;
     }
     this.spendShot(rocket, charged, ref.takeHit(player));
@@ -705,10 +701,17 @@ export class SandboxScene extends Phaser.Scene {
   private readonly processBossHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
     const pair = splitPair(a, b);
     if (!pair) return false;
-    if (!this.bossEncounter.blocksRocket(pair.rocket)) return true;
+    if (!this.blockedByWeb(pair.rocket)) return true;
     this.rockets.end(pair.rocket);
-    sfx.play('refused');
     return false;
+  };
+
+  /** Does a live web link stop this rocket (B34)? A blocked shot tinks (#3).
+   *  Both web checks (the per-frame sweep and the overlap above) go through here. */
+  private readonly blockedByWeb = (rocket: Phaser.Physics.Arcade.Sprite): boolean => {
+    if (!this.bossEncounter.blocksRocket(rocket)) return false;
+    sfx.play('refused');
+    return true;
   };
 
   /** Rocket vs pod (#26): only a FIRE round (plain or charged, never a missile

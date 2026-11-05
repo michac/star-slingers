@@ -2,33 +2,10 @@
  * haptics.spec.ts — navigator.vibrate on the v2 buttons (#3): arming tick, buzz by shot kind, silent no-ops.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, touchscreen, v2Layout, liveShots, countShots, fired, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, stubVibrate, touchscreen, v2Layout, vibes, liveShots, countShots, fired } from './helpers';
 import { HAPTICS } from '../src/layout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-// Haptics (#3). The real navigator.vibrate can't be observed, so these swap in
-// a recorder (window.__vibes) before boot. 'missing' deletes the API (iPhone);
-// 'unactivated' pins userActivation.hasBeenActive to false (Playwright's own
-// evaluate calls count as activation, so a real page here is never pre-tap).
-async function stubVibrate(page: Page, mode: 'record' | 'missing' | 'unactivated' = 'record'): Promise<void> {
-  await page.addInitScript((m) => {
-    const w = window as any;
-    w.__vibes = [];
-    if (m === 'missing') {
-      delete (Navigator.prototype as any).vibrate;
-      return;
-    }
-    Object.defineProperty(Navigator.prototype, 'vibrate', {
-      configurable: true,
-      value: (pattern: number) => (w.__vibes.push(pattern), true),
-    });
-    if (m === 'unactivated') {
-      Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { hasBeenActive: false, isActive: false } });
-    }
-  }, mode);
-}
-const vibes = (page: Page) => page.evaluate(() => (window as any).__vibes) as Promise<number[]>;
 
 test('v2: haptics — FIRE ticks once on arming, each shot fired buzzes by kind', async ({ page }) => {
   await stubVibrate(page);

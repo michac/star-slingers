@@ -221,6 +221,30 @@ export const countShots = (page: Page) =>
     };
   });
 export const fired = (page: Page) => page.evaluate(() => (window as any).__fired) as Promise<number>;
+
+// Haptics (#3). The real navigator.vibrate can't be observed, so stubVibrate
+// swaps in a recorder (window.__vibes, read with vibes()) before boot.
+// 'missing' deletes the API (iPhone); 'unactivated' pins
+// userActivation.hasBeenActive to false (Playwright's own evaluate calls count
+// as activation, so a real page here is never pre-tap).
+export async function stubVibrate(page: Page, mode: 'record' | 'missing' | 'unactivated' = 'record'): Promise<void> {
+  await page.addInitScript((m) => {
+    const w = window as any;
+    w.__vibes = [];
+    if (m === 'missing') {
+      delete (Navigator.prototype as any).vibrate;
+      return;
+    }
+    Object.defineProperty(Navigator.prototype, 'vibrate', {
+      configurable: true,
+      value: (pattern: number) => (w.__vibes.push(pattern), true),
+    });
+    if (m === 'unactivated') {
+      Object.defineProperty(navigator, 'userActivation', { configurable: true, value: { hasBeenActive: false, isActive: false } });
+    }
+  }, mode);
+}
+export const vibes = (page: Page) => page.evaluate(() => (window as any).__vibes) as Promise<number[]>;
 export const escortsAlive = (page: Page) =>
   page.evaluate(`${SCENE}.__debug.escortsAlive()`) as Promise<number>;
 export const hitEscort = (page: Page, i: number, player: 'p1' | 'p2') =>

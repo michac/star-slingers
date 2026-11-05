@@ -107,21 +107,22 @@ export class Sfx {
       .finally(() => (this.resuming = false));
   }
 
-  /** Play a sound now (or `delay` seconds from now), unless it's capped. */
-  play(name: SoundName, delay = 0): void {
+  /** Play a sound now, unless it's capped. */
+  play(name: SoundName): void {
     this.record(name);
     const { ac, master, noise } = this;
     // A suspended context (not resuming) would bank plays and blast them all at once on resume.
     if (!ac || !master || !noise || this.isMuted || !(ac.state === 'running' || this.resuming)) return;
-    const at = ac.currentTime + delay;
+    const at = ac.currentTime;
     const live = this.liveVoices(name);
     const cap = CAPS[name] ?? CAPS.default;
     if (this.capOn && (live.length >= cap.max || (at - (this.lastAt.get(name) ?? -Infinity)) * 1000 < cap.gapMs)) return;
     const bus = ac.createGain();
     bus.connect(master);
     const k = 1 + (Math.random() * 2 - 1) * this.jitter;
-    const len = RECIPES[name]({ ac, out: bus, t0: at + 0.005, k, noise });
-    live.push({ bus, endsAt: at + len });
+    const span = { end: at };
+    RECIPES[name]({ ac, out: bus, t0: at + 0.005, k, noise, span });
+    live.push({ bus, endsAt: span.end });
     this.lastAt.set(name, at);
   }
 
@@ -144,9 +145,11 @@ export class Sfx {
   /** The sound's voices still playing; finished ones are disconnected and dropped. */
   private liveVoices(name: SoundName): Voice[] {
     const now = this.ac?.currentTime ?? 0;
-    const all = this.voices.get(name) ?? [];
-    const live = all.filter((v) => v.endsAt > now);
-    for (const v of all) if (v.endsAt <= now) v.bus.disconnect();
+    const live: Voice[] = [];
+    for (const v of this.voices.get(name) ?? []) {
+      if (v.endsAt > now) live.push(v);
+      else v.bus.disconnect();
+    }
     this.voices.set(name, live);
     return live;
   }
@@ -166,11 +169,3 @@ export class Sfx {
 
 /** The game's one sound player. */
 export const sfx = new Sfx();
-
-/** Render one sound into any context: the Sound Lab's level check uses an
- *  OfflineAudioContext. Returns its length (s). */
-export function renderSound(ac: BaseAudioContext, out: AudioNode, name: SoundName): number {
-  return RECIPES[name]({ ac, out, t0: 0, k: 1, noise: noiseBuffer(ac) });
-}
-
-export const SOUND_NAMES = Object.keys(RECIPES) as SoundName[];

@@ -11,9 +11,10 @@
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
-import { BOSS_LAYOUT, FLEET } from '../layout';
+import { BOSS_LAYOUT, FLEET, HAPTICS } from '../layout';
 import { BOSS } from '../waves';
 import { TEX } from './textures';
+import { buzz } from '../haptics';
 import { sfx } from '../sfx';
 
 export class Boss {
@@ -83,13 +84,18 @@ export class Boss {
     this.entering = false;
   }
 
-  /** Returns whether the hit counted (took a point). */
-  takeHit(charged: boolean): boolean {
+  takeHit(charged: boolean): void {
     // B34: the web, not a boss ring/state gate, protects the command ship.
     // A charged round that reaches it through a missing link always chips 1 HP.
-    if (!charged || !this.isEntered) return false;
+    // A plain round, or one during the slide-in, only tinks; a hit that counts clangs and buzzes (#3 D6).
+    if (!charged || !this.isEntered) {
+      sfx.play('refused');
+      return;
+    }
+    sfx.play('bossHit');
+    buzz(HAPTICS.bossHitMs);
     this.hp -= 1;
-    if (this.hp > 0) return true;
+    if (this.hp > 0) return;
     this.active = false;
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.scene.tweens.add({
@@ -99,7 +105,6 @@ export class Boss {
       duration: 280,
       onComplete: () => this.defeated(),
     });
-    return true;
   }
 
   /** A bright beam flashes from the boss to the ship it hits when a charge fires. */

@@ -6,7 +6,7 @@
  * the mix dials (volume, limiter, caps) are SFX in layout.ts. Audition them
  * all in the Sound Lab (prototype/sound-lab.html).
  */
-import { ACT_TRANSITION } from './layout';
+import { ACT_TRANSITION, SFX } from './layout';
 
 export type SoundName =
   | 'thwip' | 'charged' | 'missile' | 'bombLaunch' | 'detonate'
@@ -19,13 +19,16 @@ export type SoundName =
   | 'giantThump' | 'giantBurst'
   | 'joinBlip' | 'countBeep' | 'countGo';
 
-/** One voice's timing context: where it starts and its random pitch factor. */
-export interface V {
+/** One voice's timing context: where it starts and its random pitch factor.
+ *  `span.end` is where its last envelope ends (s): route() raises it, so a
+ *  recipe's length is measured, not typed in. Shared by every later() copy. */
+interface V {
   ac: BaseAudioContext;
   out: AudioNode;
   t0: number;
   k: number;
   noise: AudioBuffer;
+  span: { end: number };
 }
 interface Env {
   at?: number;
@@ -43,9 +46,10 @@ type Pan = number | [number, number];
 
 const SILENT = 0.0001; // exponential ramps can't reach 0
 
-/** Filter → envelope → optional pan → out. Returns the start time. */
+/** Filter → envelope → optional pan → out, and extend the voice's span. Returns the start time. */
 function route(v: V, src: AudioNode, e: Env, filt?: Filt, pan?: Pan): number {
   const t = v.t0 + (e.at ?? 0);
+  v.span.end = Math.max(v.span.end, t + e.dur);
   let node = src;
   if (filt) {
     const b = v.ac.createBiquadFilter();
@@ -145,66 +149,55 @@ function bigBoom(v: V): void {
   sparkle(v, 0.08, 10, 1600, 3800, 0.7, 0.05);
 }
 
-/** Each recipe plays its sound starting at v.t0 and returns its length (s). */
-export const RECIPES: Record<SoundName, (v: V) => number> = {
+/** Each recipe plays its sound starting at v.t0. */
+export const RECIPES: Record<SoundName, (v: V) => void> = {
   thwip: (v) => {
     tone(v, 'triangle', 1400, 260, { dur: 0.11, gain: 0.35, attack: 0.003 });
     noise(v, { dur: 0.03, gain: 0.08 }, { type: 'highpass', f0: 3000 });
-    return 0.12;
   },
   charged: (v) => {
     tone(v, 'sawtooth', 520, 70, { dur: 0.35, gain: 0.28 }, { type: 'lowpass', f0: 2400, f1: 300, q: 4 });
     tone(v, 'sine', 160, 45, { dur: 0.4, gain: 0.45 });
     noise(v, { dur: 0.08, gain: 0.1 }, { type: 'bandpass', f0: 1500 });
-    return 0.42;
   },
   missile: (v) => {
     noise(v, { dur: 0.45, gain: 0.4, attack: 0.12 }, { type: 'bandpass', f0: 500, f1: 3500, q: 3 });
     tone(v, 'sine', 300, 900, { dur: 0.4, gain: 0.22, attack: 0.05 });
-    return 0.47;
   },
   bombLaunch: (v) => {
     tone(v, 'sine', 180, 620, { dur: 0.14, gain: 0.4 });
     tone(v, 'sine', 620, 400, { at: 0.12, dur: 0.08, gain: 0.2 });
-    return 0.22;
   },
-  detonate: (v) => (bigBoom(v), 1.35),
+  detonate: bigBoom,
   rockBreak: (v) => {
     boom(v, 1);
     sparkle(v, 0.05, 5, 1800, 3600, 0.35, 0.05);
-    return 0.55;
   },
   toughDent: (v) => {
     tone(v, 'sine', 420, 380, { dur: 0.12, gain: 0.4 });
     tone(v, 'triangle', 840, 800, { dur: 0.06, gain: 0.12 });
-    return 0.13;
   },
   refused: (v) => {
     tone(v, 'triangle', 900, 860, { dur: 0.07, gain: 0.12 }, { type: 'lowpass', f0: 1400 });
-    return 0.08;
   },
   shieldPop: (v) => {
     noise(v, { dur: 0.25, gain: 0.3, attack: 0.002 }, { type: 'highpass', f0: 4000, f1: 2000 });
     tone(v, 'triangle', 1200, 500, { dur: 0.15, gain: 0.1 });
     sparkle(v, 0.01, 6, 2500, 5000, 0.18, 0.07);
-    return 0.33;
   },
   shipLost: (v) => {
     tone(v, 'triangle', 240, 80, { dur: 0.6, gain: 0.35, attack: 0.02 }, { type: 'lowpass', f0: 900, f1: 200 });
     tone(v, 'sine', 120, 45, { dur: 0.6, gain: 0.35, attack: 0.02 });
     noise(v, { dur: 0.4, gain: 0.15 }, { type: 'lowpass', f0: 600, f1: 100 });
-    return 0.62;
   },
   shieldRebuild: (v) => {
     notes(v, 'sine', [[C6, 0, 0.25], [E6, 0.07, 0.25], [G6, 0.14, 0.3]], 0.18);
     notes(v, 'triangle', [[C5, 0, 0.25], [E5, 0.07, 0.25], [G5, 0.14, 0.3]], 0.06);
-    return 0.45;
   },
   waveClear: (v) => {
     notes(v, 'square', [[C5, 0, 0.14], [E5, 0.1, 0.14], [G5, 0.2, 0.14], [C6, 0.3, 0.5]], 0.16, SOFT);
     notes(v, 'triangle', [[C4, 0, 0.3], [G4, 0.3, 0.5]], 0.2);
     sparkle(v, 0.3, 8, 2000, 4200, 0.5, 0.06);
-    return 0.85;
   },
   runWon: (v) => {
     const mel: [number, number, number][] = [
@@ -215,25 +208,21 @@ export const RECIPES: Record<SoundName, (v: V) => number> = {
     notes(v, 'triangle', mel.map(([f, at, d]) => [f * 2, at, d]), 0.06);
     notes(v, 'triangle', [[C4, 0, 0.6], [G4 / 2, 0.62, 0.24], [C4, 0.86, 0.8]], 0.22);
     sparkle(later(v, 0.86), 0, 14, 2000, 4500, 0.8, 0.04);
-    return 1.7;
   },
   tryAgain: (v) => {
     const f: Filt = { type: 'lowpass', f0: 1500 };
     notes(v, 'triangle', [[G4, 0, 0.28], [Fs4, 0.3, 0.28], [F4, 0.6, 0.28]], 0.2, f);
     tone(v, 'triangle', E4, E4, { at: 0.9, dur: 0.75, gain: 0.2, attack: 0.01 }, f, { vib: { rate: 6, depth: 8 } });
-    return 1.7;
   },
-  podsAppear: (v) => (sparkle(v, 0, 7, 1500, 3500, 0.4, 0.16, true), 0.55),
+  podsAppear: (v) => sparkle(v, 0, 7, 1500, 3500, 0.4, 0.16, true),
   podPickup: (v) => {
     notes(v, 'square', [[C5, 0, 0.09], [E5, 0.05, 0.09], [G5, 0.1, 0.09], [C6, 0.15, 0.09], [E6, 0.2, 0.25]], 0.18, SOFT);
     sparkle(v, 0.2, 4, 3000, 4500, 0.2, 0.07);
-    return 0.48;
   },
-  podTimeout: (v) => (tone(v, 'sine', 900, 300, { dur: 0.5, gain: 0.15, attack: 0.1 }), 0.52),
+  podTimeout: (v) => tone(v, 'sine', 900, 300, { dur: 0.5, gain: 0.15, attack: 0.1 }),
   modeSwipe: (v) => {
     noise(v, { dur: 0.02, gain: 0.15 }, { type: 'bandpass', f0: 2500, q: 2 });
     tone(v, 'sine', 1400, 1400, { dur: 0.03, gain: 0.08 });
-    return 0.05;
   },
   flyby: (v) => {
     // The colony ship's act flyby (ActTransition): an engine swell that
@@ -249,57 +238,49 @@ export const RECIPES: Record<SoundName, (v: V) => number> = {
     };
     leg(v, out, [0, 0.9], true);
     leg(later(v, out), back, [-0.9, 0], false);
-    return out + back + 0.05;
   },
   bossEnter: (v) => {
     noise(v, { dur: 2.2, gain: 0.4, attack: 0.8 }, { type: 'lowpass', f0: 200 });
     tone(v, 'sine', 48, 40, { dur: 2.2, gain: 0.4, attack: 0.8 }, undefined, { vib: { rate: 6, depth: 3 } });
-    return 2.25;
   },
   bossHit: (v) => {
     // Inharmonic partials ring like struck metal.
     const parts: [number, number, number][] = [[520, 0.6, 0.18], [1360, 0.4, 0.1], [2110, 0.3, 0.07], [3080, 0.2, 0.05]];
     for (const [f, dur, gain] of parts) tone(v, 'sine', f, f, { dur, gain, attack: 0.002 });
     noise(v, { dur: 0.02, gain: 0.2 }, { type: 'highpass', f0: 2000 });
-    return 0.62;
   },
   escortClunk: (v) => {
     tone(v, 'square', 150, 95, { dur: 0.12, gain: 0.15 }, { type: 'lowpass', f0: 800 });
     noise(v, { dur: 0.08, gain: 0.2 }, { type: 'lowpass', f0: 500 });
-    return 0.14;
   },
   beamCharge: (v) => {
-    tone(v, 'sawtooth', 180, 1100, { dur: 1.8, gain: 0.18, attack: 1.5 }, { type: 'lowpass', f0: 600, f1: 3000, q: 6 });
-    tone(v, 'sine', 360, 2200, { dur: 1.8, gain: 0.05, attack: 1.5 }, undefined, { vib: { rate: 12, depth: 15 } });
-    return 1.85;
+    // Spans the last SFX.beamWhineMs of the charge, so it ends on the zap.
+    const dur = SFX.beamWhineMs / 1000;
+    tone(v, 'sawtooth', 180, 1100, { dur, gain: 0.18, attack: 1.5 }, { type: 'lowpass', f0: 600, f1: 3000, q: 6 });
+    tone(v, 'sine', 360, 2200, { dur, gain: 0.05, attack: 1.5 }, undefined, { vib: { rate: 12, depth: 15 } });
   },
   beamZap: (v) => {
     tone(v, 'sawtooth', 1800, 90, { dur: 0.25, gain: 0.25 }, { type: 'lowpass', f0: 4000, f1: 400 });
     noise(v, { dur: 0.2, gain: 0.2 }, { type: 'bandpass', f0: 2000, f1: 500 });
-    return 0.27;
   },
   // No fanfare: the boss wave's clear plays waveClear straight after.
-  bossDefeated: (v) => (bigBoom(v), 1.35),
+  bossDefeated: bigBoom,
   giantThump: (v) => {
     tone(v, 'sine', 95, 40, { dur: 0.25, gain: 0.6 });
     noise(v, { dur: 0.12, gain: 0.3 }, { type: 'lowpass', f0: 400 });
-    return 0.27;
   },
   giantBurst: (v) => {
     bigBoom(v);
     boom(later(v, 0.12), 1.2);
     sparkle(v, 0.2, 12, 1500, 4000, 0.9, 0.05);
-    return 1.4;
   },
-  joinBlip: (v) => (tone(v, 'sine', 660, 990, { dur: 0.09, gain: 0.25 }), 0.1),
+  joinBlip: (v) => tone(v, 'sine', 660, 990, { dur: 0.09, gain: 0.25 }),
   countBeep: (v) => {
     tone(v, 'square', 440, 440, { dur: 0.12, gain: 0.08 }, SOFT);
     tone(v, 'sine', 440, 440, { dur: 0.2, gain: 0.2 });
-    return 0.22;
   },
   countGo: (v) => {
     tone(v, 'square', A5, A5, { dur: 0.35, gain: 0.08 }, SOFT);
     tone(v, 'sine', A5, A5, { dur: 0.4, gain: 0.2 });
-    return 0.42;
   },
 };

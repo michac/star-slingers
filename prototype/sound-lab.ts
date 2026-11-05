@@ -119,24 +119,20 @@ function build(): void {
   vol.addEventListener('input', () => synth.setVolume(Number(vol.value) / 100));
   const volLabel = document.createElement('label');
   volLabel.append('Volume ', vol);
-  let muted = false;
   const mute = button('🔊', (b) => {
-    muted = !muted;
-    synth.muted = muted;
-    b.textContent = muted ? '🔇' : '🔊';
+    synth.muted = !synth.muted;
+    b.textContent = synth.muted ? '🔇' : '🔊';
   }, 'icon');
-  let capped = true;
-  const cap = button('Voice cap: on', (b) => {
-    capped = !capped;
-    synth.capOn = capped;
-    b.textContent = `Voice cap: ${capped ? 'on' : 'off'}`;
-  }, 'toggle');
-  let varied = true;
-  const vary = button('Pitch variation: on', (b) => {
-    varied = !varied;
-    synth.jitter = varied ? SFX.pitchJitter : 0;
-    b.textContent = `Pitch variation: ${varied ? 'on' : 'off'}`;
-  }, 'toggle');
+  /** An on/off button labelled with its state, reading and flipping it on the synth. */
+  const toggle = (label: string, isOn: () => boolean, flip: () => void) => {
+    const text = () => `${label}: ${isOn() ? 'on' : 'off'}`;
+    return button(text(), (b) => {
+      flip();
+      b.textContent = text();
+    }, 'toggle');
+  };
+  const cap = toggle('Voice cap', () => synth.capOn, () => (synth.capOn = !synth.capOn));
+  const vary = toggle('Pitch variation', () => synth.jitter > 0, () => (synth.jitter = synth.jitter > 0 ? 0 : SFX.pitchJitter));
   ctl.append(mute, volLabel, cap, vary);
   root.append(ctl);
 

@@ -576,7 +576,7 @@ export const SFX = {
     beamCharge: { max: 1, gapMs: 0 },
   },
   /** The command ship's beam whine starts when this much of its charge is
-   *  left (the beamCharge recipe's length). */
+   *  left; the beamCharge recipe lasts exactly this long. */
   beamWhineMs: 1800,
 } as const;
 
