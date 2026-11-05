@@ -6,7 +6,8 @@
  * A ship wave (ShipWaveConfig in waves.ts) fields `onScreen` ships at once
  * from a `quota`; each ship destroyed is replaced from what's left of the
  * quota, entering from the right edge. Every `shieldedEvery`th ship fielded
- * wears a bubble. The wave is clear (isClear) once the quota is spent and the
+ * wears a bubble. Each ship's whole move (glide + hold) lasts fireEveryMs,
+ * paced for the seat count (pacedMs: slower in solo, #6). The wave is clear (isClear) once the quota is spent and the
  * last ship has popped; any bolts still flying then fizzle out.
  *
  * Each ship aims at the NEAREST live fleet ship (#19: the target it steers
@@ -16,7 +17,7 @@
  */
 import Phaser from 'phaser';
 import { ENEMY_BOLT, ENEMY_SHIP, LANE } from '../layout';
-import type { ShipWaveConfig } from '../waves';
+import { pacedMs, type ShipWaveConfig } from '../waves';
 import { EnemyBolt } from './EnemyBolt';
 import { EnemyShip, type ShipOrders } from './EnemyShip';
 import type { Fleet } from './Fleet';
@@ -34,7 +35,9 @@ export class ShipSquadron {
     private readonly fleet: Fleet,
     boom: (x: number, y: number, r: number) => void,
     /** A bolt took the fleet's last ship. */
-    private readonly onFleetLost: () => void
+    private readonly onFleetLost: () => void,
+    /** Live seats (the join screen's lineup): solo paces each ship's move (pacedMs). */
+    private readonly players: 1 | 2
   ) {
     const orders: ShipOrders = {
       pickTarget: (x, y) => this.nearestLiveShip(x, y),
@@ -115,7 +118,7 @@ export class ShipSquadron {
     this.quotaRemaining -= 1;
     const fielded = config.quota - this.quotaRemaining; // this wave's ships so far, this one included
     const shielded = config.shieldedEvery > 0 && fielded % config.shieldedEvery === 0;
-    ship.field(shielded, config.fireEveryMs - ENEMY_SHIP.holdMs);
+    ship.field(shielded, pacedMs(config.fireEveryMs, this.players) - ENEMY_SHIP.holdMs);
   }
 
   /** A ship popped: refill its place from the quota; after the last one,

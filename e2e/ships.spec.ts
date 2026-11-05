@@ -4,13 +4,14 @@
  * fleet (shield, then ship), re-targeting after a loss, a bolt whose ship was
  * lost passing harmlessly, and bolts being unshootable; the wave-5 bubble rule
  * (plain/missile pop it, charged and the detonator's blast kill); missiles and
- * the triple taking ships; the wave's quota flow, the fail card and Try again.
+ * the triple taking ships; the wave's quota flow, the fail card and Try again; solo's slower
+ * shot cycle (#6).
  * The boss beam's crosshair and the command-ship drop are in boss.spec.ts.
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, clearField, tryAgain, countShots, fired, touchscreen, v2Layout, type Page } from './helpers';
 import { BOMB, ENEMY_SHIP, GAME_WIDTH, MISSILE, SCORE, SLING, sublaneCenterY } from '../src/layout';
-import { RUN } from '../src/waves';
+import { pacedMs, RUN, SOLO } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -380,4 +381,38 @@ test("a bolt that takes the fleet's last ship shows the fail card, and Try again
   expect(await debug(page, 'wave()')).toBe(4); // act 2's first wave
   expect(await debug(page, 'waveKind()')).toBe('ship');
   expect(inPlay(await ships(page))).toHaveLength(W4.onScreen);
+});
+
+test('solo: each ship fires once per fireEveryMs ÷ SOLO.pace; two players keep fireEveryMs (#6)', async ({ page }) => {
+  /** Wave 4 unattended: the ms of each ship's first two shots (both ships). */
+  const shotTimes = () =>
+    page.evaluate((frames) => {
+      const w = window as any;
+      const sq = w.__game.scene.keys['Sandbox'].squadron;
+      const byShip: number[][] = sq.ships.map(() => []);
+      const fire = sq.fire.bind(sq);
+      let ms = 0;
+      sq.fire = (x: number, y: number, i: number) => {
+        const k = sq.ships.findIndex((sh: any) => Math.hypot(sh.sprite.x - x, sh.sprite.y - y) <= sh.radius + 0.5);
+        byShip[k]?.push(ms);
+        fire(x, y, i);
+      };
+      for (let n = 0; n < frames; n++) {
+        w.__step();
+        ms += 16;
+      }
+      return byShip.filter((t) => t.length >= 2);
+    }, Math.ceil((2 * pacedMs(W4.fireEveryMs, 1) + 500) / 16));
+  for (const [lineup, players] of [[{ p1: 'normal', p2: 'normal' }, 2], [{ p2: 'normal' }, 1]] as const) {
+    await gotoGame(page, '?wave=4', lineup);
+    const cycle = pacedMs(W4.fireEveryMs, players);
+    expect(cycle).toBeCloseTo(players === 1 ? W4.fireEveryMs / SOLO.pace : W4.fireEveryMs, 6);
+    const ships = await shotTimes();
+    expect(ships.length, `${players}p`).toBe(W4.onScreen);
+    for (const [first, second] of ships) {
+      // The entry glide is a full glide, so the first shot comes a cycle less the beat after the shot.
+      expect(Math.abs(first - (cycle - ENEMY_SHIP.holdMs + ENEMY_SHIP.telegraphMs)), `${players}p first`).toBeLessThanOrEqual(32);
+      expect(Math.abs(second - first - cycle), `${players}p cycle`).toBeLessThanOrEqual(32);
+    }
+  }
 });

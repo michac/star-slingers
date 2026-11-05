@@ -390,9 +390,10 @@ export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
 // asteroid waves the kids have already learned: the rate their rocks would
 // reach the fleet if nobody shot any.
 
-/** Bolts/s reaching the fleet if nobody shoots: each ship in play fires one per fireEveryMs. */
-export function shipFleetHitsPerSec(ships: ShipWaveConfig): number {
-  return (ships.onScreen * 1000) / ships.fireEveryMs;
+/** Bolts/s reaching the fleet if nobody shoots: each ship in play fires one
+ *  per fireEveryMs (solo: per pacedMs of it, #6). */
+export function shipFleetHitsPerSec(ships: ShipWaveConfig, players: 1 | 2): number {
+  return (ships.onScreen * 1000) / pacedMs(ships.fireEveryMs, players);
 }
 
 /** Rocks/s reaching the fleet if nobody shoots: each stream fields a rock per

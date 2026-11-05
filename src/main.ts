@@ -18,7 +18,8 @@ if (import.meta.env.DEV) {
       console.log(
         `${label}: ${ships.onScreen} ships at once, quota ${ships.quota}, ` +
           `${ships.shieldedEvery ? `every ${ships.shieldedEvery} shielded` : 'no shields'}, ` +
-          `one shot per ${ships.fireEveryMs}ms each = ${shipFleetHitsPerSec(ships).toFixed(2)} bolts/s unattended`
+          `one shot per ${ships.fireEveryMs}ms each = ${shipFleetHitsPerSec(ships, 2).toFixed(2)} bolts/s unattended ` +
+          `(solo ${shipFleetHitsPerSec(ships, 1).toFixed(2)})`
       );
       continue;
     }

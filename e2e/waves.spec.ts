@@ -307,8 +307,8 @@ test("act 2's ship waves are no harder unattended than act 1's: bolts/s within t
   // Wave 4 asks no more than wave 1 would if nobody shot, wave 5 no more than wave 2.
   const [w1, w2, , w4, w5] = RUN;
   for (const players of [1, 2] as const) {
-    expect(shipFleetHitsPerSec(w4.ships!), `wave 4 vs wave 1 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w1.field!, players));
-    expect(shipFleetHitsPerSec(w5.ships!), `wave 5 vs wave 2 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w2.field!, players));
+    expect(shipFleetHitsPerSec(w4.ships!, players), `wave 4 vs wave 1 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w1.field!, players));
+    expect(shipFleetHitsPerSec(w5.ships!, players), `wave 5 vs wave 2 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w2.field!, players));
   }
   // Wave 5 steps up from wave 4: more ships at once, a bigger quota, and shields.
   expect(w5.ships!.onScreen).toBeGreaterThan(w4.ships!.onScreen);
