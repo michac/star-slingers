@@ -3,13 +3,15 @@
  * the enemy lane, the colony fleet (#19), a TwoThumbControl per joined seat (multitouch; the seats and their
  * Easy/Normal come from the join screen via lineup.ts; each seat's lefty swap
  * mirrors it and is remembered in controlsVariant.ts), the rocket pool, the WaveDirector
- * (which owns the asteroids and the 10-wave run), the two boss encounters
+ * (which owns the asteroids and the 10-wave run), act 2's enemy ships and
+ * their bolts (ShipSquadron, #27), the two boss encounters
  * (the giant asteroid, #25, and the command ship), the between-acts fleet flyby (#29), per-player HUDs, the wave
  * banner, damaged enemies' health bars, and the fail/victory overlays. It
  * also owns the shot rules (#22): FIRE rounds and SPECIAL missiles (fireShot,
- * pickMissileTarget) and what each does on a hit (handleHit, handleBossHit,
- * handleGiantHit), and what an enemy reaching the fleet does
- * (checkFleetContacts; the giant wipes the fleet itself). And the upgrades
+ * pickMissileTarget) and what each does on a hit (handleHit, handleShipHit,
+ * handleBossHit, handleGiantHit), and what a rock reaching the fleet does
+ * (checkFleetContacts; the giant wipes the fleet itself, and a ship's bolt
+ * hits it through the squadron). And the upgrades
  * (#26): a boss wave's pod drop (UpgradeDrop, taken by FIRE rounds in
  * handlePodHit), the triple missile and the detonator's bomb + blast
  * (fireShot, detonate), and carrying each seat's special modes through Try
@@ -34,6 +36,8 @@ import { WaveBanner } from '../objects/WaveBanner';
 import { WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
 import { GiantAsteroid } from '../objects/GiantAsteroid';
+import { ShipSquadron } from '../objects/ShipSquadron';
+import type { EnemyShip } from '../objects/EnemyShip';
 import { ActTransition } from '../objects/ActTransition';
 import { Boss } from '../objects/Boss';
 import { Escort } from '../objects/Escort';
@@ -52,6 +56,13 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   if (first.getData('isRocket')) return { rocket: first, other: second };
   if (second.getData('isRocket')) return { rocket: second, other: first };
   return null;
+}
+
+/** A rocket's damage on a hit (#22): a plain FIRE round or a missile deals its
+ *  own, a charged round double. (A bomb's damage is its blast's.) */
+function shotDamage(rocket: Phaser.Physics.Arcade.Sprite): number {
+  if (rocket.getData('charged') === true) return DAMAGE.charged;
+  return rocket.getData('missile') ? DAMAGE.missile : DAMAGE.fire;
 }
 
 /** A seat in play: its fixed wiring plus the HUD built for it. */
@@ -92,6 +103,7 @@ export class SandboxScene extends Phaser.Scene {
   private waveDirector!: WaveDirector;
   private bossEncounter!: BossEncounter;
   private giant!: GiantAsteroid;
+  private squadron!: ShipSquadron;
   private actTransition!: ActTransition;
   private healthBars!: HealthBars;
   private failOverlay!: Overlay;
@@ -191,6 +203,11 @@ export class SandboxScene extends Phaser.Scene {
       }
     );
 
+    // Act 2's enemy ships and their bolts (#27): pooled, built once and
+    // parked; the run hands them the field for waves 4–5. A bolt that takes
+    // the fleet's last ship shows the fail card.
+    this.squadron = new ShipSquadron(this, this.fleet, (x, y, r) => this.explosions.boom(x, y, r), () => this.showFail());
+
     // Between acts the fleet flies across (#29), on the scene's update clock.
     this.actTransition = new ActTransition(this.fleet, this.starfield);
 
@@ -210,6 +227,7 @@ export class SandboxScene extends Phaser.Scene {
           bossDrop: (wave, done) => (wave.boss ? this.upgradeDrop.start(BOSS_DROPS[wave.boss], live, done) : done()),
           actTransition: (from, to, done) => this.actTransition.start(from, to, done),
         },
+        ships: this.squadron,
         startEncounter: (boss) => {
           if (boss === 'giantAsteroid') this.giant.start();
           else this.bossEncounter.start();
@@ -296,7 +314,14 @@ export class SandboxScene extends Phaser.Scene {
       this.processBossHit
     );
 
-    // Third, built ONCE over the giant asteroid's sprite (#25).
+    // Built ONCE over the enemy ships' pool (#27), same discipline.
+    this.physics.add.overlap(
+      this.rockets.group,
+      this.squadron.ships.map((ship) => ship.sprite),
+      this.handleShipHit
+    );
+
+    // Built ONCE over the giant asteroid's sprite (#25).
     this.physics.add.overlap(this.rockets.group, this.giant.sprite, this.handleGiantHit);
 
     // Fourth, also built ONCE over the two pod sprites (#26): a FIRE round from a
@@ -391,6 +416,21 @@ export class SandboxScene extends Phaser.Scene {
         }),
         hitGiant: (player: PlayerId, charged: boolean) => this.giant.takeHit(player, charged),
         setGiantX: (x: number) => this.giant.debugSetX(x),
+        // Act 2's enemy ships (#27): each pool ship's state, the bolts in
+        // flight, placing a held ship, and making one fire now.
+        ships: () =>
+          this.squadron.ships.map((ship) => ({
+            phase: ship.phase,
+            x: ship.sprite.x,
+            y: ship.sprite.y,
+            r: ship.radius,
+            shielded: ship.shielded,
+            warning: ship.warning,
+            target: ship.target,
+          })),
+        bolts: () => this.squadron.debugBolts,
+        fieldShip: (i: number, x: number, y: number, shielded = false) => this.squadron.debugPlace(i, x, y, shielded),
+        shipFire: (i: number) => this.squadron.ships[i]?.debugFire(),
         // The fleet, top to bottom: 'shielded' | 'exposed' | 'lost' per ship (#19).
         fleet: () => this.fleet.states(),
         starOffsets: () => this.starfield.offsets,
@@ -413,6 +453,7 @@ export class SandboxScene extends Phaser.Scene {
     if (this.failOverlay.visible || this.victoryOverlay.visible) return;
     for (const control of this.controls) control.update(delta);
     for (const asteroid of this.asteroids) asteroid.update(delta);
+    this.squadron.update(delta); // act 2's ships glide, warn and fire; their bolts fly (#27)
     this.upgradeDrop.update(delta); // pods bob, time out and leave (#26)
     // Steer in-flight missiles (#22; they re-acquire through the same picker),
     // then advance + redraw every shot's exhaust trail.
@@ -501,7 +542,8 @@ export class SandboxScene extends Phaser.Scene {
    *  press, touching an enemy or the shield web, or the world bounds. Every
    *  enemy a SPECIAL can hurt (specialCanHit) whose body reaches inside
    *  BOMB.blastRadius takes DAMAGE.blast: rocks through takeHit (score + splits
-   *  exactly as a shot's kill), escorts that seat's lock
+   *  exactly as a shot's kill), enemy ships through theirs (#27: a blast pops
+   *  a bubble and kills the ship), escorts that seat's lock
    *  (BossEncounter.blastEscorts). The boss is never hurt by it. */
   private detonate(bomb: Phaser.Physics.Arcade.Sprite): void {
     const player = bomb.getData('player') as PlayerId;
@@ -524,6 +566,13 @@ export class SandboxScene extends Phaser.Scene {
         this.scoreKeeper.add(pts, s.x, s.y);
         this.waveDirector.spawnChildren(asteroid);
       }
+    }
+    for (const ship of this.squadron.ships) {
+      const s = ship.sprite;
+      // A ship still entering from off the right edge isn't in play yet.
+      if (s.x - ship.radius >= GAME_WIDTH || !inBlast(ship, x, y, r)) continue;
+      const pts = ship.takeHit(DAMAGE.blast);
+      if (pts > 0) this.scoreKeeper.add(pts, s.x, s.y);
     }
     this.bossEncounter.blastEscorts(x, y, r, player);
   }
@@ -577,6 +626,7 @@ export class SandboxScene extends Phaser.Scene {
       }
     };
     for (const cand of this.asteroids) consider(cand);
+    for (const cand of this.squadron.ships) consider(cand);
     for (const cand of this.bossEncounter.missileTargets()) consider(cand);
     consider(this.giant); // never taken: it's chargedOnly (specialCanHit)
     return best;
@@ -616,12 +666,10 @@ export class SandboxScene extends Phaser.Scene {
     // A bomb touching a rock blows up there (#26); the blast does the damage.
     if (rocket.getData('bomb')) return this.detonate(rocket);
 
-    // Shot rules (#22): a plain FIRE round or a missile deals its damage; a
-    // charged round deals double. Read the shot type BEFORE spendShot (recycle
-    // clears the rocket's flags).
+    // Shot rules (#22): read the shot type BEFORE spendShot (recycle clears
+    // the rocket's flags).
     const charged = rocket.getData('charged') === true;
-    const damage = charged ? DAMAGE.charged : rocket.getData('missile') ? DAMAGE.missile : DAMAGE.fire;
-    const pts = asteroid.takeHit(damage);
+    const pts = asteroid.takeHit(shotDamage(rocket));
     this.spendShot(rocket, charged, pts > 0);
     if (pts > 0) {
       this.scoreKeeper.add(pts, asteroid.sprite.x, asteroid.sprite.y);
@@ -630,6 +678,23 @@ export class SandboxScene extends Phaser.Scene {
       // now — the pop tween only scales/fades the sprite, never moves it.
       this.waveDirector.spawnChildren(asteroid);
     }
+  };
+
+  /** Rocket vs an enemy ship (#27). EnemyShip.takeHit holds the rule (a
+   *  wave-5 bubble soaks one point, the hull has 1 hp). A charged round that
+   *  kills one carries on along its line (#22), so it can take the ship behind
+   *  too; every other hit spends the shot. A bomb touching one blows up there
+   *  (#26); the blast does the damage. */
+  private readonly handleShipHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
+    const pair = splitPair(a, b);
+    const ship = pair?.other.getData('ref') as EnemyShip | undefined;
+    if (!pair || !ship) return;
+    const { rocket } = pair;
+    if (rocket.getData('bomb')) return this.detonate(rocket);
+    const charged = rocket.getData('charged') === true;
+    const pts = ship.takeHit(shotDamage(rocket));
+    this.spendShot(rocket, charged, pts > 0);
+    if (pts > 0) this.scoreKeeper.add(pts, ship.sprite.x, ship.sprite.y);
   };
 
   /** Rocket vs boss/escort (B5). The wrapper's takeHit() decides what a hit

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RUN, waveTarget } from './waves';
+import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RUN, shipFleetHitsPerSec, waveTarget } from './waves';
 import { COLORS } from './tokens';
 import { JoinScene } from './scenes/JoinScene';
 import { SandboxScene } from './scenes/SandboxScene';
@@ -8,10 +8,22 @@ import { SandboxScene } from './scenes/SandboxScene';
 // Difficulty readout — the tuning loop is: change a RUN target, reload,
 // read these. Shows target vs achieved (the solver lands at-or-above target,
 // or below if saturated) and the tier the solver settled on (see docs/design.md §7).
-// Logged for solo and co-op: the join screen picks the seat count later.
+// Logged for solo and co-op: the join screen picks the seat count later. A
+// ship wave (#27) logs its dials and the bolts/s that would reach the fleet if
+// nobody shot (the same for any seat count).
 if (import.meta.env.DEV) {
-  for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, placeholder }] of RUN.entries()) {
+  for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, ships, placeholder }] of RUN.entries()) {
     const label = `wave ${i + 1} (act ${act}, ${boss ?? kind}${placeholder ? ' placeholder' : ''})`;
+    if (ships) {
+      if (players === 2) {
+        console.log(
+          `${label}: ${ships.onScreen} ships at once, quota ${ships.quota}, ` +
+            `${ships.shieldedEvery ? `every ${ships.shieldedEvery} shielded` : 'no shields'}, ` +
+            `one shot per ${ships.fireEveryMs}ms each = ${shipFleetHitsPerSec(ships).toFixed(2)} bolts/s unattended`
+        );
+      }
+      continue;
+    }
     if (!w) {
       if (players === 2) console.log(`${label}: boss encounter (${boss === 'giantAsteroid' ? 'GIANT' : 'BOSS'} dials)`);
       continue;
