@@ -1,11 +1,11 @@
 /**
  * waves.spec.ts — the run and the src/waves.ts difficulty model: the 10-wave RUN table and its
- * play order, the act transition's fleet flyby (#29), the ?wave shortcut, Try again's retry wave,
+ * play order, the act transition's fleet flyby (#29), act 2's ship-wave dials (#27), the ?wave shortcut, Try again's retry wave,
  * the wave solver and the solo pace (#6).
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, debug, clearGiantField, gotoGame, stepGame, stepUntil, loseShips, loseRun, tryAgain, winToFreshRun, type Page } from './helpers';
-import { ACT_TRANSITION, AMMO_REGEN_MS, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
+import { ACT_TRANSITION, AMMO_REGEN_MS, ENEMY_SHIP, GAME_WIDTH, REGROW, SPECIAL, STARFIELD, sublaneCenterY } from '../src/layout';
 
 import {
   actStartWave,
@@ -17,10 +17,12 @@ import {
   clearDamage,
   COMMAND_SHIP_WAVE,
   DAMAGE,
+  fieldFleetHitsPerSec,
   maxHpOf,
   pacedMs,
   requiredDamagePerSec,
   RUN,
+  shipFleetHitsPerSec,
   SOLO,
   solveWave,
   startWaveFromQuery,
@@ -56,8 +58,10 @@ test('the run is one table of 10 waves in 4 acts', () => {
   expect(RUN.filter((w) => w.kind === 'boss').map((w) => RUN.indexOf(w) + 1)).toEqual([3, 6, 9]);
   expect(COMMAND_SHIP_WAVE).toBe(6);
   // The giant asteroid (#25) and the command ship are played by their own
-  // encounters; every other wave is a solver field.
-  expect(RUN.filter((w) => !w.field).map((w) => w.boss)).toEqual(['giantAsteroid', 'commandShip']);
+  // encounters, act 2's waves 4–5 by enemy ships (#27); every other wave is a solver field.
+  expect(RUN.filter((w) => !w.field && !w.ships).map((w) => w.boss)).toEqual(['giantAsteroid', 'commandShip']);
+  expect(RUN.flatMap((w, i) => (w.ships ? [i + 1] : []))).toEqual([4, 5]);
+  expect(RUN.every((w) => !(w.ships && w.field))).toBe(true);
   // Act 1's solver lever, one new rock per wave (#25): none in wave 1, two-hit rocks in wave 2.
   expect(RUN.slice(0, 2).map((w) => w.field?.topKind)).toEqual(['standard', 'tough']);
   // Try again's target: each act's first wave.
@@ -119,7 +123,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
     const n = i + 1;
     const w = RUN[i];
     expect(row, `wave ${n}`).toMatchObject({ wave: n, act: w.act, kind: w.boss ?? w.kind, won: false, cleared: true });
-    expect(row.state, `wave ${n}`).toBe(w.field ? 'live' : 'boss');
+    expect(row.state, `wave ${n}`).toBe(w.field || w.ships ? 'live' : 'boss'); // a ship wave plays live (#27)
     if (n < 10) {
       expect(row.banner, `banner announces wave ${n + 1}`).toBe(true);
       expect(row.next, `wave ${n + 1} starts`).toBe(true);
@@ -296,6 +300,22 @@ test('?wave=N boots at wave N, and Try again retries that wave', async ({ page }
   await loseRun(page);
   await tryAgain(page);
   expect(await debug(page, 'wave()')).toBe(10);
+});
+
+test("act 2's ship waves are no harder unattended than act 1's: bolts/s within the rocks/s they follow (#27)", () => {
+  // Nothing stops a bolt, so a ship wave's unattended danger is its bolt rate.
+  // Wave 4 asks no more than wave 1 would if nobody shot, wave 5 no more than wave 2.
+  const [w1, w2, , w4, w5] = RUN;
+  for (const players of [1, 2] as const) {
+    expect(shipFleetHitsPerSec(w4.ships!), `wave 4 vs wave 1 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w1.field!, players));
+    expect(shipFleetHitsPerSec(w5.ships!), `wave 5 vs wave 2 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w2.field!, players));
+  }
+  // Wave 5 steps up from wave 4: more ships at once, a bigger quota, and shields.
+  expect(w5.ships!.onScreen).toBeGreaterThan(w4.ships!.onScreen);
+  expect(w5.ships!.quota).toBeGreaterThan(w4.ships!.quota);
+  expect([w4.ships!.shieldedEvery, w5.ships!.shieldedEvery]).toEqual([0, 2]); // about half of wave 5's ships wear a bubble
+  // A ship's glide plus its hold is its whole move, so the glide always gets time.
+  for (const w of [w4, w5]) expect(w.ships!.fireEveryMs).toBeGreaterThan(ENEMY_SHIP.holdMs + 1000);
 });
 
 test('wave solver uses only standards and three-hit splitters', () => {

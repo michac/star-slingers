@@ -2,13 +2,16 @@
  * WaveDirector — owns the run: 10 waves in 4 acts, played in order from the
  * `RUN` table (src/waves.ts). It dispatches each wave by how it plays: a wave
  * with a `field` fields a finite asteroid quota (the solver's output) and
- * clears once the quota is spent and the field drains; a boss wave hands the
- * field to its encounter (the scene's startEncounter, by BossId). The command
+ * clears once the quota is spent and the field drains; a wave with `ships`
+ * (act 2's waves 4–5, #27) hands the field to the scene's ShipSquadron and
+ * clears once its ship quota is spent and the last ship is down; a boss wave
+ * hands the field to its encounter (the scene's startEncounter, by BossId). The command
  * ship reports itself down (onEncounterDefeated); the giant asteroid bursts
  * into one-hit rocks (burstBoss), and its wave then clears like a drained
  * field. State machine:
  *
  *   live | boss → between → (next wave) live | boss … → won
+ *   (a ship wave is `live` too: its ships are the field)
  *   boss → live (the giant's burst: no field, quota 0, clears on field-empty)
  *
  * Between waves (`between`): the fleet is restored (lost ships rebuilt, every
@@ -41,6 +44,7 @@ import {
   ROCK_STREAMS,
   ASTEROID_KIND,
   RUN,
+  type ShipWaveConfig,
   type Act,
   type BossId,
   type RunWave,
@@ -63,10 +67,22 @@ export interface RunHooks {
   actTransition(from: Act, to: Act, done: () => void): void;
 }
 
+/** The ship waves' field (#27: the scene's ShipSquadron). */
+export interface ShipField {
+  /** A ship wave starts: field its first ships. */
+  start(config: ShipWaveConfig): void;
+  /** Off the field at once, no more spawns (a wave jump or a forced clear). */
+  stop(): void;
+  /** Its quota is spent and no ship is in play; true when idle. */
+  readonly isClear: boolean;
+}
+
 export interface RunOptions {
   /** 1-based wave the run starts at (no banner). */
   startWave: number;
   hooks: RunHooks;
+  /** Act 2's ship waves' field (#27). */
+  ships: ShipField;
   /** Start a boss wave's encounter: the command ship reports back through
    *  onEncounterDefeated(), the giant asteroid through burstBoss(). */
   startEncounter: (boss: BossId) => void;
@@ -181,11 +197,13 @@ export class WaveDirector {
   }
 
   /** Per-frame (scene update, frozen while overlays show): the wave clears
-   *  when its quota is spent AND the field has drained empty. */
+   *  when its quota is spent AND the field has drained empty (no rocks, and
+   *  on a ship wave no ships). */
   update(_delta: number): void {
     if (this.state !== 'live') return;
     if (this.quotaRemaining > 0) return;
     if (this.asteroids.some((a) => a.isActive || a.isPopping)) return;
+    if (!this.run.ships.isClear) return;
     this.onWaveCleared();
   }
 
@@ -284,7 +302,16 @@ export class WaveDirector {
     this.waveIndex = index;
     for (const hud of this.huds) hud.setWave(this.waveNumber);
     this.run.onWaveStart(this.waveNumber);
-    const { field } = this.wave;
+    const { field, ships } = this.wave;
+    if (ships) {
+      // A ship wave (#27): no asteroids; the squadron fields the ships and
+      // the wave clears once it reports its quota spent and the ships gone.
+      this.quotaRemaining = 0;
+      this.fleet.setShieldRegenMs(ships.shieldRegenMs);
+      this.run.ships.start(ships);
+      this.state = 'live';
+      return;
+    }
     if (!field) {
       // A boss with its own encounter: no stream rocks; the encounter owns the
       // field (and the fleet's shield regen) until the boss is down.
@@ -308,9 +335,10 @@ export class WaveDirector {
     this.state = 'live';
   }
 
-  /** Remove every rock at once (DEV/test shortcuts; never scores or splits). */
+  /** Remove every rock and ship at once (DEV/test shortcuts; never scores or splits). */
   private vanishField(): void {
     for (const a of this.asteroids) a.vanish();
+    this.run.ships.stop();
   }
 
   /** Wrap a deferred step so it's dropped if another wave started meanwhile. */

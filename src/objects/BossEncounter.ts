@@ -12,8 +12,13 @@
  *   charged FIRE rounds can hit the boss only if they physically pass through a gap.
  *   won: boss HP 0 · lost: a fired charge takes the fleet's last ship.
  *
- *   Solo (#6) paces both clocks: the charge is BOSS.chargeMs and a node's regen
- *   BOSS.escortRegenMs, each ÷ SOLO.pace (pacedMs). The boss's hp doesn't change.
+ * The beam always hits the top-most live fleet ship (#27, deterministic: a
+ * fight the players don't stop works down the fleet, one ship every two
+ * beams). While the charge can fill, a pulsing magenta crosshair marks that
+ * ship, so both seats can see which one is next.
+ *
+ * Solo (#6) paces both clocks: the charge is BOSS.chargeMs and a node's regen
+ * BOSS.escortRegenMs, each ÷ SOLO.pace (pacedMs). The boss's hp doesn't change.
  *
  * Boss + escort sprites are created ONCE here (parked) so the scene's
  * rocket↔boss overlap collider — built once over `sprites` — never points at a
@@ -21,6 +26,7 @@
  */
 import Phaser from 'phaser';
 import { BOSS_LAYOUT, FLEET } from '../layout';
+import { COLORS } from '../tokens';
 import { BOSS, pacedMs } from '../waves';
 import { Boss } from './Boss';
 import { BossBars } from './BossBars';
@@ -34,12 +40,19 @@ import type { PlayerId } from './Rocket';
 type BossPhase = 'idle' | 'charging' | 'won' | 'lost';
 
 const NO_TARGETS: readonly HomingTarget[] = [];
+/** The crosshair's four ticks, as unit directions (drawn every charging frame: built once). */
+const MARK_TICKS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 export class BossEncounter {
   private readonly boss: Boss;
   private readonly bars: BossBars;
   private readonly escorts: Escort[];
   private readonly web: ShieldWeb;
+  /** The crosshair on the ship the beam will hit (#27). */
+  private readonly targetMark: Phaser.GameObjects.Graphics;
+  /** The fleet ship the crosshair is on, -1 while hidden. */
+  private markedShip = -1;
+  private markMs = 0; // the crosshair's pulse clock (update's delta)
   private phaseState: BossPhase = 'idle';
   private timer = 0; // ms of charge accrued toward chargeMs
   /** BOSS.chargeMs at this seat count (solo: slower, pacedMs). */
@@ -65,6 +78,7 @@ export class BossEncounter {
       () => new Escort(scene, () => this.onEscortDestroyed(), players === 1, escortRegenMs)
     );
     this.web = new ShieldWeb(scene, BOSS_LAYOUT.escort.webWidth);
+    this.targetMark = scene.add.graphics().setDepth(1.5);
   }
 
   get phase(): BossPhase {
@@ -96,6 +110,7 @@ export class BossEncounter {
   update(deltaMs: number): void {
     if (this.phaseState !== 'charging') return;
     this.orbitAngle += Phaser.Math.DegToRad(BOSS_LAYOUT.escort.orbitSpeedDeg) * (deltaMs / 1000);
+    this.markMs += deltaMs;
     for (const escort of this.escorts) escort.update(deltaMs); // regen timers
     this.placeEscorts(); // after regen, so a returning node is positioned before the web redraws
     this.web.update(deltaMs, this.escorts);
@@ -120,6 +135,28 @@ export class BossEncounter {
       chargeFrac: visible ? this.timer / this.chargeMs : 0,
       visible,
     });
+    this.drawTargetMark(visible);
+  }
+
+  /** The beam's next target (#27): a ring with four ticks on the top-most
+   *  live ship, pulsing, shown with the gauges. */
+  private drawTargetMark(visible: boolean): void {
+    const g = this.targetMark.clear();
+    this.markedShip = visible ? this.fleet.topMostLive() : -1;
+    if (this.markedShip < 0) return;
+    const { r, tick, width, pulseMs, minAlpha } = BOSS_LAYOUT.targetMark;
+    const pulse = 0.5 + 0.5 * Math.sin((this.markMs / pulseMs) * Math.PI * 2);
+    const { x, y } = this.fleet.shipPoint(this.markedShip);
+    g.lineStyle(width, COLORS.danger, minAlpha + (1 - minAlpha) * pulse);
+    g.strokeCircle(x, y, r);
+    for (const [dx, dy] of MARK_TICKS) {
+      g.lineBetween(x + dx * (r - tick / 2), y + dy * (r - tick / 2), x + dx * (r + tick), y + dy * (r + tick));
+    }
+  }
+
+  /** DEV/test read: the fleet ship the crosshair marks, -1 while it's hidden. */
+  get beamTarget(): number {
+    return this.markedShip;
   }
 
   /** What a SPECIAL missile can take here: the escorts, while charging. The
@@ -207,9 +244,9 @@ export class BossEncounter {
     this.web.update(0, this.escorts);
   }
 
-  /** The charge fired: the beam hits the top-most live ship (#19's placeholder
-   *  rule; #27 decides the final one). The fleet can't be empty here — losing
-   *  the last ship ends the encounter. */
+  /** The charge fired: the beam hits the top-most live ship (#27), the one the
+   *  crosshair marks. The fleet can't be empty here — losing the last ship
+   *  ends the encounter. */
   private bossFires(): void {
     const target = this.fleet.topMostLive();
     this.boss.fireBeam(this.fleet.shipPoint(target));
