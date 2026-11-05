@@ -40,7 +40,8 @@ import {
   DIFFICULTY_MODEL,
   GIANT,
   isWaveNumber,
-  paceFor,
+  shipsFor,
+  splitterMotionFor,
   ROCK_STREAMS,
   ASTEROID_KIND,
   RUN,
@@ -108,7 +109,7 @@ export class WaveDirector {
   /** The child pool — the tail of `asteroids` (indices ≥ stream count): a
    *  splitter's children and the giant asteroid's burst rocks. */
   private readonly childPool: Asteroid[];
-  /** A splitter's children's motion at this seat count: solo cruises them at SOLO.pace. */
+  /** A splitter's children's motion at this seat count (splitterMotionFor). */
   private readonly splitterMotion: ChildMotion;
 
   private waveIndex = 0;
@@ -135,11 +136,11 @@ export class WaveDirector {
     private readonly boom: (x: number, y: number, radius: number) => void,
     /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
     private readonly celebrate: () => void,
-    /** Live seats (the join screen's lineup): solo drifts each field and its
-     *  splitters' children at SOLO.pace (asteroidsFor, splitterMotion). */
+    /** Live seats (the join screen's lineup): solo plays each wave at SOLO.pace
+     *  (asteroidsFor, splitterMotionFor, shipsFor). */
     private readonly players: 1 | 2
   ) {
-    this.splitterMotion = { ...SPLITTER_CHILDREN, childSpeed: SPLITTER_CHILDREN.childSpeed * paceFor(players) };
+    this.splitterMotion = splitterMotionFor(players);
     // One wrapper per rock stream, alive for the whole run, built parked with
     // a weak default; each field wave reconfigures the streams it fields
     // (startWave), and the rest stay parked.
@@ -308,7 +309,7 @@ export class WaveDirector {
       // the wave clears once it reports its quota spent and the ships gone.
       this.quotaRemaining = 0;
       this.fleet.setShieldRegenMs(ships.shieldRegenMs);
-      this.run.ships.start(ships);
+      this.run.ships.start(shipsFor(ships, this.players));
       this.state = 'live';
       return;
     }

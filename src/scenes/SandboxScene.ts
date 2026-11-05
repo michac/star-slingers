@@ -206,13 +206,7 @@ export class SandboxScene extends Phaser.Scene {
     // Act 2's enemy ships and their bolts (#27): pooled, built once and
     // parked; the run hands them the field for waves 4–5. A bolt that takes
     // the fleet's last ship shows the fail card.
-    this.squadron = new ShipSquadron(
-      this,
-      this.fleet,
-      (x, y, r) => this.explosions.boom(x, y, r),
-      () => this.showFail(),
-      players
-    );
+    this.squadron = new ShipSquadron(this, this.fleet, (x, y, r) => this.explosions.boom(x, y, r), () => this.showFail());
 
     // Between acts the fleet flies across (#29), on the scene's update clock.
     this.actTransition = new ActTransition(this.fleet, this.starfield);

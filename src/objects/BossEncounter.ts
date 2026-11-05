@@ -274,7 +274,7 @@ export class BossEncounter {
 
   private onEscortDestroyed(): void {
     // A kill opens two adjacent web links and resets the charge; the update
-    // loop keeps it paused until the node regenerates (its regenMs).
+    // loop keeps it paused until the node regenerates (Escort.regenMs).
     this.timer = 0;
   }
 

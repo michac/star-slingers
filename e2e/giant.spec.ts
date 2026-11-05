@@ -5,7 +5,7 @@
  * popping it bursts it into one-hit rocks, and the wave clears (then the boss
  * drop runs) once they're gone. Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, SOLO_BOTTOM, type Page } from './helpers';
 import { FLEET, GAME_WIDTH, GIANT_LAYOUT, LANE, SUBLANE_H } from '../src/layout';
 import { ASTEROID_KIND, BOSS_DROPS, GIANT, RUN } from '../src/waves';
 import type { Lineup } from '../src/lineup';
@@ -63,7 +63,7 @@ test('wave 3 is the giant alone: far bigger than any rock, entering at the right
   const duo = await tripSec();
   expect(duo).toBeGreaterThan(GIANT.travelMs / 1000 - 1);
   expect(duo).toBeLessThan(GIANT.travelMs / 1000 + 1);
-  await gotoGame(page, '?wave=3', { p2: 'normal' });
+  await gotoGame(page, '?wave=3', SOLO_BOTTOM);
   expect(await tripSec()).toBeCloseTo(duo, 6);
 });
 

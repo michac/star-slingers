@@ -64,6 +64,10 @@ export const test = base.extend<{ consoleGate: void }>({
 });
 
 export const SCENE = `window.__game.scene.keys['Sandbox']`;
+/** Both seats Normal: the co-op lineup gotoGame boots by default. */
+export const DUO: Partial<Lineup> = { p1: 'normal', p2: 'normal' };
+/** Solo in the bottom seat (the top seat empty). */
+export const SOLO_BOTTOM: Partial<Lineup> = { p2: 'normal' };
 /** The join screen (#20), the scene every boot opens on. */
 export const JOIN_SCENE = `window.__game.scene.keys['Join']`;
 
@@ -72,7 +76,7 @@ export const JOIN_SCENE = `window.__game.scene.keys['Join']`;
  *  the co-op every older case assumes). `'join'` stops on the join screen
  *  instead, for the cases that drive it with touches. Either way the RAF loop
  *  is parked on return. */
-export async function gotoGame(page: Page, query = '', lineup: Partial<Lineup> | 'join' = { p1: 'normal', p2: 'normal' }): Promise<void> {
+export async function gotoGame(page: Page, query = '', lineup: Partial<Lineup> | 'join' = DUO): Promise<void> {
   // Default 'load' (not 'networkidle' — Vite HMR keeps the socket busy).
   await page.goto('/' + query);
   await page.waitForSelector('#game canvas', { timeout: 15_000 });

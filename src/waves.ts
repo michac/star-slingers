@@ -12,7 +12,7 @@
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN } from './layout';
+import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN, type ChildMotion } from './layout';
 import type { SpecialKind } from './objects/specials';
 
 export interface AsteroidSpec {
@@ -215,11 +215,11 @@ export function startWaveFromQuery(search: string): number {
  * fields exactly the enemies a two-player run does (counts, kinds, hp, quota);
  * only what sets the pace slows, by `pace`:
  *   - field waves' rocks (and a splitter's children) drift at speed × pace
- *     (asteroidsFor), so the solver's composition, the wave's two-hit rocks
- *     or splitters included, is the two-player one;
+ *     (asteroidsFor, splitterMotionFor), so the solver's composition, the
+ *     wave's two-hit rocks or splitters included, is the two-player one;
  *   - every pacing duration — the command ship's beam charge and a downed
- *     escort's regen, a ship wave's time between shots — is ms ÷ pace
- *     (pacedMs). Route any pace-dependent interval through it.
+ *     escort's regen, a ship wave's time between shots (shipsFor) — is
+ *     ms ÷ pace (pacedMs). Route any pace-dependent interval through it.
  * Solo leaves alone: the fleet's shield regen, enemy bolt speed and the
  * giant asteroid (its solo rule is already per-seat even:
  * any charged hit is a point; its drift isn't slowed).
@@ -357,6 +357,11 @@ export function asteroidsFor(wave: WaveConfig, players: 1 | 2): AsteroidSpec[] {
   return solveWave(wave.required, leakAllowancePerSec(wave), wave.topKind).map((spec) => ({ ...spec, speed: spec.speed * pace }));
 }
 
+/** A splitter's children's motion at this seat count: solo cruises them at SOLO.pace. */
+export function splitterMotionFor(players: 1 | 2): ChildMotion {
+  return { ...SPLITTER_CHILDREN, childSpeed: SPLITTER_CHILDREN.childSpeed * paceFor(players) };
+}
+
 /** Accurate damage/s a wave actually demands (post-solve). */
 export function threatDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
   return threatOf(asteroidsFor(wave, players));
@@ -390,10 +395,16 @@ export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
 // asteroid waves the kids have already learned: the rate their rocks would
 // reach the fleet if nobody shot any.
 
+/** The ship wave a seat count plays: the same ships and quota; solo stretches
+ *  each ship's move (fireEveryMs) by pacedMs. */
+export function shipsFor(ships: ShipWaveConfig, players: 1 | 2): ShipWaveConfig {
+  return { ...ships, fireEveryMs: pacedMs(ships.fireEveryMs, players) };
+}
+
 /** Bolts/s reaching the fleet if nobody shoots: each ship in play fires one
- *  per fireEveryMs (solo: per pacedMs of it, #6). */
+ *  per fireEveryMs at this seat count (shipsFor). */
 export function shipFleetHitsPerSec(ships: ShipWaveConfig, players: 1 | 2): number {
-  return (ships.onScreen * 1000) / pacedMs(ships.fireEveryMs, players);
+  return (ships.onScreen * 1000) / shipsFor(ships, players).fireEveryMs;
 }
 
 /** Rocks/s reaching the fleet if nobody shoots: each stream fields a rock per
