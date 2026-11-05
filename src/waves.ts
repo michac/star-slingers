@@ -224,11 +224,12 @@ export function startWaveFromQuery(search: string): number {
  * giant asteroid (its solo rule is already per-seat even:
  * any charged hit is a point; its drift isn't slowed).
  *
- * Tuning: 0.7 has a solo player carry ~70% of the team's work, about what
- * the stronger player carries in co-op (Michael, #6 D2). 0.5 is an even
- * split; toward 1.0 is harder (1.0 = the two-player pace). The dev boot log
- * prints each field wave's solo break-even beside its two-player one. The
- * phone playtest that calibrates it is #45.
+ * Tuning: 0.7 plays solo at 70% of the co-op pace (Michael, #6 D2). Shield
+ * regen forgives misses at the same rate either way, so a field wave's solo
+ * required damage/s comes out at ~60–70% of the team's. Lower is gentler;
+ * 1.0 is the two-player pace. The dev boot log prints each field wave's solo
+ * required damage/s and break-even beside its two-player ones. The phone
+ * playtest that calibrates it is #45.
  */
 export const SOLO = {
   pace: 0.7,

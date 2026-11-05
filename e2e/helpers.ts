@@ -263,7 +263,7 @@ export async function winToFreshRun(page: Page): Promise<void> {
   await page.evaluate(`${SCENE}.victoryOverlay.tapZone.emit('pointerdown')`);
   await stepGame(page, 16, 2);
   expect(await sceneActive(page, 'Join')).toBe(true);
-  await page.evaluate(`${JOIN_SCENE}.__debug.startRun({ p1: 'normal', p2: 'normal' })`);
+  await page.evaluate(`${JOIN_SCENE}.__debug.startRun(${JSON.stringify(DUO)})`);
   await stepGame(page, 16, 2);
 }
 export const score = (page: Page) => page.evaluate(`${SCENE}.__debug.score()`) as Promise<number>;

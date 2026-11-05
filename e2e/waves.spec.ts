@@ -362,7 +362,8 @@ test('solo plays the same field as two players at SOLO.pace (#6)', () => {
     // Two players get the solver's field for the wave's own target, untouched.
     expect(duo).toEqual(solveWave(w.required, leakAllowancePerSec(w), w.topKind));
     // Solo: the same rocks (count, kind, size, hp), each drifting at the pace.
-    expect(solo.map(({ kind, radius, hp }) => ({ kind, radius, hp }))).toEqual(duo.map(({ kind, radius, hp }) => ({ kind, radius, hp })));
+    const shape = (spec: (typeof duo)[number]) => ({ kind: spec.kind, radius: spec.radius, hp: maxHpOf(spec) });
+    expect(solo.map(shape)).toEqual(duo.map(shape));
     solo.forEach((spec, i) => expect(spec.speed).toBeCloseTo(duo[i].speed * SOLO.pace, 10));
     // A solo seat lands more than a co-op seat's share, but less than double.
     expect(breakEvenAccuracy(w, 1)).toBeGreaterThan(breakEvenAccuracy(w, 2));

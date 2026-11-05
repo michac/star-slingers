@@ -29,13 +29,14 @@ if (import.meta.env.DEV) {
     }
     const specs = asteroidsFor(w, 2);
     const count = (k: string) => specs.filter((s) => s.kind === k).length;
-    const speedScale = (specs[0].speed / ROCK_STREAMS[0].baseSpeed).toFixed(2);
+    const speedScale = (players: 1 | 2) => (asteroidsFor(w, players)[0].speed / ROCK_STREAMS[0].baseSpeed).toFixed(2);
     const pct = (players: 1 | 2) => `${(breakEvenAccuracy(w, players) * 100).toFixed(0)}%`;
     console.log(
       `${label}: target ${w.required.toFixed(2)} -> achieved ` +
         `${requiredDamagePerSec(w, 2).toFixed(2)} required damage/s ` +
-        `[streams ${specs.length}, speed x${speedScale}, tough ${count('tough')}, splitters ${count('splitter')}], ` +
-        `break-even 2p ${pct(2)} / solo ${pct(1)} (pace x${SOLO.pace}), quota ${w.quota}`
+        `[streams ${specs.length}, speed x${speedScale(2)}, tough ${count('tough')}, splitters ${count('splitter')}], ` +
+        `break-even 2p ${pct(2)}; solo (pace x${SOLO.pace}): speed x${speedScale(1)}, ` +
+        `${requiredDamagePerSec(w, 1).toFixed(2)} required damage/s, break-even ${pct(1)}; quota ${w.quota}`
     );
   }
 }
