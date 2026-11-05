@@ -56,11 +56,13 @@ test('the run is one table of 10 waves in 4 acts', () => {
   ]);
   expect(RUN.filter((w) => w.kind === 'boss').map((w) => RUN.indexOf(w) + 1)).toEqual([3, 6, 9]);
   expect(COMMAND_SHIP_WAVE).toBe(6);
-  // The giant asteroid (#25) and the command ship are played by their own
-  // encounters, act 2's waves 4–5 by enemy ships (#27); every other wave is a solver field.
-  expect(RUN.filter((w) => !w.field && !w.ships).map((w) => w.boss)).toEqual(['giantAsteroid', 'commandShip']);
+  // The three bosses are played by their own encounters, act 2's waves 4–5
+  // by enemy ships (#27), act 3's waves 7–8 by space jellies (#28); every
+  // other wave is a solver field.
+  expect(RUN.filter((w) => !w.field && !w.ships && !w.monsters).map((w) => w.boss)).toEqual(['giantAsteroid', 'commandShip', 'monsterBoss']);
   expect(RUN.flatMap((w, i) => (w.ships ? [i + 1] : []))).toEqual([4, 5]);
-  expect(RUN.every((w) => !(w.ships && w.field))).toBe(true);
+  expect(RUN.flatMap((w, i) => (w.monsters ? [i + 1] : []))).toEqual([7, 8]);
+  expect(RUN.every((w) => [w.field, w.ships, w.monsters].filter(Boolean).length <= 1)).toBe(true);
   // Act 1's solver lever, one new rock per wave (#25): none in wave 1, two-hit rocks in wave 2.
   expect(RUN.slice(0, 2).map((w) => w.field?.topKind)).toEqual(['standard', 'tough']);
   // Try again's target: each act's first wave.
@@ -122,7 +124,7 @@ test('the run plays waves 1 to 10 in order with breathers, then wins', async ({ 
     const n = i + 1;
     const w = RUN[i];
     expect(row, `wave ${n}`).toMatchObject({ wave: n, act: w.act, kind: w.boss ?? w.kind, won: false, cleared: true });
-    expect(row.state, `wave ${n}`).toBe(w.field || w.ships ? 'live' : 'boss'); // a ship wave plays live (#27)
+    expect(row.state, `wave ${n}`).toBe(w.field || w.ships || w.monsters ? 'live' : 'boss'); // a squad wave plays live (#27, #28)
     if (n < 10) {
       expect(row.banner, `banner announces wave ${n + 1}`).toBe(true);
       expect(row.next, `wave ${n + 1} starts`).toBe(true);
@@ -289,7 +291,7 @@ test('Try again after a loss restarts at the first wave of that act', async ({ p
 
 test('?wave=N boots at wave N, and Try again retries that wave', async ({ page }) => {
   await gotoGame(page, '?wave=9');
-  expect(await runState(page)).toMatchObject({ wave: 9, act: 3, kind: 'monsterBoss', state: 'live' });
+  expect(await runState(page)).toMatchObject({ wave: 9, act: 3, kind: 'monsterBoss', state: 'boss' });
   await loseRun(page);
   await tryAgain(page);
   expect(await debug(page, 'wave()')).toBe(9); // the shortcut pins the retry, not act 3's start

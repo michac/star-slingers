@@ -477,6 +477,48 @@ export const ENEMY_BOLT = {
 } as const;
 
 /**
+ * Act 3's space jellies (#28) GEOMETRY + motion (balance dials, hp and heal
+ * timing, are JELLY / MOTHER in waves.ts). A jelly is a glowing dome with
+ * tentacles trailing behind it; it swims in PULSES (a short surge, then a long
+ * glide, pulseMs apart) at the nearest live fleet ship, turning at turnRateDeg,
+ * and stays inside the lane. It enters just off the right edge, staggered up
+ * to entryGapMax so a wave's jellies don't arrive stacked. A baby (the mother
+ * jelly's brood) is a smaller, quicker copy.
+ */
+export const JELLY_LAYOUT = {
+  radius: 14,
+  babyRadius: 9,
+  cruiseSpeed: 30, // px/s averaged over a pulse (~9 s across the field)
+  babySpeed: 40,
+  pulseMs: 1400, // one surge + glide
+  surgeFrac: 0.3, // the surge is this fraction of the pulse...
+  surgeMul: 1.9, // ...at this × the cruise speed; the glide eases from glideMul... (avg ≈ 1)
+  glideMul: 0.6,
+  squash: 0.14, // the surge stretches the body this much along its heading
+  turnRateDeg: 70,
+  entryGapMax: 160, // fielded up to this far past the right edge
+  hitFlashMs: 90,
+  popMs: 180,
+  halo: { pad: 5, width: 3, alpha: 0.85 }, // the heal glow: a COLORS.health ring while it heals
+  poolSize: 12, // wave jellies on screen + the mother's babies
+} as const;
+
+/** The mother jelly (#28, wave 9's boss) GEOMETRY: a big jelly that slides in
+ *  from the right edge to x, then bobs slowly up and down the lane. */
+export const MOTHER_LAYOUT = {
+  radius: 40,
+  x: GAME_WIDTH - 62,
+  enterFromX: GAME_WIDTH + 50,
+  enterMs: 1500,
+  bobAmp: 100, // px either side of the lane's centre line
+  bobMs: 7000, // one full bob
+  hitFlashMs: 90,
+  popMs: 260,
+  /** Its babies leave from just in front of it, fanned this far up and down. */
+  releaseSpreadY: 26,
+} as const;
+
+/**
  * Final boss (B5) GEOMETRY. The boss slides in from the right and parks at
  * center — fully on screen, equidistant from both seats — and is stationary
  * while battling. 4 escorts slowly orbit it at a radius kept OUTSIDE the boss
@@ -622,6 +664,8 @@ export const SCORE = {
   splitter: 20,
   ship: 10, // an enemy ship (#27)
   shieldedShip: 20, // a wave-5 ship that wore a bubble
+  jelly: 30, // a 3-hp space jelly (#28)
+  babyJelly: 10, // the mother jelly's brood
   popup: { riseScale: 1.4, durationMs: 650, fontPx: 18 }, // floating "+N"
 } as const;
 

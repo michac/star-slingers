@@ -36,6 +36,10 @@ export const COLORS = {
   rockToughFill: 0x4a1660,
   rockToughRim: 0xc2186e,
   crater: 0xff7ab3, // .crater
+  // Act 3's space jellies (#28): an acid green, far from the magenta ships and
+  // rocks, and yellower than COLORS.health so the heal halo still reads on them.
+  monster: 0xb6ff3a, // body + tentacles
+  monsterDeep: 0x2f5a12, // the dome's darker inner shade
   star: 0xbfefff, // .star (bright cyan-white, was lineDim)
 
   // The #neon-shield gradient stops (outer→inner). A fleet ship's shield bubble

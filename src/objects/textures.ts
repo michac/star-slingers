@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT, ENEMY_BOLT, ENEMY_SHIP, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, PODS, STARFIELD } from '../layout';
+import { BOSS_LAYOUT, ENEMY_BOLT, ENEMY_SHIP, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, JELLY_LAYOUT, MOTHER_LAYOUT, PODS, STARFIELD } from '../layout';
 import { drawDashedLine } from './draw';
 import { ASTEROID_KIND, type AsteroidKind } from '../waves';
 
@@ -20,6 +20,8 @@ export const TEX = {
   escortP2Lock: 'escort-p2-lock', // amber lock remains
   enemyShip: 'enemy-ship', // #27 act 2's ship: the escort's dart, solid magenta, no fins
   enemyBolt: 'enemy-bolt', // #27 its slow glowing shot
+  /** #28 a space jelly of dome radius r (the wave jelly, a baby, the mother). */
+  jelly: (r: number) => `jelly-${r}`,
   heart: 'icon-heart', // B5 health-bar cap (white, tinted at use)
   bolt: 'icon-bolt', // B5 charge-bar cap (white, tinted at use)
   spark: 'px-spark', // B29 explosion: white dot → additive white-hot sparks
@@ -74,6 +76,7 @@ export function generateTextures(scene: Phaser.Scene): void {
   makeEscort(scene);
   makeEnemyShip(scene);
   makeEnemyBolt(scene);
+  for (const r of [JELLY_LAYOUT.radius, JELLY_LAYOUT.babyRadius, MOTHER_LAYOUT.radius]) makeJelly(scene, r);
   makeHeart(scene);
   makeBolt(scene);
   makeSpark(scene);
@@ -351,6 +354,66 @@ function makeEnemyBolt(scene: Phaser.Scene): void {
   g.fillStyle(COLORS.white, 0.9);
   g.fillCircle(c, c, r * 0.45);
   g.generateTexture(TEX.enemyBolt, c * 2, c * 2);
+  g.destroy();
+}
+
+/** Where a jelly's dome centre sits in its texture, as fractions of the
+ *  texture's size (the image origin, so the image's position IS the dome's
+ *  centre), and the texture's size, both for dome radius r. */
+export const JELLY_TEX = {
+  width: (r: number) => Math.ceil(r * 2.4),
+  height: (r: number) => Math.ceil(r * 3),
+  originX: 0.5,
+  originY: 1.1 / 3,
+} as const;
+
+/** #28 space jelly: a glowing acid-green dome, nose up (Jelly rotates it to
+ *  its heading), with a scalloped skirt and four wavy tentacles trailing down
+ *  behind it. A dark inner shade and a bright rim and highlight make it read
+ *  as soft and alive, not as a rock or a ship. */
+function makeJelly(scene: Phaser.Scene, r: number): void {
+  const key = TEX.jelly(r);
+  if (scene.textures.exists(key)) return;
+  const w = JELLY_TEX.width(r);
+  const h = JELLY_TEX.height(r);
+  const cx = w * JELLY_TEX.originX;
+  const cy = h * JELLY_TEX.originY;
+  const skirtY = cy + r * 0.5;
+  const g = scene.make.graphics({}, false);
+  // Tentacles first, under the dome: wavy lines from the skirt to the tail.
+  g.lineStyle(Math.max(1.5, r * 0.16), COLORS.monster, 0.85);
+  for (const fx of [-0.6, -0.2, 0.2, 0.6]) {
+    const pts: Phaser.Math.Vector2[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const u = k / 10;
+      const y = skirtY + u * (h - skirtY - 2);
+      const x = cx + fx * r * (1 - 0.25 * u) + Math.sin(u * Math.PI * 2.2 + fx * 4) * r * 0.16 * u;
+      pts.push(new Phaser.Math.Vector2(x, y));
+    }
+    g.strokePoints(pts, false);
+  }
+  // The dome: a half-disc on a short skirt, dark inside, bright at the rim.
+  const dome: Phaser.Math.Vector2[] = [];
+  for (let k = 0; k <= 20; k++) {
+    const a = Math.PI + (k / 20) * Math.PI; // left → over the top → right
+    dome.push(new Phaser.Math.Vector2(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
+  }
+  // The scalloped skirt, right → left.
+  for (let k = 0; k <= 8; k++) {
+    const u = k / 8;
+    const x = cx + r - u * 2 * r;
+    const y = cy + (k % 2 === 0 ? r * 0.5 : r * 0.32);
+    dome.push(new Phaser.Math.Vector2(x, y));
+  }
+  g.fillStyle(COLORS.monsterDeep, 1);
+  g.fillPoints(dome, true);
+  g.fillStyle(COLORS.monster, 0.35);
+  g.fillCircle(cx, cy - r * 0.05, r * 0.72);
+  g.lineStyle(Math.max(1.5, r * 0.12), COLORS.monster, 1);
+  g.strokePoints(dome, true);
+  g.fillStyle(COLORS.white, 0.55); // a glint high on the dome
+  g.fillCircle(cx - r * 0.35, cy - r * 0.45, Math.max(1, r * 0.16));
+  g.generateTexture(key, w, h);
   g.destroy();
 }
 

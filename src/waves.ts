@@ -12,7 +12,7 @@
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN } from './layout';
+import { AMMO, AMMO_REGEN_MS, FLEET, GAME_WIDTH, JELLY_LAYOUT, MOTHER_LAYOUT, SPECIAL, SPLITTER_CHILDREN } from './layout';
 import type { SpecialKind } from './objects/specials';
 
 export interface AsteroidSpec {
@@ -102,9 +102,8 @@ export interface WaveConfig {
 /** The run's four acts: 1 asteroids, 2 ships, 3 space monsters, 4 the finale. */
 export type Act = 1 | 2 | 3 | 4;
 
-/** What a wave fields. Each kind gets its real content from its act's issue
- *  (#25 asteroids, #27 ships, #28 monsters); until then a `placeholder` wave
- *  plays as a solver asteroid field. */
+/** What a wave fields: asteroids (#25), enemy ships (#27), space jellies
+ *  (#28), a boss, or the finale's asteroid field. */
 export type WaveKind = 'asteroid' | 'ship' | 'monster' | 'boss' | 'finale';
 
 /** Which boss a `boss` wave is: the giant asteroid ends act 1, the command
@@ -128,19 +127,32 @@ export interface ShipWaveConfig {
   shieldRegenMs: number; // a fleet ship's shield regrows after this long unhit
 }
 
+/** A monster wave (#28, act 3): space jellies swim at the fleet
+ *  (JellySwarm). Like a ship wave it has its own dials, not the solver's. A
+ *  jelly has JELLY.hp and heals: healPauseMs after its last hit it starts
+ *  climbing back, empty to full in healFullMs, so a jelly is killed by hits
+ *  landing close together. */
+export interface MonsterWaveConfig {
+  onScreen: number; // jellies in play at once; a gone jelly's place is refilled from the quota
+  quota: number; // total jellies this wave fields (the initial ones included)
+  healPauseMs: number; // a hit stops the heal this long
+  healFullMs: number; // then it heals empty → full in this long
+  shieldRegenMs: number; // a fleet ship's shield regrows after this long unhit
+}
+
 /** One wave of the run. A wave with a `field` is played by the difficulty
- *  solver (an asteroid field today), a wave with `ships` by the ShipSquadron;
- *  a boss with neither is played by its own encounter (the giant asteroid by
- *  GiantAsteroid with the GIANT dials, the command ship by the BossEncounter
- *  with the BOSS dials). */
+ *  solver (an asteroid field), a wave with `ships` by the ShipSquadron, a
+ *  wave with `monsters` by the JellySwarm; a boss with none of them is played
+ *  by its own encounter (the giant asteroid by GiantAsteroid with the GIANT
+ *  dials, the command ship by the BossEncounter with the BOSS dials, the
+ *  mother jelly by MotherJelly with the MOTHER dials). */
 export interface RunWave {
   act: Act;
   kind: WaveKind;
   boss?: BossId;
   field?: WaveConfig;
   ships?: ShipWaveConfig;
-  /** Plays as an asteroid field until its act's issue builds the real content. */
-  placeholder?: true;
+  monsters?: MonsterWaveConfig;
 }
 
 /**
@@ -155,7 +167,9 @@ export interface RunWave {
  * toward ~0.25. Act 2 (#27) plays its first two waves as enemy ships (their
  * own dials, ShipWaveConfig): W4 two at a time, W5 three with every second
  * one shielded. Each eases its unattended fleet-hit rate below the matching
- * act-1 wave's (W4 under W1, W5 under W2). Act 3's waves are placeholders.
+ * act-1 wave's (W4 under W1, W5 under W2). Act 3 (#28) plays its first two
+ * waves as space jellies (MonsterWaveConfig): W7 three at a time, healing
+ * empty → full in 3 s; W8 four, healing in 2 s. W9 is the mother jelly (MOTHER).
  * All revisable in playtest. Tune by the dev boot log (target vs achieved +
  * tier; a ship wave logs its bolts/s).
  *
@@ -170,16 +184,16 @@ export const RUN: readonly RunWave[] = [
   { act: 2, kind: 'ship', ships: { onScreen: 2, quota: 6, shieldedEvery: 0, fireEveryMs: 8000, shieldRegenMs: 11000 } },
   { act: 2, kind: 'ship', ships: { onScreen: 3, quota: 8, shieldedEvery: 2, fireEveryMs: 8000, shieldRegenMs: 13000 } },
   { act: 2, kind: 'boss', boss: 'commandShip' },
-  { act: 3, kind: 'monster', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
-  { act: 3, kind: 'monster', placeholder: true, field: { required: 0.75, quota: 14, shieldRegenMs: 15000 } },
-  { act: 3, kind: 'boss', boss: 'monsterBoss', placeholder: true, field: { required: 0.75, quota: 14, shieldRegenMs: 15000 } },
+  { act: 3, kind: 'monster', monsters: { onScreen: 3, quota: 8, healPauseMs: 500, healFullMs: 3000, shieldRegenMs: 13000 } },
+  { act: 3, kind: 'monster', monsters: { onScreen: 4, quota: 10, healPauseMs: 500, healFullMs: 2000, shieldRegenMs: 15000 } },
+  { act: 3, kind: 'boss', boss: 'monsterBoss' },
   { act: 4, kind: 'finale', field: { required: 0.9, quota: 24, shieldRegenMs: 8000 } },
 ];
 
 /** What each boss drops when it's popped (#26): the two upgrade pods' specials,
  *  in pod order (left, right). The command ship drops the giant asteroid's
- *  pair until its laser + helper drone are built (#42), and the monster boss
- *  until #28 picks its own; each edits its row. */
+ *  pair until its laser + helper drone are built (#42), and the mother jelly
+ *  until its Swarm + Mega laser are (#43); each edits its row. */
 export const BOSS_DROPS: Record<BossId, readonly [SpecialKind, SpecialKind]> = {
   giantAsteroid: ['triple', 'detonator'],
   commandShip: ['triple', 'detonator'],
@@ -250,6 +264,35 @@ export const GIANT = {
   travelMs: 30000, // its leading edge's trip from the right edge to the fleet's bubble front
   burstCount: 6, // one-hit rocks it bursts into
   shieldRegenMs: 13000, // regen during the wave (its burst rocks can pop shields)
+} as const;
+
+/**
+ * Space jelly (#28) BALANCE dial: its hp. Every hit counts (plain 1, charged
+ * 2, missile 1, blast 2), so a charged round helps but never kills one alone;
+ * its heal timing is the wave's (MonsterWaveConfig). Motion is JELLY_LAYOUT.
+ */
+export const JELLY = {
+  hp: 3,
+} as const;
+
+/**
+ * Mother jelly (#28) BALANCE dials — wave 9, act 3's boss (geometry is
+ * MOTHER_LAYOUT). It hangs at the lane's right end, bobbing, and releases
+ * `babiesPerRelease` one-hit baby jellies every `releaseEveryMs`; they swim
+ * at the fleet like any jelly. Every weapon hurts it, and it heals like a
+ * jelly (empty → full in healFullMs, healPauseMs after its last hit), so it
+ * can climb all the way back from nearly dead. Its pop pops every baby still
+ * in flight. Tuned so it outlives the fleet if the babies are ignored
+ * (motherFocusKillMs vs babyWipeMs below; the e2e suite checks both).
+ */
+export const MOTHER = {
+  hp: 140,
+  healPauseMs: 1200, // longer than a round's regen, so one seat's steady fire keeps the heal stopped
+  healFullMs: 30000,
+  firstReleaseMs: 1000, // after it has slid in
+  releaseEveryMs: 2500,
+  babiesPerRelease: 2,
+  shieldRegenMs: 15000,
 } as const;
 
 /**
@@ -382,4 +425,38 @@ export function shipFleetHitsPerSec(ships: ShipWaveConfig): number {
  *  whatever its hp. */
 export function fieldFleetHitsPerSec(wave: WaveConfig, players: 1 | 2): number {
   return asteroidsFor(wave, players).reduce((sum, a) => sum + a.speed / TRAVEL_DIST, 0);
+}
+
+// ---- the mother jelly (#28): does it outlive an ignored brood? ----
+// The design (#28 D6): the fight is shooting the mother while still
+// intercepting her babies, so she must survive long enough that babies left
+// alone would wipe the fleet. Both sides here are deliberately generous to the
+// players: the fastest focus kill, and the slowest baby wipe.
+
+/** Fleet hits that lose every ship (each ship: shield, then hull). */
+const FLEET_HITS_TO_WIPE = 2 * 4;
+
+/** A baby's trip from the mother's front to the fleet's bubble fronts, at its
+ *  cruise speed (the straight-line part; it also climbs to its ship's row). */
+function babyTravelMs(): number {
+  return ((MOTHER_LAYOUT.x - MOTHER_LAYOUT.radius - FLEET.bubbleFrontX) / JELLY_LAYOUT.babySpeed) * 1000;
+}
+
+/** How long the mother's babies take to wipe the fleet if nobody shoots any:
+ *  her entry, the releases until FLEET_HITS_TO_WIPE babies are out, and the
+ *  last one's trip. */
+export function babyWipeMs(): number {
+  const releases = Math.ceil(FLEET_HITS_TO_WIPE / MOTHER.babiesPerRelease);
+  return MOTHER_LAYOUT.enterMs + MOTHER.firstReleaseMs + (releases - 1) * MOTHER.releaseEveryMs + babyTravelMs();
+}
+
+/** The fastest the seats could kill her shooting nothing else: every round
+ *  charged, every special a triple missile (the strongest special so far),
+ *  starting from full ammo, with her heal never running (steady fire keeps it
+ *  stopped). Normal seats; an Easy seat has no ammo limit. */
+export function motherFocusKillMs(players: 1 | 2): number {
+  const tripleDamage = 3 * DAMAGE.missile;
+  const perSeat = (1000 / AMMO_REGEN_MS) * DAMAGE.charged + (1000 / SPECIAL.regenMs) * tripleDamage;
+  const burst = players * (AMMO.max * DAMAGE.charged + SPECIAL.max * tripleDamage);
+  return (Math.max(0, MOTHER.hp - burst) / (players * perSeat)) * 1000;
 }
