@@ -28,6 +28,7 @@ import {
   liveShots,
   touchscreen,
   v2Layout,
+  clearGiantField,
   type Page,
   type Pt,
   type Touchscreen,
@@ -45,7 +46,7 @@ const pods = (page: Page) => debug<PodState>(page, 'pods()');
 /** Clear wave 3 (the giant-asteroid boss wave) so its real drop starts. */
 async function dropPods(page: Page): Promise<void> {
   await debug(page, 'jumpToWave(3)');
-  await debug(page, 'clearWave()');
+  await clearGiantField(page);
   await stepGame(page, 16, 2); // the wave clears, the bossDrop hook starts the drop
   expect(await pods(page)).toMatchObject({ phase: 'live', kinds: [...BOSS_DROPS.giantAsteroid] });
 }

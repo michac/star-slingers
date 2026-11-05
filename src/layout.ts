@@ -380,6 +380,56 @@ export const VICTORY_ICON = {
 } as const;
 
 /**
+ * Giant asteroid (#25) GEOMETRY — act 1's boss. A boulder about as tall as one
+ * sublane (3.4× a standard rock's radius), centred on the lane so it never
+ * leaves it, entering just off the right edge and drifting straight left
+ * (its speed comes from GIANT.travelMs in waves.ts). Balance dials live there.
+ */
+export const GIANT_LAYOUT = {
+  radius: 44,
+  y: (LANE.top + LANE.bottom) / 2,
+  /** Extra craters on top of the rock drawing, as (x, y, r) fractions of the radius. */
+  extraCraters: [
+    [0.1, -0.55, 0.14],
+    [-0.45, 0.45, 0.17],
+    [0.5, -0.15, 0.1],
+    [-0.05, 0.25, 0.09],
+  ],
+  /** The two-player lock ring (one seat's charged hit waiting for the other's):
+   *  a circle just outside the rim in that seat's colour, fading as its window runs out. */
+  ring: { pad: 7, width: 4, alpha: 0.95 },
+  hitFlashMs: 90, // a damaging hit flashes it white this long (counted on update's delta)
+  /** The burst: its rocks fan out evenly up and down the lane (the outer pair
+   *  spreadY above and below the giant's row, on the outer sublanes' ships, so
+   *  every ship is threatened), easing only driftX to the left as they spread,
+   *  then drift left like a splitter's children. Their own ChildMotion: a
+   *  no-hit grace long enough for the 560 px/s charged round that popped the
+   *  giant to carry on clear of them (they sit still under the boom meanwhile:
+   *  a body that's off doesn't move, so scatterMs counts the grace too, and
+   *  they spread over scatterMs − spawnGraceMs); and a lifetime cap that
+   *  outlasts the trip to the fleet from a pop at the right edge (~8 s at the
+   *  cruise speed). */
+  burst: {
+    spreadY: 1.5 * SUBLANE_H, // the outer sublanes' centres, from the lane's centre line
+    driftX: 40,
+    childSpeed: 45, // SPLITTER_CHILDREN's cruise
+    scatterMs: 1000,
+    spawnGraceMs: 400,
+    lifetimeMs: 10000,
+  },
+} as const;
+
+/** How a scatter child moves once launched: its cruise, scatter time, spawn
+ *  grace and lifetime cap (SPLITTER_CHILDREN for a splitter's,
+ *  GIANT_LAYOUT.burst for the giant's). */
+export type ChildMotion = {
+  readonly childSpeed: number;
+  readonly scatterMs: number;
+  readonly spawnGraceMs: number;
+  readonly lifetimeMs: number;
+};
+
+/**
  * Final boss (B5) GEOMETRY. The boss slides in from the right and parks at
  * center — fully on screen, equidistant from both seats — and is stationary
  * while battling. 4 escorts slowly orbit it at a radius kept OUTSIDE the boss
@@ -511,12 +561,14 @@ export const HUD_ROWS = {
 } as const;
 
 /**
- * Scoring presentation — standards score 10 and splitters score 20 immediately;
- * their two children score 10 each. The popup grows-and-fades in place (orientation-neutral so it
+ * Scoring presentation — standards score 10, two-hit rocks 20, and splitters
+ * 20 immediately; a splitter's two children (and the giant asteroid's burst
+ * rocks) score 10 each. The giant itself is unscored, like the command ship. The popup grows-and-fades in place (orientation-neutral so it
  * reads the same from both seats); the HUD number is the canonical read.
  */
 export const SCORE = {
   standard: 10,
+  tough: 20,
   splitter: 20,
   popup: { riseScale: 1.4, durationMs: 650, fontPx: 18 }, // floating "+N"
 } as const;

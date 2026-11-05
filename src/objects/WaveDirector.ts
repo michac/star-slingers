@@ -2,10 +2,14 @@
  * WaveDirector — owns the run: 10 waves in 4 acts, played in order from the
  * `RUN` table (src/waves.ts). It dispatches each wave by how it plays: a wave
  * with a `field` fields a finite asteroid quota (the solver's output) and
- * clears once the quota is spent and the field drains; the command ship hands
- * the field to the BossEncounter until it reports the boss down. State machine:
+ * clears once the quota is spent and the field drains; a boss wave hands the
+ * field to its encounter (the scene's startEncounter, by BossId). The command
+ * ship reports itself down (onEncounterDefeated); the giant asteroid bursts
+ * into one-hit rocks (burstBoss), and its wave then clears like a drained
+ * field. State machine:
  *
  *   live | boss → between → (next wave) live | boss … → won
+ *   boss → live (the giant's burst: no field, quota 0, clears on field-empty)
  *
  * Between waves (`between`): the fleet is restored (lost ships rebuilt, every
  * shield back), the star-shower plays, then the interlude hooks run in order:
@@ -26,16 +30,18 @@
  * the wave that restart begins at.
  */
 import Phaser from 'phaser';
-import { LANE, SPLITTER_CHILDREN, SUBLANE_H, sublaneCenterY } from '../layout';
+import { GIANT_LAYOUT, LANE, SPLITTER_CHILDREN, SUBLANE_H, sublaneCenterY, type ChildMotion } from '../layout';
 import {
   asteroidsFor,
   BREATHER,
   DIFFICULTY_MODEL,
+  GIANT,
   isWaveNumber,
   ROCK_STREAMS,
   ASTEROID_KIND,
   RUN,
   type Act,
+  type BossId,
   type RunWave,
 } from '../waves';
 import { Asteroid } from './Asteroid';
@@ -60,9 +66,9 @@ export interface RunOptions {
   /** 1-based wave the run starts at (no banner). */
   startWave: number;
   hooks: RunHooks;
-  /** Start the command-ship encounter; the scene reports back through
-   *  onEncounterDefeated(). */
-  startEncounter: () => void;
+  /** Start a boss wave's encounter: the command ship reports back through
+   *  onEncounterDefeated(), the giant asteroid through burstBoss(). */
+  startEncounter: (boss: BossId) => void;
   /** Stop the encounter (a wave jump away from it). */
   stopEncounter: () => void;
   /** Stop the interludes' own work if one is still playing (a wave jump
@@ -82,7 +88,8 @@ export class WaveDirector {
    *  never being recreated). The child wrappers are the tail of this array. */
   readonly asteroids: Asteroid[];
 
-  /** The splitter-child pool — the tail of `asteroids` (indices ≥ stream count). */
+  /** The child pool — the tail of `asteroids` (indices ≥ stream count): a
+   *  splitter's children and the giant asteroid's burst rocks. */
   private readonly childPool: Asteroid[];
 
   private waveIndex = 0;
@@ -139,7 +146,7 @@ export class WaveDirector {
     // spawnChild() at a scatter position. Their indices are ≥ stream count, so
     // startWave's specs[i] is undefined for them and waves never field them.
     this.childPool = Array.from(
-      { length: SPLITTER_CHILDREN.poolSize },
+      { length: Math.max(SPLITTER_CHILDREN.poolSize, GIANT.burstCount) },
       () =>
         new Asteroid(
           this.scene,
@@ -208,21 +215,44 @@ export class WaveDirector {
    *  the kill; the pop tween only scales/fades the sprite, never moves it). */
   spawnChildren(origin: Asteroid): void {
     if (origin.spec.kind !== 'splitter') return;
-    const free = this.childPool.filter((child) => !child.isActive);
-    if (free.length === 0) return; // pool exhausted — degrade gracefully
-    const n = Math.min(SPLITTER_CHILDREN.count, free.length);
     const { x, y } = origin.sprite;
     const half = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterConeDeg) / 2;
     const center = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterCenterDeg);
-    for (let i = 0; i < n; i++) {
-      // Spread n children evenly across the cone (single child → dead center).
-      const t = n > 1 ? i / (n - 1) : 0.5;
-      const angle = center - half + 2 * half * t;
-      const vx = Math.cos(angle) * SPLITTER_CHILDREN.launchSpeed;
-      const vy = Math.sin(angle) * SPLITTER_CHILDREN.launchSpeed;
-      free[i].spawnChild(x, y, vx, vy);
+    const fielded = this.fieldChildren(x, y, SPLITTER_CHILDREN.count, SPLITTER_CHILDREN, (t) => {
+      const angle = center - half + 2 * half * t; // evenly across the leftward cone
+      return [Math.cos(angle) * SPLITTER_CHILDREN.launchSpeed, Math.sin(angle) * SPLITTER_CHILDREN.launchSpeed];
+    });
+    if (fielded > 0) {
+      this.splitCount += 1;
     }
-    this.splitCount += 1;
+  }
+
+  /** The giant asteroid popped at (x, y) (#25): it bursts into
+   *  GIANT.burstCount one-hit rocks fanned evenly up and down the lane (on
+   *  the burst's own motion, GIANT_LAYOUT.burst), and its wave
+   *  turns into a drained field: it clears (then the boss drop runs) once
+   *  they're gone. */
+  burstBoss(x: number, y: number): void {
+    if (this.state !== 'boss') return;
+    const { burst } = GIANT_LAYOUT;
+    const spreadSec = (burst.scatterMs - burst.spawnGraceMs) / 1000; // they're still during the grace
+    this.fieldChildren(x, y, GIANT.burstCount, burst, (t) => [-burst.driftX / spreadSec, ((2 * t - 1) * burst.spreadY) / spreadSec]);
+    this.quotaRemaining = 0;
+    this.state = 'live';
+  }
+
+  /** Field up to n one-hit children at (x, y) on `motion`, each launched at
+   *  `velocityAt(t)` for its place t in 0..1 across the spread (a single child
+   *  is t = 0.5, dead centre). Returns how many went out: fewer if the pool
+   *  runs short, which degrades gracefully. */
+  private fieldChildren(x: number, y: number, n: number, motion: ChildMotion, velocityAt: (t: number) => [number, number]): number {
+    const free = this.childPool.filter((child) => !child.isActive);
+    const count = Math.min(n, free.length);
+    for (let i = 0; i < count; i++) {
+      const [vx, vy] = velocityAt(count > 1 ? i / (count - 1) : 0.5);
+      free[i].spawnChild(x, y, vx, vy, motion);
+    }
+    return count;
   }
 
   /** A spawn's y: the next sublane from the shuffle bag (refilled + reshuffled
@@ -251,11 +281,11 @@ export class WaveDirector {
     this.run.onWaveStart(this.waveNumber);
     const { field } = this.wave;
     if (!field) {
-      // The command ship: no asteroids; the encounter owns the field (and the
-      // fleet's shield regen) until it reports the boss down.
+      // A boss with its own encounter: no stream rocks; the encounter owns the
+      // field (and the fleet's shield regen) until the boss is down.
       this.quotaRemaining = 0;
       this.state = 'boss';
-      this.run.startEncounter();
+      this.run.startEncounter(this.wave.boss ?? 'commandShip');
       return;
     }
     const specs = asteroidsFor(field, this.players);

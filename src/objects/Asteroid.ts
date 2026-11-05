@@ -1,12 +1,14 @@
 /**
- * Asteroid — a drifting target: a bare physics Sprite (B37: size alone
- * tells standards from splitters, so there's no label). It drifts straight
+ * Asteroid — a drifting target: a bare physics Sprite (no label: size tells
+ * standards from splitters, and a two-hit rock is also drawn in a darker,
+ * denser shade, #25). It drifts straight
  * left inside the enemy lane, at a y the WaveDirector's sublane bag picks on
  * every (re)spawn; the scene's fleet-contact check decides what reaching the
  * left edge does, and a rock that gets past (a lost ship's sublane) just
  * leaves the field like any other left exit. Pops once its hp runs
- * out (1 hp for every kind today, so any hit pops it; a tougher rock shows a
- * health bar, drawn by the scene's HealthBars from `hp`/`maxHp`), then asks the
+ * out (a standard or splitter on one point of damage, a tough rock on two; a
+ * damaged rock shows a health bar, drawn by the scene's HealthBars from
+ * `hp`/`maxHp`), then asks the
  * WaveDirector for respawn permission (the wave's finite quota); denied
  * respawns park it inactive instead. The wrapper itself is NEVER destroyed
  * or recreated — the scene's rocket→asteroid overlap collider is built once
@@ -14,10 +16,10 @@
  * Between waves the director reconfigure()s the same wrappers in place.
  */
 import Phaser from 'phaser';
-import { GAME_WIDTH, LANE, SCORE, SPLITTER_CHILDREN } from '../layout';
+import { GAME_WIDTH, LANE, SCORE, SPLITTER_CHILDREN, type ChildMotion } from '../layout';
 import { COLORS } from '../tokens';
 import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
-import { TEX } from './textures';
+import { ensureAsteroidTexture, TEX } from './textures';
 
 /** A non-lethal hit flashes the rock white this long, so a shot that chips a
  *  tough rock never reads as "my shot didn't work". Counted on update()'s delta
@@ -38,8 +40,10 @@ export class Asteroid {
   /** Child spawn grace: body stays off until aliveMs passes this. */
   private graceUntilMs = 0;
   /** Child still in its scatter burst (it turns straight left after
-   *  SPLITTER_CHILDREN.scatterMs). */
+   *  motion.scatterMs). */
   private scattering = false;
+  /** A child's scatter, grace and lifetime dials (a splitter's or the giant's burst). */
+  private motion: ChildMotion = SPLITTER_CHILDREN;
   /** Current hp; reset to the spec's max on every (re)field. */
   private _hp = 1;
   /** Remaining white hit-flash time (non-lethal hits only). */
@@ -58,7 +62,8 @@ export class Asteroid {
   ) {
     this._spec = spec;
     this.spawnGapMax = spawnGapMax;
-    this.sprite = scene.physics.add.sprite(0, 0, TEX.asteroid(spec.radius));
+    ensureAsteroidTexture(scene, spec.kind, spec.radius);
+    this.sprite = scene.physics.add.sprite(0, 0, TEX.asteroid(spec.kind, spec.radius));
     this.sprite.setData('ref', this); // collision callback reaches the wrapper
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
@@ -112,7 +117,10 @@ export class Asteroid {
     this.child = false; // defensive: a stream reconfigure clears any child identity
     this.aliveMs = 0;
     this.resetHp();
-    this.sprite.setTexture(TEX.asteroid(spec.radius)); // radius may change here; spawnChild needs no swap (child wrappers are built at the child radius)
+    // Kind and radius may change here; spawnChild needs no swap (child wrappers
+    // are built as standards at the child radius).
+    ensureAsteroidTexture(this.scene, spec.kind, spec.radius);
+    this.sprite.setTexture(TEX.asteroid(spec.kind, spec.radius));
     (this.sprite.body as Phaser.Physics.Arcade.Body).setCircle(spec.radius);
     this.park();
   }
@@ -127,20 +135,21 @@ export class Asteroid {
    *  (vx,vy) — a one-shot standard rock. Sibling to spawn(): same wrapper, but
    *  positioned in-field with a scatter burst rather than off the right edge,
    *  and its onWantRespawn returns false so pop/exit/expire just parks it.
-   *  After SPLITTER_CHILDREN.scatterMs (update) it turns from the fast
-   *  launchSpeed scatter to straight left at the calmer childSpeed. */
-  spawnChild(x: number, y: number, vx: number, vy: number): void {
+   *  After motion.scatterMs (update) it turns from the fast launchSpeed
+   *  scatter to straight left at the calmer childSpeed. */
+  spawnChild(x: number, y: number, vx: number, vy: number, motion: ChildMotion = SPLITTER_CHILDREN): void {
+    this.motion = motion;
     this._spec = {
       kind: 'standard',
       radius: ASTEROID_KIND.standard.radius,
-      speed: SPLITTER_CHILDREN.childSpeed, // the straight-left cruise after the scatter
+      speed: motion.childSpeed, // the straight-left cruise after the scatter
     };
     this.child = true;
     this.active = true;
     this.popping = false;
     this.scattering = true;
     this.aliveMs = 0;
-    this.graceUntilMs = SPLITTER_CHILDREN.spawnGraceMs;
+    this.graceUntilMs = motion.spawnGraceMs;
     this.resetHp();
     this.sprite.setVisible(true).setScale(1).setAlpha(1).setPosition(x, y);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
@@ -165,7 +174,7 @@ export class Asteroid {
       // Hard lifetime cap: a child counts toward field-empty, so this
       // guarantees the wave can always clear even if one never reaches the
       // fleet or an edge. Parks (onWantRespawn is false).
-      if (this.aliveMs >= SPLITTER_CHILDREN.lifetimeMs) {
+      if (this.aliveMs >= this.motion.lifetimeMs) {
         this.respawnOrPark();
         return;
       }
@@ -181,7 +190,7 @@ export class Asteroid {
   /** A child's scatter burst: it may not drift out of the enemy lane, and once
    *  the burst is over it turns straight left at its cruise speed. */
   private scatter(body: Phaser.Physics.Arcade.Body): void {
-    if (this.aliveMs >= SPLITTER_CHILDREN.scatterMs) {
+    if (this.aliveMs >= this.motion.scatterMs) {
       this.scattering = false;
       body.setVelocity(-this._spec.speed, 0);
       return;
@@ -217,7 +226,7 @@ export class Asteroid {
       return 0;
     }
     this.pop();
-    return this._spec.kind === 'splitter' ? SCORE.splitter : SCORE.standard;
+    return SCORE[this._spec.kind];
   }
 
   /** Full hp for the current spec, no hit flash. */

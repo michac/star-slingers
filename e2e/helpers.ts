@@ -35,7 +35,7 @@
  * not one per frame.
  */
 import { test as base, expect, type Page } from '@playwright/test';
-import { ASTEROID_KIND } from '../src/waves';
+import { ASTEROID_KIND, type AsteroidKind } from '../src/waves';
 import { FLEET, GAME_HEIGHT, GAME_WIDTH, sublaneCenterY } from '../src/layout';
 import type { Lineup } from '../src/lineup';
 import type { ShipState } from '../src/objects/Fleet';
@@ -182,7 +182,7 @@ export async function fieldRock(
     slot = 0,
     hp,
     speed = 0,
-  }: { x: number; y: number; kind?: 'standard' | 'splitter'; radius?: number; slot?: number; hp?: number; speed?: number }
+  }: { x: number; y: number; kind?: AsteroidKind; radius?: number; slot?: number; hp?: number; speed?: number }
 ): Promise<void> {
   await page.evaluate(
     ({ x, y, kind, radius, slot, hp, speed }) => {
@@ -279,6 +279,11 @@ export async function enterBoss(page: Page): Promise<void> {
   await page.evaluate(`${SCENE}.__debug.snapBossIn()`);
   await stepGame(page, 16, 1);
 }
+/** End the giant-asteroid wave (wave 3, #25) at once: pop the giant through
+ *  its real pop path (it bursts into one-hit rocks), then take those off the
+ *  field, so the wave clears on the next step into its pod drop (#26). */
+export const clearGiantField = (page: Page) =>
+  page.evaluate(`(() => { const d = ${SCENE}.__debug; d.defeatBoss(); d.clearWave(); })()`);
 /** The health bars (#23) drawn on the latest frame: centre + remaining fraction
  *  (HealthBars' DrawnHealthBar; not imported, because that module reads
  *  import.meta.env, which the Node-typed e2e project doesn't declare). */

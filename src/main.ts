@@ -13,16 +13,16 @@ if (import.meta.env.DEV) {
   for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, placeholder }] of RUN.entries()) {
     const label = `wave ${i + 1} (act ${act}, ${boss ?? kind}${placeholder ? ' placeholder' : ''})`;
     if (!w) {
-      if (players === 2) console.log(`${label}: boss encounter (BOSS dials)`);
+      if (players === 2) console.log(`${label}: boss encounter (${boss === 'giantAsteroid' ? 'GIANT' : 'BOSS'} dials)`);
       continue;
     }
     const specs = asteroidsFor(w, players);
-    const splitters = specs.filter((s) => s.kind === 'splitter').length;
+    const count = (k: string) => specs.filter((s) => s.kind === k).length;
     const speedScale = (specs[0].speed / ROCK_STREAMS[0].baseSpeed).toFixed(2);
     console.log(
       `${label} (${players}p): target ${waveTarget(w, players).toFixed(2)} -> achieved ` +
         `${requiredDamagePerSec(w, players).toFixed(2)} required damage/s ` +
-        `[streams ${specs.length}, speed x${speedScale}, splitters ${splitters}], ` +
+        `[streams ${specs.length}, speed x${speedScale}, tough ${count('tough')}, splitters ${count('splitter')}], ` +
         `break-even ${(breakEvenAccuracy(w, players) * 100).toFixed(0)}%, quota ${w.quota}`
     );
   }

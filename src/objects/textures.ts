@@ -4,15 +4,16 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, PODS, STARFIELD } from '../layout';
+import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, PODS, STARFIELD } from '../layout';
 import { drawDashedLine } from './draw';
-import { ASTEROID_KIND } from '../waves';
+import { ASTEROID_KIND, type AsteroidKind } from '../waves';
 
 export const TEX = {
   rocketP1: 'rocket-p1',
   rocketP2: 'rocket-p2',
-  /** One texture per distinct asteroid radius. */
-  asteroid: (radius: number) => `asteroid-${radius}`,
+  /** One texture per asteroid kind and radius (a tough rock has its own shade). */
+  asteroid: (kind: AsteroidKind, radius: number) => `asteroid-${kind}-${radius}`,
+  giantAsteroid: 'asteroid-giant', // #25 act 1's boss
   boss: 'boss', // B34 directional command ship
   escort: 'escort-both-locks', // B33 escort ship with both player locks
   escortP1Lock: 'escort-p1-lock', // cyan lock remains
@@ -60,10 +61,13 @@ const ROCKET_H = 14;
 export function generateTextures(scene: Phaser.Scene): void {
   makeRocket(scene, TEX.rocketP1, COLORS.p1);
   makeRocket(scene, TEX.rocketP2, COLORS.p2);
-  // Every lane-rock radius up front — standards and splitters only.
-  for (const { radius } of Object.values(ASTEROID_KIND)) {
-    makeAsteroid(scene, radius);
+  // Every lane-rock kind at its own radius up front, so wave 2's first two-hit
+  // rock doesn't draw and upload its texture mid-play (a spec with another
+  // radius still makes its own on reconfigure, via ensureAsteroidTexture).
+  for (const [kind, { radius }] of Object.entries(ASTEROID_KIND)) {
+    ensureAsteroidTexture(scene, kind as AsteroidKind, radius);
   }
+  makeGiantAsteroid(scene);
   makeBoss(scene);
   makeEscort(scene);
   makeHeart(scene);
@@ -192,22 +196,44 @@ function makeRocket(scene: Phaser.Scene, key: string, color: number): void {
  * Texture is exactly 2r x 2r with the rock centered, so the physics body is
  * just body.setCircle(r) — no offset bookkeeping.
  */
-function makeAsteroid(scene: Phaser.Scene, r: number): void {
-  if (scene.textures.exists(TEX.asteroid(r))) return; // survives scene.restart()
+export function ensureAsteroidTexture(scene: Phaser.Scene, kind: AsteroidKind, r: number): void {
+  const key = TEX.asteroid(kind, r);
+  if (scene.textures.exists(key)) return; // survives scene.restart()
   const g = scene.make.graphics({}, false);
-  drawAsteroid(g, r);
-  g.generateTexture(TEX.asteroid(r), r * 2, r * 2);
+  drawAsteroid(g, r, ROCK_PAINT[kind]);
+  g.generateTexture(key, r * 2, r * 2);
   g.destroy();
 }
 
-function drawAsteroid(g: Phaser.GameObjects.Graphics, r: number): void {
+/** The giant asteroid (#25): the same rock drawing at boss size, with a
+ *  heavier rim and a scatter of extra craters so it reads as a boulder. */
+function makeGiantAsteroid(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.giantAsteroid)) return;
+  const r = GIANT_LAYOUT.radius;
+  const g = scene.make.graphics({}, false);
+  drawAsteroid(g, r, { ...ROCK_PAINT.standard, rimWidth: STROKES.rockGiant.width });
+  g.lineStyle(STROKES.crater.width, COLORS.crater, 1);
+  for (const [cx, cy, cr] of GIANT_LAYOUT.extraCraters) g.strokeCircle(r + cx * r, r + cy * r, cr * r);
+  g.generateTexture(TEX.giantAsteroid, r * 2, r * 2);
+  g.destroy();
+}
+
+/** A lane rock's paint by kind: a tough rock (#25) is denser, with a heavier, deeper rim. */
+type RockPaint = { fill: number; rim: number; rimWidth: number };
+const ROCK_PAINT: Record<AsteroidKind, RockPaint> = {
+  standard: { fill: COLORS.rockFill, rim: COLORS.danger, rimWidth: STROKES.rock.width },
+  tough: { fill: COLORS.rockToughFill, rim: COLORS.rockToughRim, rimWidth: STROKES.rockTough.width },
+  splitter: { fill: COLORS.rockFill, rim: COLORS.danger, rimWidth: STROKES.rock.width },
+};
+
+function drawAsteroid(g: Phaser.GameObjects.Graphics, r: number, { fill, rim, rimWidth }: RockPaint): void {
   // Dark interior fill so the rock reads as a solid body, not a ring.
-  g.fillStyle(COLORS.rockFill, 1);
-  g.fillCircle(r, r, r - STROKES.rock.width / 2);
+  g.fillStyle(fill, 1);
+  g.fillCircle(r, r, r - rimWidth / 2);
   // Stroke is centered on the path, so pull the radius in by half the
   // line width to keep the outer edge inside the 2r x 2r canvas.
-  g.lineStyle(STROKES.rock.width, COLORS.danger, 1);
-  g.strokeCircle(r, r, r - STROKES.rock.width / 2);
+  g.lineStyle(rimWidth, rim, 1);
+  g.strokeCircle(r, r, r - rimWidth / 2);
   // Craters at the mock's proportions (r=21 rock: craters (-6,-5,5) & (8,4,4)).
   g.lineStyle(STROKES.crater.width, COLORS.crater, 1);
   g.strokeCircle(r - 0.29 * r, r - 0.24 * r, 0.24 * r);
