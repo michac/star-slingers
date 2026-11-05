@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Sound Lab (#3)</title>
+  <!-- One dir deeper than the game root → fonts live at ../fonts -->
+  <link rel="preload" as="font" type="font/woff2" href="../fonts/Audiowide-Regular.woff2" crossorigin />
+  <style>
+    @font-face {
+      font-family: "Audiowide";
+      src: url('../fonts/Audiowide-Regular.woff2') format('woff2');
+      font-display: swap;
+    }
+    html, body { margin: 0; padding: 0; background: #0a0626; color: #fdf4ff; }
+    body { font-family: "Audiowide", system-ui, sans-serif; }
+    #lab { max-width: 560px; margin: 0 auto; padding: 16px 16px 48px; }
+    h1 { font-size: 20px; margin: 4px 0 2px; color: var(--accent); }
+    .sub { font-size: 12px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+    h2 { font-size: 13px; letter-spacing: 1px; color: var(--muted); margin: 18px 0 8px; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .controls label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex: 1 1 160px; }
+    .controls input { flex: 1; accent-color: var(--p1); }
+    button {
+      font: inherit; font-size: 13px; color: var(--ink); background: #1a0f3d;
+      border: 2px solid var(--p1); border-radius: 10px; padding: 14px 8px; min-height: 52px;
+      touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    button:active { background: #2b1a5e; }
+    button.demo { border-color: var(--p2); }
+    button.demo.on { background: #3a2410; }
+    button.toggle { border-color: var(--muted); font-size: 11px; min-height: 40px; padding: 8px 10px; }
+    button.icon { font-size: 20px; min-height: 44px; padding: 6px 14px; }
+  </style>
+</head>
+<body>
+  <div id="lab">
+    <h1>Sound Lab · #3</h1>
+    <p class="sub">Every sound is made in code with Web Audio, with no audio files. Tap one to hear it. Turn the phone's media volume up.</p>
+  </div>
+  <script type="module" src="./sound-lab.ts"></script>
+</body>
+</html>
