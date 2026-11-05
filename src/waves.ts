@@ -107,7 +107,7 @@ export type Act = 1 | 2 | 3 | 4;
 export type WaveKind = 'asteroid' | 'ship' | 'monster' | 'boss' | 'finale';
 
 /** Which boss a `boss` wave is: the giant asteroid ends act 1, the command
- *  ship (BOSS below, docs/design.md §9) ends act 2, the monster boss act 3. */
+ *  ship (BOSS below, docs/design.md §9) ends act 2, the mother jelly (MOTHER below, §12) act 3. */
 export type BossId = 'giantAsteroid' | 'commandShip' | 'monsterBoss';
 
 /** A ship wave (#27, act 2): enemy ships roam the lane and shoot bolts at
