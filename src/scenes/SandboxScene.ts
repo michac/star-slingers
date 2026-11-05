@@ -765,11 +765,12 @@ export class SandboxScene extends Phaser.Scene {
     return false;
   };
 
-  /** Does a live web link stop this rocket (B34)? A blocked shot tinks (#3).
+  /** Does a live web link stop this rocket (B34)? A blocked shot tinks (#3),
+   *  except a bomb: it blows up there (its own boom), and its blast still works.
    *  Both web checks (the per-frame sweep and the overlap above) go through here. */
   private readonly blockedByWeb = (rocket: Phaser.Physics.Arcade.Sprite): boolean => {
     if (!this.bossEncounter.blocksRocket(rocket)) return false;
-    sfx.play('refused');
+    if (!rocket.getData('bomb')) sfx.play('refused');
     return true;
   };
 

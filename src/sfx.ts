@@ -4,8 +4,11 @@
  * (the recipes in sfxRecipes.ts), so there are no audio files to load.
  *
  * Silent until the first tap: browsers keep audio locked until a gesture, so
- * main.ts calls `unlock()` from the first pointerdown, and only then is an
- * AudioContext made. Before that, without Web Audio, or while muted, play()
+ * main.ts calls `unlock()` from every pointerdown and pointerup, and only one
+ * that lands inside a real gesture makes the AudioContext (a touch counts on
+ * its release, a mouse on its press). Every later tap resumes it if anything
+ * (iOS's 'interrupted', say) has stopped it. While the page is hidden it's
+ * suspended, so sound pauses with the game loop. Before that, without Web Audio, or while muted, play()
  * only records the request. Every request, played or not, goes on `log`,
  * which is what the e2e suite reads (it never listens to real audio).
  *
@@ -53,8 +56,10 @@ export class Sfx {
   private readonly lastAt = new Map<SoundName, number>();
   private volume: number = SFX.masterVolume;
   private isMuted: boolean;
-  /** A resume() is in flight: plays may schedule (they sound once it lands). */
+  /** A resume() from a real gesture is in flight: plays may schedule (they
+   *  sound the moment it lands, a few ms later). */
   private resuming = false;
+  private hidden = false;
 
   /** `persist`: read and save the mute in localStorage (the game's; the lab's isn't). */
   constructor(private readonly persist = true) {
@@ -81,8 +86,10 @@ export class Sfx {
     this.applyVolume();
   }
 
-  /** Build the audio graph (first call) and resume it. Call from a tap. */
+  /** Build the audio graph (first call) and resume it. Call from a tap: it
+   *  does nothing outside a user activation, where a resume would only hang. */
   unlock(): void {
+    if (this.hidden || navigator.userActivation?.isActive === false) return;
     if (!this.ac) {
       if (typeof window.AudioContext !== 'function') return; // no Web Audio: stay silent
       const ac = new AudioContext();
@@ -99,12 +106,22 @@ export class Sfx {
       this.noise = noiseBuffer(ac);
       this.applyVolume();
     }
-    if (this.ac.state !== 'suspended' || this.resuming) return;
+    if (this.ac.state === 'running' || this.ac.state === 'closed') return;
     this.resuming = true;
     this.ac
       .resume()
       .catch(() => undefined)
       .finally(() => (this.resuming = false));
+  }
+
+  /** Page hidden (tab switched, phone locked): suspend, so nothing plays on
+   *  while the game loop sleeps; shown again: resume, best effort (a browser
+   *  that refuses waits for the next tap's unlock). */
+  setHidden(hidden: boolean): void {
+    this.hidden = hidden;
+    const ac = this.ac;
+    if (!ac || ac.state === 'closed') return;
+    (hidden ? ac.suspend() : ac.resume()).catch(() => undefined);
   }
 
   /** Play a sound now, unless it's capped. */
@@ -154,8 +171,12 @@ export class Sfx {
     return live;
   }
 
+  /** Muting waits SFX.muteTailS, so a sound played just before it (the
+   *  speaker's click) is heard. */
   private applyVolume(): void {
-    if (this.ac && this.master) this.master.gain.setTargetAtTime(this.isMuted ? 0 : this.volume, this.ac.currentTime, 0.02);
+    if (!this.ac || !this.master) return;
+    const at = this.ac.currentTime + (this.isMuted ? SFX.muteTailS : 0);
+    this.master.gain.setTargetAtTime(this.isMuted ? 0 : this.volume, at, 0.02);
   }
 
   private readMuted(): boolean {

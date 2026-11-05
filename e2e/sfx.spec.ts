@@ -71,6 +71,24 @@ async function instrument(page: Page, noAudio = false): Promise<void> {
   }, noAudio);
 }
 const clearVibes = (page: Page) => page.evaluate(() => void ((window as any).__vibes.length = 0));
+/** navigator.userActivation as on a phone ('touch': a touch counts only on
+ *  its release, so isActive is false during pointerdown and true from
+ *  pointerup), or 'missing' (no such API, as on older browsers). The init
+ *  script's capture listeners run before main.ts's unlock listeners. */
+async function stubActivation(page: Page, mode: 'touch' | 'missing'): Promise<void> {
+  await page.addInitScript((m) => {
+    const w = window as any;
+    if (m === 'missing') {
+      delete (Navigator.prototype as any).userActivation;
+      return;
+    }
+    w.__active = false;
+    const ua = { get isActive() { return w.__active; }, get hasBeenActive() { return w.__active; } };
+    Object.defineProperty(navigator, 'userActivation', { configurable: true, value: ua });
+    for (const type of ['pointerdown', 'pointerup']) window.addEventListener(type, (e) => (w.__active = e.type === 'pointerup'), { capture: true });
+  }, mode);
+}
+const audioState = (page: Page) => page.evaluate(() => (window as any).__sfx.ac?.state ?? 'none') as Promise<string>;
 const contexts = (page: Page) => page.evaluate(() => (window as any).__contexts) as Promise<number>;
 const oscillators = (page: Page) => page.evaluate(() => (window as any).__oscillators) as Promise<number>;
 
@@ -211,6 +229,20 @@ test('the command ship: rumble in, clunks on escorts, tinks off the web and its 
   });
   expect((await stepUntil(page, 's.rockets.group.countActive(true) === 0', 40)).done).toBe(true);
   expect(await takeLog(page)).toEqual(['refused']);
+  // A bomb the web stops blows up there: its boom, no tink (its blast still works).
+  await page.evaluate(() => {
+    const s = (window as any).__game.scene.keys['Sandbox'];
+    const { ax, ay, bx, by } = s.__debug.webLinks().links[0];
+    const b = s.bossEncounter.boss.sprite;
+    const mx = (ax + bx) / 2, my = (ay + by) / 2;
+    const len = Math.hypot(mx - b.x, my - b.y);
+    const ux = (mx - b.x) / len, uy = (my - b.y) / len;
+    s.rockets.fire('rocket-p1', mx + ux * 30, my + uy * 30, -ux * 250, -uy * 250, 'p1', { bomb: true });
+  });
+  expect((await stepUntil(page, 's.rockets.group.countActive(true) === 0', 40)).done).toBe(true);
+  const bomb = await takeLog(page);
+  expect(bomb).toContain('detonate');
+  expect(bomb).not.toContain('refused');
 
   await hitEscort(page, 2, 'p2'); // a lock
   await hitEscort(page, 2, 'p2'); // the same seat again: refused
@@ -322,8 +354,10 @@ test('the speaker on the join screen\'s centre line mutes sound (only), and is r
   const speaker = () => page.evaluate(`${JOIN_SCENE}.__debug.speaker()`) as Promise<Pt & { r: number; muted: boolean }>;
   const at = await speaker();
   expect(at.muted).toBe(false);
+  await clearSfxLog(page);
   await press(page, t, at, 1);
   expect((await speaker()).muted).toBe(true);
+  expect(await sfxLog(page)).toEqual(['joinBlip']); // the click, played before muting
   // The tap was the speaker's alone: neither seat joined.
   expect(await page.evaluate(`${JOIN_SCENE}.__debug.picks()`)).toEqual({});
 
@@ -372,6 +406,49 @@ test('no AudioContext before the first tap; the first tap makes exactly one, and
   expect(await oscillators(page)).toBeGreaterThan(0);
   await press(page, t, L.fire);
   expect(await contexts(page)).toBe(1);
+});
+
+test('on a phone a touch unlocks on its release; without userActivation the press unlocks', async ({ page, context }) => {
+  await stubActivation(page, 'touch');
+  await instrument(page);
+  await gotoGame(page);
+  const L = await v2Layout(page, 2);
+  const t = await touchscreen(page);
+  await t.down(1, L.fire.x, L.fire.y);
+  await stepGame(page, 16, 3);
+  expect(await contexts(page)).toBe(0); // no activation yet: nothing made, nothing left pending
+  await t.up(1);
+  expect(await contexts(page)).toBe(1);
+  await expect.poll(() => audioState(page)).toBe('running');
+
+  const other = await context.newPage();
+  await stubActivation(other, 'missing');
+  await instrument(other);
+  await gotoGame(other);
+  const L2 = await v2Layout(other, 2);
+  const t2 = await touchscreen(other);
+  await t2.down(1, L2.fire.x, L2.fire.y);
+  expect(await contexts(other)).toBe(1);
+  await t2.up(1);
+  await expect.poll(() => audioState(other)).toBe('running');
+  await other.close();
+});
+
+test('a hidden page suspends sound and showing it again resumes', async ({ page }) => {
+  await instrument(page);
+  await gotoGame(page);
+  const L = await v2Layout(page, 2);
+  await press(page, await touchscreen(page), L.fire);
+  await expect.poll(() => audioState(page)).toBe('running');
+  const setHidden = (hidden: boolean) =>
+    page.evaluate((h) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+  await setHidden(true);
+  await expect.poll(() => audioState(page)).toBe('suspended');
+  await setHidden(false);
+  await expect.poll(() => audioState(page)).toBe('running');
 });
 
 test('without Web Audio the game plays on, silent and error-free', async ({ page }) => {

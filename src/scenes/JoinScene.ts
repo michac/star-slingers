@@ -141,9 +141,13 @@ export class JoinScene extends Phaser.Scene {
   private onDown(pointer: Phaser.Input.Pointer): void {
     // The speaker sits on the centre line, so it's tested before the halves.
     if (within(pointer, JOIN.speaker)) {
-      sfx.muted = !sfx.muted;
+      // The click plays either way: before muting (so a kid who mutes by
+      // accident hears that something changed), after unmuting.
+      const turningOn = sfx.muted;
+      if (!turningOn) sfx.play('joinBlip');
+      sfx.muted = !turningOn;
+      if (turningOn) sfx.play('joinBlip');
       this.drawSpeaker();
-      sfx.play('joinBlip'); // heard only when it just turned sound on
       return;
     }
     const edge: SeatEdge = pointer.y >= JOIN.halfY ? 'bottom' : 'top';

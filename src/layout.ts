@@ -3,6 +3,8 @@
  * (plans/mockups/style-wireframe.html, viewBox 360x740).
  */
 
+import type { SoundName } from './sfxRecipes';
+
 export const GAME_WIDTH = 360;
 export const GAME_HEIGHT = 740;
 
@@ -612,6 +614,8 @@ export const SFX = {
   pitchJitter: 0.04,
   /** Fade when a sound is cut short (stop()), in seconds. */
   stopFadeS: 0.05,
+  /** Muting waits this long (s), so the speaker's click before it is heard. */
+  muteTailS: 0.15,
   /** Voices of one sound at once, and the minimum gap between its starts:
    *  two seats' rapid fire can't stack into a wall of noise. */
   caps: {
@@ -625,7 +629,7 @@ export const SFX = {
     bossEnter: { max: 1, gapMs: 0 },
     beamCharge: { max: 1, gapMs: 0 },
     shipShot: { max: 2, gapMs: 80 },
-  },
+  } satisfies Partial<Record<SoundName | 'default', { readonly max: number; readonly gapMs: number }>>,
   /** The command ship's beam whine starts when this much of its charge is
    *  left; the beamCharge recipe lasts exactly this long. */
   beamWhineMs: 1800,

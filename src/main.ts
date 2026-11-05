@@ -83,13 +83,14 @@ function boot(): void {
   (window as unknown as { __sfx: typeof sfx }).__sfx = sfx;
 }
 
-// Sound unlocks on the first tap (#3). pointerdown makes the AudioContext, so
-// that first tap's own sound can play; a touch only counts as a user gesture
-// on its release, so pointerup resumes it too. Capture phase: before Phaser's
-// handlers run the tap.
+// Sound unlocks on the first tap (#3). A mouse press counts as a user gesture
+// but a touch only counts on its release, so both events try; unlock() acts
+// only inside a real gesture. Capture phase: before Phaser's handlers run the
+// tap, so the tap's own sound can play. A hidden page suspends sound.
 for (const type of ['pointerdown', 'pointerup'] as const) {
   window.addEventListener(type, () => sfx.unlock(), { capture: true, passive: true });
 }
+document.addEventListener('visibilitychange', () => sfx.setHidden(document.hidden));
 
 // Wait for the neon font (Audiowide) so the first HUD text paints in it, not
 // the fallback. Boot anyway if the Font Loading API is missing or the fetch
