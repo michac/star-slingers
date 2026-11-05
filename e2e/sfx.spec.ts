@@ -133,6 +133,7 @@ test('rocks: a kill booms, a two-hit rock\'s first hit tonks, and a rock reachin
 
 test('the fleet: a ship lost bwomps, a shield coming back chimes, a wave clear plays its fanfare, a lost run plays Try again', async ({ page }) => {
   await gotoGame(page);
+  await clearField(page); // no wave rock may reach the fleet and reset the shield's quiet stretch
   await clearSfxLog(page);
   await page.evaluate(`${SCENE}.fleet.onEnemyReached(2)`);
   await page.evaluate(`${SCENE}.fleet.onEnemyReached(2)`);
@@ -145,7 +146,6 @@ test('the fleet: a ship lost bwomps, a shield coming back chimes, a wave clear p
   expect(await takeLog(page)).toEqual(['shieldRebuild']);
 
   // The wave clears: its fanfare, then ship 2 rebuilt (its chime).
-  await clearField(page);
   await debug(page, 'clearWave()');
   expect((await stepUntil(page, "s.__debug.fleet()[2] === 'shielded' && !s.fleet.restoring", 200)).done).toBe(true);
   const clear = await takeLog(page);
