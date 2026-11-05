@@ -591,9 +591,10 @@ export class SandboxScene extends Phaser.Scene {
     const uy = diry / len;
     let best: HomingTarget | null = null;
     let bestPerp = Infinity;
-    // Asteroids during the field waves, plus the escorts during the boss.
-    // Two plain loops — this runs every frame while a seat holds SPECIAL and
-    // for every target-less missile, so no merged array.
+    // Asteroids during the field waves, the enemy ships during act 2's ship
+    // waves (#27), plus the escorts during the boss. Plain loops, one per
+    // source — this runs every frame while a seat holds SPECIAL and for every
+    // target-less missile, so no merged array.
     const consider = (cand: HomingTarget) => {
       if (!specialCanHit(cand) || exclude?.has(cand)) return; // also never one still off the right edge
       const s = cand.sprite;
@@ -730,7 +731,7 @@ export class SandboxScene extends Phaser.Scene {
     this.spendShot(rocket, charged, result === 'popped');
   };
 
-  /** The charged round's pass-through rule (#22), for rocks and escorts alike:
+  /** The charged round's pass-through rule (#22), for rocks, enemy ships and escorts alike:
    *  it carries on along its line only past a target this hit killed; every
    *  other hit spends the shot. A killed target turns its body off in the same
    *  call, so the round carrying on can't overlap it again. */

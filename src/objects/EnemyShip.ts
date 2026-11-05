@@ -4,15 +4,17 @@
  *
  *   gliding → holding (warn telegraphMs, fire, a beat) → gliding … | popping → parked
  *
- * A glide eases in and out to a new spot in ENEMY_SHIP.roam, at most hopMax
- * away, nose turning to its heading. In the hold the nose swings to the
+ * A glide eases in and out to a new spot inside ENEMY_SHIP.roam, hopMin to
+ * hopMax away, nose turning to its heading. In the hold the nose swings to the
  * nearest live fleet ship (re-picked every frame of the warning, so a ship
  * lost meanwhile is dropped), glows brighter for telegraphMs, then the ship
  * fires one bolt at that ship. The first shot comes only after the entry glide.
  *
  * A wave-5 ship wears a one-hit bubble that soaks one point of damage: a plain
  * round or a missile pops it and leaves the ship whole; a charged round or a
- * detonator blast (2) pops it and kills the ship. The hull has 1 hp. Neither
+ * detonator blast (2) pops it and kills the ship. The hull has 1 hp. While
+ * the bubble is up the ship's hit circle is the ring's, so a round that
+ * visibly crosses the ring pops it. Neither
  * shows a health bar (#23: shields never do, and 1 hp never needs one).
  *
  * Every timer runs on update()'s delta (no tweens), so it steps in lockstep
@@ -49,7 +51,8 @@ const { Linear: lerp, SmoothStep } = Phaser.Math;
 
 export class EnemyShip implements HomingTarget {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
-  readonly radius = ENEMY_SHIP.radius;
+  /** The hull's radius (its art; the body while no bubble is up). */
+  private readonly hullR = ENEMY_SHIP.radius;
   private readonly art: Phaser.GameObjects.Graphics;
   private phaseState: ShipPhase = 'parked';
   private shieldUp = false;
@@ -78,7 +81,7 @@ export class EnemyShip implements HomingTarget {
     this.sprite.setData('ref', this); // collision callback reaches the wrapper
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
-    body.setCircle(this.radius); // the texture is exactly 2r × 2r
+    body.setCircle(this.hullR); // the texture is exactly 2r × 2r
     this.art = scene.add.graphics().setDepth(2.1);
     this.park();
   }
@@ -89,6 +92,12 @@ export class EnemyShip implements HomingTarget {
   }
   private get y(): number {
     return this.sprite.y;
+  }
+
+  /** What a shot, a missile's aim or a blast meets: the bubble while it's up
+   *  (the ring the kids see), else the hull. */
+  get radius(): number {
+    return this.shieldUp ? ENEMY_SHIP.shield.r : this.hullR;
   }
 
   get phase(): ShipPhase {
@@ -164,6 +173,7 @@ export class EnemyShip implements HomingTarget {
     let left = damage;
     if (this.shieldUp) {
       this.shieldUp = false;
+      this.fitBody();
       left -= 1;
       this.orders.boom(this.x, this.y, ENEMY_SHIP.shield.r * 0.4);
     }
@@ -206,26 +216,47 @@ export class EnemyShip implements HomingTarget {
     this.heading = Math.PI; // nose left, into the lane
     this.sprite.setVisible(true).setScale(1).setAlpha(1);
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
+    this.fitBody();
+  }
+
+  /** The body matches what's drawn: the bubble's ring while it's up, else the
+   *  hull, centred on the 2r × 2r texture either way. */
+  private fitBody(): void {
+    const r = this.radius;
+    (this.sprite.body as Phaser.Physics.Arcade.Body).setCircle(r, this.hullR - r, this.hullR - r);
   }
 
   private fire(): void {
     this.fired = true;
     if (this.targetIndex < 0) return; // nothing left to shoot at
-    const r = this.radius;
+    const r = this.hullR;
     this.orders.fire(this.x + Math.cos(this.heading) * r, this.y + Math.sin(this.heading) * r, this.targetIndex);
   }
 
-  /** Ease toward a new spot at most hopMax away, inside the roam box. */
+  /** Ease toward a new spot inside the roam box, hopMin..hopMax away. The
+   *  spot is drawn inside the box (never clamped onto its edge), so a ship by
+   *  an edge or corner still makes a real hop, and one entering from off the
+   *  right edge comes well into the lane. */
   private startGlide(): void {
-    const { roam, hopMax } = ENEMY_SHIP;
+    const { roam, hopMin, hopMax } = ENEMY_SHIP;
     this.phaseState = 'gliding';
     this.t = 0;
     this.fromX = this.x;
     this.fromY = this.y;
-    const a = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
-    const d = Phaser.Math.FloatBetween(hopMax * 0.4, hopMax);
-    this.toX = Phaser.Math.Clamp(this.x + Math.cos(a) * d, roam.minX, roam.maxX);
-    this.toY = Phaser.Math.Clamp(this.y + Math.sin(a) * d, roam.minY, roam.maxY);
+    // The part of the box within hopMax on each axis (the entry point is
+    // outside the box, so start from its edge when that's nearer).
+    const x0 = Math.max(roam.minX, Math.min(this.x, roam.maxX) - hopMax);
+    const x1 = Math.min(roam.maxX, Math.max(this.x, roam.minX) + hopMax);
+    const y0 = Math.max(roam.minY, this.y - hopMax);
+    const y1 = Math.min(roam.maxY, this.y + hopMax);
+    // Draw until the hop is in range; the box is far bigger than hopMin, so
+    // this takes a draw or two (the last draw stands if none lands).
+    for (let tries = 0; tries < 12; tries++) {
+      this.toX = Phaser.Math.FloatBetween(x0, x1);
+      this.toY = Phaser.Math.FloatBetween(y0, y1);
+      const d = Math.hypot(this.toX - this.x, this.toY - this.y);
+      if (d >= hopMin && d <= hopMax) break;
+    }
     this.glideHeading = Math.atan2(this.toY - this.fromY, this.toX - this.fromX);
   }
 
@@ -238,7 +269,10 @@ export class EnemyShip implements HomingTarget {
 
   private turnToward(angle: number, deltaMs: number): void {
     const step = Phaser.Math.DegToRad(ENEMY_SHIP.turnRateDeg) * (deltaMs / 1000);
-    this.heading = Phaser.Math.Angle.RotateTo(this.heading, angle, step);
+    // RotateTo takes the short way only between angles in −π..π, and doesn't
+    // wrap what it returns: wrap it, or the heading drifts and the nose turns
+    // the long way round.
+    this.heading = Phaser.Math.Angle.Wrap(Phaser.Math.Angle.RotateTo(this.heading, angle, step));
   }
 
   /** The hull's rotation, the bubble ring and the warning glow at the nose. */
@@ -254,8 +288,8 @@ export class EnemyShip implements HomingTarget {
     if (this.warning) {
       const frac = Math.min(1, this.t / ENEMY_SHIP.telegraphMs);
       const { r, alpha } = ENEMY_SHIP.glow;
-      const nx = this.x + Math.cos(this.heading) * this.radius * 0.8;
-      const ny = this.y + Math.sin(this.heading) * this.radius * 0.8;
+      const nx = this.x + Math.cos(this.heading) * this.hullR * 0.8;
+      const ny = this.y + Math.sin(this.heading) * this.hullR * 0.8;
       g.fillStyle(COLORS.danger, alpha * frac * 0.6);
       g.fillCircle(nx, ny, r * (0.6 + 0.6 * frac));
       g.fillStyle(COLORS.white, alpha * frac);
@@ -268,7 +302,7 @@ export class EnemyShip implements HomingTarget {
     this.t = 0;
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.art.clear();
-    this.orders.boom(this.x, this.y, this.radius);
+    this.orders.boom(this.x, this.y, this.hullR);
   }
 
   private park(): void {

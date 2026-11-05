@@ -438,8 +438,8 @@ export type ChildMotion = {
  * width: from the right edge to well short of the fleet's bubbles), hold
  * there, warn (its nose glows for telegraphMs), fire one bolt at the nearest
  * live fleet ship, and glide on. Each glide eases in and out (slow, then
- * slower), lasting the wave's fireEveryMs minus holdMs; a new spot is at most
- * hopMax away, so they drift rather than dart. Balance dials (how many, how
+ * slower), lasting the wave's fireEveryMs minus holdMs; a new spot is drawn
+ * inside the roam box, hopMin to hopMax away, so they drift rather than dart. Balance dials (how many, how
  * often) are per wave in waves.ts (ShipWaveConfig).
  */
 export const ENEMY_SHIP = {
@@ -451,12 +451,13 @@ export const ENEMY_SHIP = {
     maxY: LANE.bottom - 16,
   },
   entryX: GAME_WIDTH + 16, // fielded just off the right edge
+  hopMin: 60, // a glide's nearest destination from where it starts (a real move, never a twitch)
   hopMax: 150, // a glide's furthest destination from where it starts
   holdMs: 1500, // the stop: telegraphMs of warning, the shot, then a short beat
   telegraphMs: 1000, // the nose glows brighter for this long, then it fires
   turnRateDeg: 240, // how fast the nose swings round (deg/s)
   popMs: 160, // the kill's pop (scale up + fade), counted on update's delta
-  shield: { r: 18, width: 2, alpha: 0.85 }, // the wave-5 bubble: a thin magenta ring
+  shield: { r: 18, width: 2, alpha: 0.85 }, // the wave-5 bubble: a thin magenta ring, and the ship's hit circle while it's up
   glow: { r: 7, alpha: 0.95 }, // the telegraph glow at the nose, at full warning
   poolSize: 4, // most ships any wave fields at once
 } as const;

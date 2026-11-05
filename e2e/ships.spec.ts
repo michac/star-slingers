@@ -215,6 +215,94 @@ test('the bubble: a plain round or a missile pops it, a charged round or a bomb�
   expect(BOMB.blastRadius).toBeGreaterThan(ENEMY_SHIP.shield.r);
 });
 
+test('the bubble is the hit circle: a round crossing the ring outside the hull still pops it', async ({ page }) => {
+  await emptyField(page);
+  const at = { x: 180, y: 380 };
+  await placeShip(page, 0, at.x, at.y, true);
+  // A slow round straight up, its body's near edge between the hull (12) and the ring.
+  await fire(page, 0, 600, 0, -300, '{}', 'p2');
+  const hw = (await page.evaluate(`${SCENE}.rockets.group.getChildren().find((r) => r.active).body.halfWidth`)) as number;
+  const gap = (ENEMY_SHIP.radius + ENEMY_SHIP.shield.r) / 2; // 15: outside the hull, inside the ring
+  await page.evaluate(`(() => { const r = ${SCENE}.rockets.group.getChildren().find((r) => r.active); r.body.reset(${at.x + gap} + ${hw}, 600); r.body.setVelocity(0, -300); })()`);
+  expect((await stepUntil(page, `!s.__debug.ships()[0].shielded`, 120)).done).toBe(true);
+  expect((await ships(page))[0].phase).toBe('holding'); // popped, not killed
+  // With the bubble gone, the same line now misses the bare hull.
+  await fire(page, 0, 600, 0, -300, '{}', 'p2');
+  await page.evaluate(`(() => { const r = ${SCENE}.rockets.group.getChildren().find((r) => r.active); r.body.reset(${at.x + gap} + ${hw}, 600); r.body.setVelocity(0, -300); })()`);
+  await stepGame(page, 16, 80);
+  expect((await ships(page))[0].phase).toBe('holding');
+  expect(await score(page)).toBe(0);
+});
+
+test('every glide is a real hop inside the roam box, from the entry point and from a corner', async ({ page }) => {
+  await emptyField(page);
+  // Many draws of a ship's next spot, straight through its own glide code.
+  const r = await page.evaluate((roam) => {
+    const sh = (window as any).__game.scene.keys['Sandbox'].squadron.ships[0];
+    const hops: { from: string; d: number; inBox: boolean }[] = [];
+    const draw = (from: string) => {
+      const d = Math.hypot(sh.toX - sh.fromX, sh.toY - sh.fromY);
+      const inBox = sh.toX >= roam.minX && sh.toX <= roam.maxX && sh.toY >= roam.minY && sh.toY <= roam.maxY;
+      hops.push({ from, d, inBox });
+    };
+    for (let n = 0; n < 200; n++) {
+      sh.field(false, 6500); // the entry glide, from just off the right edge
+      draw('entry');
+      for (const [x, y] of [[roam.maxX, roam.minY], [roam.maxX, roam.maxY], [roam.minX, roam.minY], [roam.minX, roam.maxY]]) {
+        sh.sprite.setPosition(x, y);
+        sh.startGlide();
+        draw('corner');
+      }
+    }
+    sh.vanish();
+    return hops;
+  }, ENEMY_SHIP.roam);
+  for (const hop of r) {
+    expect(hop.inBox, hop.from).toBe(true);
+    expect(hop.d, hop.from).toBeGreaterThanOrEqual(ENEMY_SHIP.hopMin);
+    expect(hop.d, hop.from).toBeLessThanOrEqual(ENEMY_SHIP.hopMax);
+  }
+});
+
+test('a ship faces where it glides and turns the short way: its heading stays in ±π and its nose is on target when it fires', async ({ page }) => {
+  await gotoGame(page, '?wave=5');
+  // 60 s unattended (shields regrow often enough at this pace that some fleet
+  // ship is always left to aim at). Every frame, every ship's heading stays
+  // in −π..π; at each glide's end the nose is along the glide; at each shot
+  // it points at the fleet ship it fires at.
+  const r = await page.evaluate((frames) => {
+    const w = window as any;
+    const s = w.__game.scene.keys['Sandbox'];
+    const sq = s.squadron;
+    const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    let outOfRange = 0;
+    const glideErr: number[] = [];
+    const aimErr: number[] = [];
+    const fire = sq.fire.bind(sq);
+    sq.fire = (x: number, y: number, i: number) => {
+      const sh = sq.ships.find((k: any) => Math.hypot(k.sprite.x - x, k.sprite.y - y) <= 12.5);
+      const p = s.fleet.shipPoint(i);
+      if (sh) aimErr.push(Math.abs(wrap(sh.heading - Math.atan2(p.y - sh.sprite.y, p.x - sh.sprite.x))));
+      fire(x, y, i);
+    };
+    const prev = sq.ships.map((k: any) => k.phase);
+    for (let n = 0; n < frames && !s.failOverlay.visible; n++) {
+      w.__step();
+      sq.ships.forEach((k: any, j: number) => {
+        if (k.isActive && Math.abs(k.heading) > Math.PI + 1e-9) outOfRange++;
+        if (prev[j] === 'gliding' && k.phase === 'holding') glideErr.push(Math.abs(wrap(k.heading - k.glideHeading)));
+        prev[j] = k.phase;
+      });
+    }
+    return { outOfRange, glideErr, aimErr };
+  }, Math.round(60_000 / 16));
+  expect(r.outOfRange).toBe(0);
+  expect(r.glideErr.length).toBeGreaterThan(5);
+  expect(r.aimErr.length).toBeGreaterThan(5);
+  for (const e of r.glideErr) expect(e).toBeLessThan(0.05);
+  for (const e of r.aimErr) expect(e).toBeLessThan(0.05);
+});
+
 test('the triple missile takes three different ships', async ({ page }) => {
   await emptyField(page);
   // Three ships across P2's boot aim (straight up from its launcher at x=180).
