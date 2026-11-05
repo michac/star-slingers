@@ -218,8 +218,9 @@ export function startWaveFromQuery(search: string): number {
  *     (asteroidsFor), so the solver's composition, the wave's two-hit rocks
  *     or splitters included, is the two-player one;
  *   - every pacing duration — the command ship's beam charge and a downed
- *     escort's regen, a ship wave's time between shots, a jelly's heal and
- *     the mother jelly's baby interval — is ms ÷ pace (pacedMs).
+ *     escort's regen, a ship wave's time between shots — is ms ÷ pace
+ *     (pacedMs). Act 3 (#28) is to pace a jelly's heal and the mother
+ *     jelly's baby interval through it too.
  * Solo leaves alone: the fleet's shield regen, enemy bolt speed, jelly swim
  * speed, and the giant asteroid (its solo rule is already per-seat even:
  * any charged hit is a point; its drift isn't slowed).
