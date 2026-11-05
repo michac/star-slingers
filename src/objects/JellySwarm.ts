@@ -25,7 +25,7 @@ import type { Fleet } from './Fleet';
 import { Jelly, type JellyKind, type JellyOrders } from './Jelly';
 
 /** A mother jelly's baby: small, quick, one hit, no heal (#28 gap-fill). */
-export const BABY_JELLY: JellyKind = {
+const BABY_JELLY: JellyKind = {
   radius: JELLY_LAYOUT.babyRadius,
   maxHp: 1,
   speed: JELLY_LAYOUT.babySpeed,
@@ -51,7 +51,8 @@ export class JellySwarm {
    *  missile picker, the detonator's blast and the health bars go over it. */
   readonly jellies: Jelly[];
   private readonly halos: Phaser.GameObjects.Graphics;
-  private config: MonsterWaveConfig | null = null;
+  /** The live monster wave's jelly (null between waves: no spawns). */
+  private kind: JellyKind | null = null;
   private quotaRemaining = 0;
 
   constructor(
@@ -62,7 +63,7 @@ export class JellySwarm {
     private readonly onFleetLost: () => void
   ) {
     const orders: JellyOrders = {
-      pickTarget: (x, y) => this.nearestLiveShip(x, y),
+      pickTarget: (_x, y) => this.fleet.nearestLive(y),
       targetPoint: (i) => this.fleet.shipPoint(i),
       contactX: (i) => this.fleet.contactX(i),
       reached: (i) => this.fleet.onEnemyReached(i),
@@ -76,7 +77,7 @@ export class JellySwarm {
   /** A monster wave starts: field its first jellies. */
   start(config: MonsterWaveConfig): void {
     this.stop();
-    this.config = config;
+    this.kind = waveJelly(config);
     this.quotaRemaining = config.quota;
     for (let i = 0; i < config.onScreen; i++) this.spawn();
   }
@@ -84,7 +85,7 @@ export class JellySwarm {
   /** Off the field at once: every jelly, and no more spawns (a wave jump, or
    *  a forced clear). */
   stop(): void {
-    this.config = null;
+    this.kind = null;
     this.quotaRemaining = 0;
     for (const jelly of this.jellies) jelly.vanish();
     this.halos.clear();
@@ -126,33 +127,17 @@ export class JellySwarm {
     }
   }
 
-  /** The live fleet ship nearest (x, y), or -1 if the fleet is lost. */
-  private nearestLiveShip(x: number, y: number): number {
-    let best = -1;
-    let bestD = Infinity;
-    for (let i = 0; i < LANE.sublanes; i++) {
-      if (!this.fleet.isLive(i)) continue;
-      const p = this.fleet.shipPoint(i);
-      const d = Phaser.Math.Distance.Squared(x, y, p.x, p.y);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    return best;
-  }
-
   /** Field the next wave jelly from the quota, if there's one left and a free
    *  wrapper (every jelly gone calls this, so a wave refills itself). */
   private spawn(): void {
-    const config = this.config;
-    if (!config || this.quotaRemaining <= 0) return;
+    const kind = this.kind;
+    if (!kind || this.quotaRemaining <= 0) return;
     const jelly = this.jellies.find((j) => j.phase === 'parked');
     if (!jelly) return;
     this.quotaRemaining -= 1;
-    const r = JELLY_LAYOUT.radius;
+    const r = kind.radius;
     const x = GAME_WIDTH + r + Phaser.Math.FloatBetween(0, JELLY_LAYOUT.entryGapMax);
-    jelly.field(x, Phaser.Math.FloatBetween(LANE.top + r, LANE.bottom - r), waveJelly(config));
+    jelly.field(x, Phaser.Math.FloatBetween(LANE.top + r, LANE.bottom - r), kind);
   }
 
   /** A green ring round every jelly that's healing (#28: the health colour). */

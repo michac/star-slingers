@@ -15,9 +15,9 @@
  * Health and healing (#28 D2): every hit counts as its damage (plain 1,
  * charged 2, missile 1, blast 2). After a hit it waits healPauseMs, then its
  * hp climbs smoothly back, empty → full in healFullMs; every hit restarts the
- * wait. hp is fractional while it heals, so the health bar (#23) refills
- * smoothly; a green halo shows it's healing (the swarm draws it). A baby has 1
- * hp and no heal.
+ * wait (HealingHp, shared with the mother jelly). hp is fractional while it
+ * heals, so the health bar (#23) refills smoothly; a green halo shows it's
+ * healing (the swarm draws it). A baby has 1 hp and no heal.
  *
  * Every timer runs on update()'s delta (no tweens), so it steps in lockstep
  * with the e2e fixed clock. Motion is kinematic: it sets its hit sprite's
@@ -31,8 +31,9 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, JELLY_LAYOUT, LANE } from '../layout';
 import { COLORS } from '../tokens';
 import type { FleetHit } from './Fleet';
+import { HealingHp } from './HealingHp';
 import type { HomingTarget } from './HomingTarget';
-import { JELLY_TEX, TEX } from './textures';
+import { fitJellyBody, JELLY_TEX, TEX } from './textures';
 
 export type JellyPhase = 'parked' | 'swimming' | 'popping';
 
@@ -87,8 +88,7 @@ export class Jelly implements HomingTarget {
   private readonly image: Phaser.GameObjects.Image;
   private phaseState: JellyPhase = 'parked';
   private kind: JellyKind = { radius: JELLY_LAYOUT.radius, maxHp: 1, speed: 0, healPauseMs: 0, healFullMs: 0, score: 0 };
-  private hpLeft = 1;
-  private msSinceHit = 0;
+  private readonly life = new HealingHp(1, 0, 0);
   private flashMs = 0;
   private heading = Math.PI; // its direction of travel (radians, 0 = right)
   private t = 0; // ms swimming (the pulse clock), or into its pop
@@ -100,7 +100,7 @@ export class Jelly implements HomingTarget {
     scene: Phaser.Scene,
     private readonly orders: JellyOrders
   ) {
-    this.sprite = scene.physics.add.sprite(0, 0, TEX.jelly(JELLY_LAYOUT.radius)).setVisible(false);
+    this.sprite = scene.physics.add.sprite(0, 0, TEX.jelly(JELLY_LAYOUT.radius)).setVisible(false).setOrigin(JELLY_TEX.originX, JELLY_TEX.originY);
     this.sprite.setData('ref', this); // collision callback reaches the wrapper
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
@@ -112,10 +112,10 @@ export class Jelly implements HomingTarget {
     return this.kind.radius;
   }
   get hp(): number {
-    return this.hpLeft;
+    return this.life.hp;
   }
   get maxHp(): number {
-    return this.kind.maxHp;
+    return this.life.maxHp;
   }
   get phase(): JellyPhase {
     return this.phaseState;
@@ -136,14 +136,13 @@ export class Jelly implements HomingTarget {
   }
   /** Climbing back toward full: damaged, and its last hit is healPauseMs old. */
   get healing(): boolean {
-    return this.isActive && this.kind.healFullMs > 0 && this.hpLeft < this.kind.maxHp && this.msSinceHit >= this.kind.healPauseMs;
+    return this.isActive && this.life.healing;
   }
 
   /** Field it at (x, y) as `kind`, at full hp, swimming left. */
   field(x: number, y: number, kind: JellyKind): void {
     this.kind = kind;
-    this.hpLeft = kind.maxHp;
-    this.msSinceHit = 0;
+    this.life.reset(kind.maxHp, kind.healPauseMs, kind.healFullMs);
     this.flashMs = 0;
     this.heading = Math.PI;
     this.t = 0;
@@ -153,12 +152,7 @@ export class Jelly implements HomingTarget {
     const key = TEX.jelly(kind.radius);
     this.sprite.setTexture(key);
     this.image.setTexture(key).setVisible(true).setAlpha(1).setScale(1).clearTint();
-    // The hit circle sits on the dome: the sprite's origin is the dome's
-    // centre (as the image's), so a circle of r offset to it is centred there.
-    this.sprite.setOrigin(JELLY_TEX.originX, JELLY_TEX.originY);
-    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.setCircle(kind.radius, JELLY_TEX.width(kind.radius) * JELLY_TEX.originX - kind.radius, JELLY_TEX.height(kind.radius) * JELLY_TEX.originY - kind.radius);
-    body.enable = true;
+    fitJellyBody(this.sprite, kind.radius).enable = true;
     this.placeAt(x, y);
   }
 
@@ -175,7 +169,7 @@ export class Jelly implements HomingTarget {
       }
       return null;
     }
-    this.heal(deltaMs);
+    this.life.tick(deltaMs);
     if (this.flashMs > 0) {
       this.flashMs -= deltaMs;
       if (this.flashMs <= 0) this.image.clearTint();
@@ -219,14 +213,11 @@ export class Jelly implements HomingTarget {
   /** A hit dealing `damage`: restarts the heal's wait. Returns points on a kill, else 0. */
   takeHit(damage: number): number {
     if (!this.isActive) return 0;
-    this.hpLeft -= damage;
-    this.msSinceHit = 0;
-    if (this.hpLeft > 1e-6) {
+    if (!this.life.hit(damage)) {
       this.image.setTintFill(COLORS.white);
       this.flashMs = JELLY_LAYOUT.hitFlashMs;
       return 0;
     }
-    this.hpLeft = 0;
     this.pop();
     return this.kind.score;
   }
@@ -234,10 +225,7 @@ export class Jelly implements HomingTarget {
   /** Pop it now, as a kill (the mother jelly's pop takes her babies with
    *  her). Returns its points, or 0 if it wasn't in play. */
   popNow(): number {
-    if (!this.isActive) return 0;
-    this.hpLeft = 0;
-    this.pop();
-    return this.kind.score;
+    return this.takeHit(Infinity);
   }
 
   /** Off the field at once, no burst (a wave jump, or a forced clear). */
@@ -249,14 +237,6 @@ export class Jelly implements HomingTarget {
   debugPlace(x: number, y: number, kind: JellyKind): void {
     this.field(x, y, kind);
     this.frozen = true;
-  }
-
-  /** The heal (#28 D2): healPauseMs after the last hit, climb back to full in healFullMs. */
-  private heal(deltaMs: number): void {
-    this.msSinceHit += deltaMs;
-    const { healFullMs, healPauseMs, maxHp } = this.kind;
-    if (healFullMs <= 0 || this.hpLeft >= maxHp || this.msSinceHit < healPauseMs) return;
-    this.hpLeft = Math.min(maxHp, this.hpLeft + (maxHp * deltaMs) / healFullMs);
   }
 
   private placeAt(x: number, y: number): void {

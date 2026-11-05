@@ -12,7 +12,7 @@
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO, AMMO_REGEN_MS, FLEET, GAME_WIDTH, JELLY_LAYOUT, MOTHER_LAYOUT, SPECIAL, SPLITTER_CHILDREN } from './layout';
+import { AMMO, AMMO_REGEN_MS, FLEET, GAME_WIDTH, JELLY_LAYOUT, LANE, MOTHER_LAYOUT, SPECIAL, SPLITTER_CHILDREN } from './layout';
 import type { SpecialKind } from './objects/specials';
 
 export interface AsteroidSpec {
@@ -398,9 +398,10 @@ export function requiredDamagePerSec(wave: WaveConfig, players: 1 | 2): number {
 }
 
 /** One seat's sustained damage ceiling: both ammo pools at their regen rates
- *  (FIRE rounds + SPECIAL missiles), one hit each. */
-function seatDamagePerSec(): number {
-  return (1000 / AMMO_REGEN_MS) * DAMAGE.fire + (1000 / SPECIAL.regenMs) * DAMAGE.missile;
+ *  (FIRE rounds + SPECIAL missiles), each landing its damage (by default a
+ *  plain round's and one missile's). */
+function seatDamagePerSec(roundDamage: number = DAMAGE.fire, specialDamage: number = DAMAGE.missile): number {
+  return (1000 / AMMO_REGEN_MS) * roundDamage + (1000 / SPECIAL.regenMs) * specialDamage;
 }
 
 /** Fraction of the players' damage ceiling (seats × seatDamagePerSec) that
@@ -434,7 +435,7 @@ export function fieldFleetHitsPerSec(wave: WaveConfig, players: 1 | 2): number {
 // players: the fastest focus kill, and the slowest baby wipe.
 
 /** Fleet hits that lose every ship (each ship: shield, then hull). */
-const FLEET_HITS_TO_WIPE = 2 * 4;
+const FLEET_HITS_TO_WIPE = 2 * LANE.sublanes;
 
 /** A baby's trip from the mother's front to the fleet's bubble fronts, at its
  *  cruise speed (the straight-line part; it also climbs to its ship's row). */
@@ -456,7 +457,7 @@ export function babyWipeMs(): number {
  *  stopped). Normal seats; an Easy seat has no ammo limit. */
 export function motherFocusKillMs(players: 1 | 2): number {
   const tripleDamage = 3 * DAMAGE.missile;
-  const perSeat = (1000 / AMMO_REGEN_MS) * DAMAGE.charged + (1000 / SPECIAL.regenMs) * tripleDamage;
+  const perSeat = seatDamagePerSec(DAMAGE.charged, tripleDamage);
   const burst = players * (AMMO.max * DAMAGE.charged + SPECIAL.max * tripleDamage);
   return (Math.max(0, MOTHER.hp - burst) / (players * perSeat)) * 1000;
 }

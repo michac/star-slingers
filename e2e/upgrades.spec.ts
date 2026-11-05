@@ -19,6 +19,8 @@ import {
   enterBoss,
   countShots,
   clearField,
+  emptyField,
+  blastAt,
   score,
   fired,
   escortLocks,
@@ -318,20 +320,16 @@ test('a bomb also blows up on touching a rock, and at the screen edge (AC4)', as
 });
 
 test('a blast splits a splitter like a shot (the children survive it), and spares rocks still off-screen (AC4)', async ({ page }) => {
-  await gotoGame(page);
-  await clearField(page);
-  await stepGame(page, 16, 1);
-  const blast = (x: number, y: number) =>
-    page.evaluate(`${SCENE}.detonate(${SCENE}.rockets.fire('rocket-p2', ${x}, ${y}, 0, 0, 'p2', { bomb: true }))`);
+  await emptyField(page);
   await fieldRock(page, { x: 200, y: 380, kind: 'splitter', hp: 1, slot: 0 });
-  await blast(200, 380);
+  await blastAt(page, 200, 380);
   expect(await score(page)).toBe(SCORE.splitter);
   expect(await debug(page, 'childrenAlive()')).toBe(2);
 
   // A rock waiting just past the right edge is out of play: a blast there misses it.
   const r = ASTEROID_KIND.standard.radius;
   await fieldRock(page, { x: GAME_WIDTH + r + 2, y: 300, slot: 1 });
-  await blast(GAME_WIDTH - 4, 300);
+  await blastAt(page, GAME_WIDTH - 4, 300);
   expect(await score(page)).toBe(SCORE.splitter);
   expect(await page.evaluate(`${SCENE}.asteroids[1].isActive && !${SCENE}.asteroids[1].isPopping`)).toBe(true);
 });
@@ -341,11 +339,11 @@ test('boss fight: a blast takes each escort it reaches as that seat\'s lock and 
   await enterBoss(page);
   const at = (await page.evaluate(`(() => { const e = ${SCENE}.bossEncounter.escorts[0].sprite; return { x: e.x, y: e.y }; })()`)) as Pt;
   // A P2 bomb blown up right on escort 0: its P2 lock (bit 2) is set, as a P2 shot would.
-  await page.evaluate(`${SCENE}.detonate(${SCENE}.rockets.fire('rocket-p2', ${at.x}, ${at.y}, 0, 0, 'p2', { bomb: true }))`);
+  await blastAt(page, at.x, at.y, 'p2');
   expect((await escortLocks(page))[0]).toBe(2);
   // One blown up on the boss itself does nothing to it.
   const boss = (await page.evaluate(`(() => { const b = ${SCENE}.bossEncounter.boss.sprite; return { x: b.x, y: b.y }; })()`)) as Pt;
-  await page.evaluate(`${SCENE}.detonate(${SCENE}.rockets.fire('rocket-p1', ${boss.x}, ${boss.y}, 0, 0, 'p1', { bomb: true }))`);
+  await blastAt(page, boss.x, boss.y, 'p1');
   expect(await debug(page, 'bossHp()')).toBe(BOSS.hp);
 });
 

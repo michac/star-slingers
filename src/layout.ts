@@ -508,6 +508,7 @@ export const JELLY_LAYOUT = {
 export const MOTHER_LAYOUT = {
   radius: 40,
   x: GAME_WIDTH - 62,
+  y: (LANE.top + LANE.bottom) / 2, // the lane's centre line: the middle of her bob
   enterFromX: GAME_WIDTH + 50,
   enterMs: 1500,
   bobAmp: 100, // px either side of the lane's centre line

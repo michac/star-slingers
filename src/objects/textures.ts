@@ -367,6 +367,14 @@ export const JELLY_TEX = {
   originY: 1.1 / 3,
 } as const;
 
+/** Fit a jelly sprite's Arcade body (its origin already JELLY_TEX's) to a
+ *  circle of dome radius r: the origin is the dome's centre, so the circle is
+ *  offset to sit there. Returns the body. */
+export function fitJellyBody(sprite: Phaser.Physics.Arcade.Sprite, r: number): Phaser.Physics.Arcade.Body {
+  const body = sprite.body as Phaser.Physics.Arcade.Body;
+  return body.setCircle(r, JELLY_TEX.width(r) * JELLY_TEX.originX - r, JELLY_TEX.height(r) * JELLY_TEX.originY - r);
+}
+
 /** #28 space jelly: a glowing acid-green dome, nose up (Jelly rotates it to
  *  its heading), with a scalloped skirt and four wavy tentacles trailing down
  *  behind it. A dark inner shade and a bright rim and highlight make it read

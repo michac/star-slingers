@@ -9,8 +9,8 @@
  * the mother jelly, #28), the between-acts fleet flyby (#29), per-player HUDs, the wave
  * banner, damaged enemies' health bars, and the fail/victory overlays. It
  * also owns the shot rules (#22): FIRE rounds and SPECIAL missiles (fireShot,
- * pickMissileTarget) and what each does on a hit (handleHit, handleShipHit,
- * handleMonsterHit, handleBossHit, handleGiantHit), and what a rock reaching
+ * pickMissileTarget) and what each does on a hit (handleHit, handleSquadHit,
+ * handleBossHit, handleGiantHit), and what a rock reaching
  * the fleet does (checkFleetContacts; the giant wipes the fleet itself, and a
  * ship's bolt or a jelly hits it through its squad). And the upgrades
  * (#26): a boss wave's pod drop (UpgradeDrop, taken by FIRE rounds in
@@ -38,7 +38,6 @@ import { WaveDirector } from '../objects/WaveDirector';
 import { BossEncounter } from '../objects/BossEncounter';
 import { GiantAsteroid } from '../objects/GiantAsteroid';
 import { ShipSquadron } from '../objects/ShipSquadron';
-import type { EnemyShip } from '../objects/EnemyShip';
 import { JellySwarm, waveJelly } from '../objects/JellySwarm';
 import { MotherJelly } from '../objects/MotherJelly';
 import { ActTransition } from '../objects/ActTransition';
@@ -48,7 +47,7 @@ import { HealthBars, type HealthBarTarget } from '../objects/HealthBars';
 import { inBlast, specialCanHit, type HomingTarget } from '../objects/HomingTarget';
 import type { SpecialKind } from '../objects/specials';
 import { UpgradeDrop } from '../objects/UpgradeDrop';
-import { actStartWave, BOSS_DROPS, COMMAND_SHIP_WAVE, DAMAGE, RUN, startWaveFromQuery } from '../waves';
+import { actStartWave, BOSS_DROPS, COMMAND_SHIP_WAVE, DAMAGE, RUN, startWaveFromQuery, type BossId } from '../waves';
 import { buzz, shotBuzz } from '../haptics';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
@@ -61,11 +60,21 @@ function splitPair(a: unknown, b: unknown): { rocket: Phaser.Physics.Arcade.Spri
   return null;
 }
 
-/** What a FIRE round, a missile or a blast can hurt and score (a rock, an enemy ship). */
+/** What a FIRE round, a missile or a blast can hurt and score (a rock, an
+ *  enemy ship, a jelly). */
 interface Shootable {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
   /** Deal `damage`; the points on a kill, else 0. */
   takeHit(damage: number): number;
+}
+
+/** A boss wave's own encounter (the giant asteroid, the command ship, the mother jelly). */
+interface Encounter {
+  start(): void;
+  /** Off the field (a wave jump away from the fight). */
+  stop(): void;
+  /** DEV/test: defeat it now, through its real defeat path. */
+  debugDefeat(): void;
 }
 
 /** A seat in play: its fixed wiring plus the HUD built for it. */
@@ -107,6 +116,12 @@ export class SandboxScene extends Phaser.Scene {
   private bossEncounter!: BossEncounter;
   private giant!: GiantAsteroid;
   private squadron!: ShipSquadron;
+  /** Every enemy that takes hits by one plain rule (Shootable.takeHit): act
+   *  2's ships (#27), act 3's jellies and the mother jelly (#28). Built once,
+   *  so the collider, the blast and the missile picker share one list. */
+  private squadEnemies!: (Shootable & HomingTarget)[];
+  /** Each boss wave's encounter, by BossId. */
+  private encounters!: Record<BossId, Encounter>;
   private swarm!: JellySwarm;
   private mother!: MotherJelly;
   private actTransition!: ActTransition;
@@ -228,6 +243,8 @@ export class SandboxScene extends Phaser.Scene {
         this.waveDirector.onEncounterDefeated();
       }
     );
+    this.squadEnemies = [...this.squadron.ships, ...this.swarm.jellies, this.mother];
+    this.encounters = { commandShip: this.bossEncounter, giantAsteroid: this.giant, monsterBoss: this.mother };
 
     // Between acts the fleet flies across (#29), on the scene's update clock.
     this.actTransition = new ActTransition(this.fleet, this.starfield);
@@ -250,16 +267,10 @@ export class SandboxScene extends Phaser.Scene {
         },
         ships: this.squadron,
         monsters: this.swarm,
-        startEncounter: (boss) => {
-          if (boss === 'giantAsteroid') this.giant.start();
-          else if (boss === 'monsterBoss') this.mother.start();
-          else this.bossEncounter.start();
-        },
+        startEncounter: (boss) => this.encounters[boss].start(),
         stopEncounter: () => {
-          this.bossEncounter.stop();
-          this.giant.stop();
-          this.mother.stop();
-          this.swarm.stop(); // her babies
+          for (const encounter of Object.values(this.encounters)) encounter.stop();
+          this.swarm.stop(); // the mother jelly's babies
         },
         stopInterludes: () => {
           this.actTransition.cancel();
@@ -339,18 +350,12 @@ export class SandboxScene extends Phaser.Scene {
       this.processBossHit
     );
 
-    // Built ONCE over the enemy ships' pool (#27), same discipline.
+    // Built ONCE over the enemy ships' pool (#27), the jelly pool and the
+    // mother jelly's sprite (#28), same discipline.
     this.physics.add.overlap(
       this.rockets.group,
-      this.squadron.ships.map((ship) => ship.sprite),
-      this.handleShipHit
-    );
-
-    // Built ONCE over the jelly pool and the mother jelly's sprite (#28), same discipline.
-    this.physics.add.overlap(
-      this.rockets.group,
-      [...this.swarm.jellies.map((jelly) => jelly.sprite), this.mother.sprite],
-      this.handleMonsterHit
+      this.squadEnemies.map((enemy) => enemy.sprite),
+      this.handleSquadHit
     );
 
     // Built ONCE over the giant asteroid's sprite (#25).
@@ -378,9 +383,7 @@ export class SandboxScene extends Phaser.Scene {
         // Defeat the current wave's boss: the giant pops (and bursts), the command ship goes down.
         defeatBoss: () => {
           const boss = this.waveDirector.wave.boss;
-          if (boss === 'giantAsteroid') this.giant.debugDefeat();
-          else if (boss === 'monsterBoss') this.mother.debugDefeat();
-          else this.bossEncounter.debugDefeat();
+          if (boss) this.encounters[boss].debugDefeat();
         },
         hits: () => this.hitCount,
         score: () => this.scoreKeeper.value,
@@ -635,9 +638,7 @@ export class SandboxScene extends Phaser.Scene {
     // inBlast skips anything still off the right edge (specialCanHit).
     const blast = (t: Shootable & HomingTarget) => (inBlast(t, x, y, r) ? this.scoreHit(t, t.takeHit(DAMAGE.blast)) : 0);
     for (const asteroid of this.asteroids) if (blast(asteroid) > 0) this.waveDirector.spawnChildren(asteroid);
-    for (const ship of this.squadron.ships) blast(ship);
-    for (const jelly of this.swarm.jellies) blast(jelly);
-    blast(this.mother);
+    for (const enemy of this.squadEnemies) blast(enemy);
     this.bossEncounter.blastEscorts(x, y, r, player);
   }
 
@@ -671,9 +672,9 @@ export class SandboxScene extends Phaser.Scene {
     let bestPerp = Infinity;
     // Asteroids during the field waves, the enemy ships during act 2's ship
     // waves (#27), the jellies and the mother during act 3 (#28), plus the
-    // escorts during the command ship's fight. Plain loops, one per
-    // source — this runs every frame while a seat holds SPECIAL and for every
-    // target-less missile, so no merged array.
+    // escorts during the command ship's fight. Plain loops over lists built
+    // once — this runs every frame while a seat holds SPECIAL and for every
+    // target-less missile, so nothing is merged per call.
     const consider = (cand: HomingTarget) => {
       if (!specialCanHit(cand) || exclude?.has(cand)) return; // also never one still off the right edge
       const s = cand.sprite;
@@ -689,9 +690,7 @@ export class SandboxScene extends Phaser.Scene {
       }
     };
     for (const cand of this.asteroids) consider(cand);
-    for (const cand of this.squadron.ships) consider(cand);
-    for (const cand of this.swarm.jellies) consider(cand);
-    consider(this.mother);
+    for (const cand of this.squadEnemies) consider(cand);
     for (const cand of this.bossEncounter.missileTargets()) consider(cand);
     consider(this.giant); // never taken: it's chargedOnly (specialCanHit)
     return best;
@@ -758,26 +757,14 @@ export class SandboxScene extends Phaser.Scene {
     return pts;
   }
 
-  /** Rocket vs an enemy ship (#27). EnemyShip.takeHit holds the rule (a
-   *  wave-5 bubble soaks one point, the hull has 1 hp). A charged round that
-   *  kills one carries on along its line (#22), so it can take the ship behind
-   *  too; every other hit spends the shot. A bomb touching one blows up there
-   *  (#26); the blast does the damage. */
-  private readonly handleShipHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
-    const pair = splitPair(a, b);
-    const ship = pair?.other.getData('ref') as EnemyShip | undefined;
-    if (!pair || !ship) return;
-    const { rocket } = pair;
-    if (rocket.getData('bomb')) return this.detonate(rocket);
-    this.resolveShot(rocket, ship);
-  };
-
-  /** Rocket vs a space jelly or the mother jelly (#28). Their takeHit holds
-   *  the rule (the hit's damage off their hp, restarting the heal's wait); a
-   *  charged round that kills a jelly carries on (#22), every other hit spends
-   *  the shot. A bomb touching one blows up there (#26); the blast does the
+  /** Rocket vs an enemy ship (#27), a space jelly or the mother jelly (#28).
+   *  Each one's takeHit holds its rule (a wave-5 bubble soaks one point and a
+   *  ship's hull has 1 hp; a jelly's hp takes the hit's damage and its heal's
+   *  wait restarts). A charged round that kills one carries on along its line
+   *  (#22), so it can take the enemy behind too; every other hit spends the
+   *  shot. A bomb touching one blows up there (#26); the blast does the
    *  damage. */
-  private readonly handleMonsterHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
+  private readonly handleSquadHit: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (a, b) => {
     const pair = splitPair(a, b);
     const target = pair?.other.getData('ref') as Shootable | undefined;
     if (!pair || !target) return;

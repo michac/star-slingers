@@ -10,7 +10,7 @@
  * MOTHER dials outlasting an ignored brood.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, clearField, healthBars, type Page } from './helpers';
+import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, emptyField, blastAt, healthBars, type Page } from './helpers';
 import { AMMO_REGEN_MS, BOMB, GAME_WIDTH, JELLY_LAYOUT, LANE, MOTHER_LAYOUT, SCORE, SLING, SUBLANE_H, sublaneCenterY } from '../src/layout';
 import { BOSS_DROPS, JELLY, MOTHER, RUN, babyWipeMs, motherFocusKillMs } from '../src/waves';
 
@@ -26,25 +26,13 @@ const W7 = RUN[6].monsters!;
 const W8 = RUN[7].monsters!;
 const FRAME = 16;
 
-/** An empty field to place jellies on: wave 1 with its rocks taken off (they
- *  don't come back: a vanished rock is parked, not respawned). */
-async function emptyField(page: Page): Promise<void> {
-  await gotoGame(page);
-  await clearField(page);
-  await stepGame(page, FRAME, 1);
-}
-
 /** Place pool jelly i as wave N's jelly: held still (it still heals), or swimming. */
 const placeJelly = (page: Page, i: number, x: number, y: number, { wave = 7, held = true } = {}) =>
   debug(page, `fieldJelly(${i}, ${x}, ${y}, ${wave}, ${held})`);
 
-/** A bomb blown up right at (x, y), through the scene's real detonate path. */
-const blastAt = (page: Page, x: number, y: number) =>
-  page.evaluate(`${SCENE}.detonate(${SCENE}.rockets.fire('rocket-p2', ${x}, ${y}, 0, 0, 'p2', { bomb: true }))`);
-
 /** Frames from a hit until a held jelly's hp is back to full. */
 async function framesToFull(page: Page, i: number): Promise<number> {
-  const r = await stepUntil(page, `s.__debug.jellies()[${i}].hp >= s.__debug.jellies()[${i}].maxHp`, 400);
+  const r = await stepUntil(page, `s.swarm.jellies[${i}].hp >= s.swarm.jellies[${i}].maxHp`, 400);
   expect(r.done).toBe(true);
   return r.steps;
 }
@@ -207,8 +195,9 @@ test('real shots count as usual on a jelly: plain 1, charged 2 (passing through 
 test('the mother jelly slides in to the right of the lane, bobs, and releases babies that swim at the fleet', async ({ page }) => {
   await gotoGame(page, '?wave=9');
   expect(await debug(page, 'state()')).toBe('boss');
-  expect(await mother(page)).toMatchObject({ phase: 'entering', hp: MOTHER.hp, maxHp: MOTHER.hp, released: 0 });
-  expect((await mother(page)).x).toBeGreaterThan(GAME_WIDTH);
+  const entering = await mother(page);
+  expect(entering).toMatchObject({ phase: 'entering', hp: MOTHER.hp, maxHp: MOTHER.hp, released: 0 });
+  expect(entering.x).toBeGreaterThan(GAME_WIDTH);
   expect((await stepUntil(page, `s.__debug.mother().phase === 'live'`, Math.ceil(MOTHER_LAYOUT.enterMs / FRAME) + 2)).done).toBe(true);
   expect((await mother(page)).x).toBeCloseTo(MOTHER_LAYOUT.x, 0);
   expect(swimming(await jellies(page))).toHaveLength(0);
@@ -219,7 +208,7 @@ test('the mother jelly slides in to the right of the lane, bobs, and releases ba
   expect(babies).toHaveLength(MOTHER.babiesPerRelease);
   expect(babies.every((b) => b.baby && b.hp === 1 && b.maxHp === 1 && b.r === JELLY_LAYOUT.babyRadius)).toBe(true);
   await stepGame(page, FRAME, 1);
-  expect((await jellies(page)).filter((j) => j.phase === 'swimming').every((b) => b.target >= 0)).toBe(true);
+  expect(swimming(await jellies(page)).every((b) => b.target >= 0)).toBe(true);
   const next = await stepUntil(page, `s.__debug.mother().released > ${MOTHER.babiesPerRelease}`, Math.ceil(MOTHER.releaseEveryMs / FRAME) + 2);
   expect(Math.abs(next.steps - MOTHER.releaseEveryMs / FRAME)).toBeLessThanOrEqual(2);
   babies = swimming(await jellies(page));
@@ -247,13 +236,13 @@ test('every weapon hurts the mother, and she heals from 0 back to full given tim
   // A plain round 1, a charged round 2 (fired straight at her from the left).
   await fire(page, m.x - 120, m.y, SLING.maxSpeed, 0);
   expect((await stepUntil(page, `s.__debug.mother().hp < ${MOTHER.hp}`, 30)).done).toBe(true);
-  expect((await mother(page)).hp).toBe(MOTHER.hp - 1);
   const at = await mother(page);
+  expect(at.hp).toBe(MOTHER.hp - 1);
   await fire(page, at.x - 120, at.y, SLING.maxSpeed, 0, '{ charged: true }');
   expect((await stepUntil(page, `s.__debug.mother().hp < ${MOTHER.hp - 1}`, 30)).done).toBe(true);
-  expect((await mother(page)).hp).toBe(MOTHER.hp - 3);
   // The detonator's blast 2; and a missile's picker takes her.
   const b = await mother(page);
+  expect(b.hp).toBe(MOTHER.hp - 3);
   await blastAt(page, b.x - b.r, b.y);
   expect((await mother(page)).hp).toBe(MOTHER.hp - 5);
   expect(await page.evaluate(`${SCENE}.pickMissileTarget(${b.x - 150}, ${b.y}, 1, 0) === ${SCENE}.mother`)).toBe(true);

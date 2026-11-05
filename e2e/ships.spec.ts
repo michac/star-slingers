@@ -8,7 +8,7 @@
  * The boss beam's crosshair and the command-ship drop are in boss.spec.ts.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, clearField, tryAgain, countShots, fired, touchscreen, v2Layout, type Page } from './helpers';
+import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, emptyField, tryAgain, countShots, fired, touchscreen, v2Layout, type Page } from './helpers';
 import { BOMB, ENEMY_SHIP, GAME_WIDTH, MISSILE, SCORE, SLING, sublaneCenterY } from '../src/layout';
 import { RUN } from '../src/waves';
 
@@ -22,14 +22,6 @@ const inPlay = (list: Ship[]) => list.filter((s) => s.phase === 'gliding' || s.p
 const W4 = RUN[3].ships!;
 const W5 = RUN[4].ships!;
 const glideMs = (w: typeof W4) => w.fireEveryMs - ENEMY_SHIP.holdMs;
-
-/** An empty field to place ships on: wave 1 with its rocks taken off (they
- *  don't come back: a vanished rock is parked, not respawned). */
-async function emptyField(page: Page): Promise<void> {
-  await gotoGame(page);
-  await clearField(page);
-  await stepGame(page, 16, 1);
-}
 
 /** Place pool ship i, held still (it fires only through shipFire). */
 const placeShip = (page: Page, i: number, x: number, y: number, shielded = false) =>

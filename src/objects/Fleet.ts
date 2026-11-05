@@ -155,6 +155,24 @@ export class Fleet {
     return this.ships.findIndex((ship) => ship.state !== 'lost');
   }
 
+  /** The live ship nearest a point at height y, or -1 if the whole fleet is
+   *  lost: what an enemy ship aims at (#27) and a jelly swims at (#28). Every
+   *  ship sits at the same x (shipPoint), so nearest is nearest in y. It runs
+   *  every frame for every jelly, so it allocates nothing. */
+  nearestLive(y: number): number {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < this.ships.length; i++) {
+      const ship = this.ships[i];
+      const d = Math.abs(y - ship.cy);
+      if (ship.state !== 'lost' && d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
   /** The x an enemy in ship i's sublane stops at: the bubble's front while
    *  the shield is up, else the hull's nose. */
   contactX(i: number): number {
