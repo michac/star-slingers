@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RUN, shipFleetHitsPerSec, waveTarget } from './waves';
+import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RUN, shipFleetHitsPerSec, SOLO } from './waves';
 import { COLORS } from './tokens';
 import { JoinScene } from './scenes/JoinScene';
 import { SandboxScene } from './scenes/SandboxScene';
@@ -8,34 +8,35 @@ import { SandboxScene } from './scenes/SandboxScene';
 // Difficulty readout — the tuning loop is: change a RUN target, reload,
 // read these. Shows target vs achieved (the solver lands at-or-above target,
 // or below if saturated) and the tier the solver settled on (see docs/design.md §7).
-// Logged for solo and co-op: the join screen picks the seat count later. A
-// ship wave (#27) logs its dials and the bolts/s that would reach the fleet if
-// nobody shot (the same for any seat count).
+// A solo run plays the same waves at SOLO.pace (#6), so each wave logs once,
+// with its two-player and solo numbers side by side. A ship wave (#27) logs
+// its dials and the bolts/s that would reach the fleet if nobody shot.
 if (import.meta.env.DEV) {
-  for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, ships, placeholder }] of RUN.entries()) {
+  for (const [i, { act, kind, boss, field: w, ships, placeholder }] of RUN.entries()) {
     const label = `wave ${i + 1} (act ${act}, ${boss ?? kind}${placeholder ? ' placeholder' : ''})`;
     if (ships) {
-      if (players === 2) {
-        console.log(
-          `${label}: ${ships.onScreen} ships at once, quota ${ships.quota}, ` +
-            `${ships.shieldedEvery ? `every ${ships.shieldedEvery} shielded` : 'no shields'}, ` +
-            `one shot per ${ships.fireEveryMs}ms each = ${shipFleetHitsPerSec(ships).toFixed(2)} bolts/s unattended`
-        );
-      }
+      console.log(
+        `${label}: ${ships.onScreen} ships at once, quota ${ships.quota}, ` +
+          `${ships.shieldedEvery ? `every ${ships.shieldedEvery} shielded` : 'no shields'}, ` +
+          `one shot per ${ships.fireEveryMs}ms each = ${shipFleetHitsPerSec(ships, 2).toFixed(2)} bolts/s unattended ` +
+          `(solo ${shipFleetHitsPerSec(ships, 1).toFixed(2)})`
+      );
       continue;
     }
     if (!w) {
-      if (players === 2) console.log(`${label}: boss encounter (${boss === 'giantAsteroid' ? 'GIANT' : 'BOSS'} dials)`);
+      console.log(`${label}: boss encounter (${boss === 'giantAsteroid' ? 'GIANT' : 'BOSS'} dials)`);
       continue;
     }
-    const specs = asteroidsFor(w, players);
+    const specs = asteroidsFor(w, 2);
     const count = (k: string) => specs.filter((s) => s.kind === k).length;
-    const speedScale = (specs[0].speed / ROCK_STREAMS[0].baseSpeed).toFixed(2);
+    const speedScale = (players: 1 | 2) => (asteroidsFor(w, players)[0].speed / ROCK_STREAMS[0].baseSpeed).toFixed(2);
+    const pct = (players: 1 | 2) => `${(breakEvenAccuracy(w, players) * 100).toFixed(0)}%`;
     console.log(
-      `${label} (${players}p): target ${waveTarget(w, players).toFixed(2)} -> achieved ` +
-        `${requiredDamagePerSec(w, players).toFixed(2)} required damage/s ` +
-        `[streams ${specs.length}, speed x${speedScale}, tough ${count('tough')}, splitters ${count('splitter')}], ` +
-        `break-even ${(breakEvenAccuracy(w, players) * 100).toFixed(0)}%, quota ${w.quota}`
+      `${label}: target ${w.required.toFixed(2)} -> achieved ` +
+        `${requiredDamagePerSec(w, 2).toFixed(2)} required damage/s ` +
+        `[streams ${specs.length}, speed x${speedScale(2)}, tough ${count('tough')}, splitters ${count('splitter')}], ` +
+        `break-even 2p ${pct(2)}; solo (pace x${SOLO.pace}): speed x${speedScale(1)}, ` +
+        `${requiredDamagePerSec(w, 1).toFixed(2)} required damage/s, break-even ${pct(1)}; quota ${w.quota}`
     );
   }
 }

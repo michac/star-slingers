@@ -110,14 +110,14 @@ textures, tokens).
   so CI and both deploy pre-flights check all of it.
 - `npm test` — `@playwright/test` suite, one spec per area in `e2e/`: `combat.spec.ts` (boot, hits,
   score, FIRE damage + charged pass-through, the SPECIAL missile, splitters, hp), `waves.spec.ts` (the 10-wave `RUN` table and its
-  play order and ship-wave dials, the act-transition flyby, `?wave=N`, Try again's act-start retry, the solver, solo target scaling), `boss.spec.ts`
+  play order and ship-wave dials, the act-transition flyby, `?wave=N`, Try again's act-start retry, the solver, the solo pace model), `boss.spec.ts`
   (co-op escort locks, shield web, the beam's crosshair and drop, `?boss`), `ships.spec.ts` (act 2's enemy
   ships: dispatch, roam bounds + shot warning, bolts vs the fleet, re-targeting, the bubble rule, missiles,
   the quota flow and fail card), `giant.spec.ts` (the wave-3 giant asteroid: charged-only
   and paired-in-co-op damage, no SPECIAL hurts it, the fleet wipe, the burst, its clear and pod drop), `join.spec.ts` (the join screen: join, Easy/Normal,
   countdown, leaving, Easy's unlimited ammo, Try again keeps the lineup, a win returns to it),
   `fleet.spec.ts` (the colony fleet: sublane contact, harmless pass, all-four-lost fail, shield regen + rebuild,
-  sublane spawn spread, splitter children in the lane, the starfield), `solo.spec.ts` (one joined seat), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools),
+  sublane spawn spread, splitter children in the lane, the starfield), `solo.spec.ts` (one joined seat: the empty seat, the solo pace in play), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools),
   `upgrades.spec.ts` (boss upgrade pods, the SPECIAL swipe between modes, triple missile, detonator, Try again's kept
   specials) and `haptics.spec.ts`. The shared harness is `e2e/helpers.ts`: `gotoGame` (by default it skips the
   join screen with both seats Normal; pass a lineup, or `'join'` to stop on it), `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,

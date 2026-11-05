@@ -9,7 +9,6 @@
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
 import { BOSS_LAYOUT } from '../layout';
-import { BOSS } from '../waves';
 import { rejectSpark } from './draw';
 import { TEX } from './textures';
 import type { PlayerId } from './Rocket';
@@ -27,7 +26,9 @@ export class Escort {
     /** Fired the instant this escort is destroyed (gate + interrupt). */
     private readonly onDestroyed: () => void,
     /** Solo (one joined seat): both hits may come from the one seat (see takeHit). */
-    private readonly solo: boolean
+    private readonly solo: boolean,
+    /** How long a downed node stays down: BOSS.escortRegenMs at the seat count (BossEncounter). */
+    private readonly regenMs: number
   ) {
     this.sprite = scene.physics.add
       .sprite(BOSS_LAYOUT.park.x, BOSS_LAYOUT.park.y, TEX.escort)
@@ -62,11 +63,11 @@ export class Escort {
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
   }
 
-  /** A downed node returns after B34's fixed shield-web gap window. */
+  /** A downed node returns after B34's shield-web gap window (regenMs). */
   update(deltaMs: number): void {
     if (this.active || !this.popping) return;
     this.downMs += deltaMs;
-    if (this.downMs >= BOSS.escortRegenMs) this.activate();
+    if (this.downMs >= this.regenMs) this.activate();
   }
 
   /** Encounter repositions it on the orbit each frame. */

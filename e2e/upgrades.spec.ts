@@ -29,6 +29,7 @@ import {
   touchscreen,
   v2Layout,
   clearGiantField,
+  SOLO_BOTTOM,
   type Page,
   type Pt,
   type Touchscreen,
@@ -163,7 +164,7 @@ test('unpicked pods blink, then leave after the timeout, and the run goes on (AC
 });
 
 test('solo: the pods leave as soon as the one seat picks (AC3)', async ({ page }) => {
-  await gotoGame(page, '', { p2: 'normal' });
+  await gotoGame(page, '', SOLO_BOTTOM);
   await dropPods(page);
   expect(await debug(page, 'pickPod(1, 0)')).toBe(false); // no top seat in this run
   await shoot(page, 'p2', { x: PODS.xs[1], y: 600 }, 0, -SLING.maxSpeed);

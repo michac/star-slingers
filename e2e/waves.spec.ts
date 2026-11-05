@@ -1,7 +1,7 @@
 /**
  * waves.spec.ts — the run and the src/waves.ts difficulty model: the 10-wave RUN table and its
  * play order, the act transition's fleet flyby (#29), act 2's ship-wave dials (#27), the ?wave shortcut, Try again's retry wave,
- * the wave solver and solo target scaling.
+ * the wave solver and the solo pace (#6).
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, debug, clearGiantField, gotoGame, stepGame, stepUntil, loseShips, loseRun, tryAgain, winToFreshRun, type Page } from './helpers';
@@ -13,18 +13,19 @@ import {
   ASTEROID_KIND,
   BREATHER,
   breakEvenAccuracy,
+  leakAllowancePerSec,
   clearDamage,
   COMMAND_SHIP_WAVE,
   DAMAGE,
   fieldFleetHitsPerSec,
   maxHpOf,
+  pacedMs,
   requiredDamagePerSec,
   RUN,
   shipFleetHitsPerSec,
   SOLO,
   solveWave,
   startWaveFromQuery,
-  waveTarget,
 } from '../src/waves';
 
 /** Get past the giant-asteroid wave (#25) at once: end it (clearGiantField),
@@ -306,8 +307,8 @@ test("act 2's ship waves are no harder unattended than act 1's: bolts/s within t
   // Wave 4 asks no more than wave 1 would if nobody shot, wave 5 no more than wave 2.
   const [w1, w2, , w4, w5] = RUN;
   for (const players of [1, 2] as const) {
-    expect(shipFleetHitsPerSec(w4.ships!), `wave 4 vs wave 1 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w1.field!, players));
-    expect(shipFleetHitsPerSec(w5.ships!), `wave 5 vs wave 2 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w2.field!, players));
+    expect(shipFleetHitsPerSec(w4.ships!, players), `wave 4 vs wave 1 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w1.field!, players));
+    expect(shipFleetHitsPerSec(w5.ships!, players), `wave 5 vs wave 2 (${players}p)`).toBeLessThanOrEqual(fieldFleetHitsPerSec(w2.field!, players));
   }
   // Wave 5 steps up from wave 4: more ships at once, a bigger quota, and shields.
   expect(w5.ships!.onScreen).toBeGreaterThan(w4.ships!.onScreen);
@@ -353,18 +354,24 @@ test('booted waves field the hp mix: wave 1 all 1-hp standards, wave 2 some 2-hp
   expect(w2.every(([kind]) => kind !== 'splitter')).toBe(true);
 });
 
-test('solo scales wave targets; two-player targets are untouched', () => {
-  // SOLO.requiredScale ships at 1.0, so drive the wiring with an explicit scale.
+test('solo plays the same field as two players at SOLO.pace (#6)', () => {
+  expect(SOLO.pace).toBe(0.7);
   for (const w of RUN.flatMap((r) => (r.field ? [r.field] : []))) {
-    expect(waveTarget(w, 2, 0.5)).toBe(w.required);
-    expect(waveTarget(w, 1, 0.5)).toBeCloseTo(w.required * 0.5, 10);
-    expect(waveTarget(w, 1)).toBeCloseTo(w.required * SOLO.requiredScale, 10);
-    // Break-even is over the seats in play: per unit of required damage/s, one
-    // seat must land twice the share two seats do (whatever SOLO's scale is).
-    const perRequired = (players: 1 | 2) => breakEvenAccuracy(w, players) / requiredDamagePerSec(w, players);
-    expect(requiredDamagePerSec(w, 1)).toBeGreaterThan(0);
-    expect(perRequired(1) / perRequired(2)).toBeCloseTo(2, 10);
+    const duo = asteroidsFor(w, 2);
+    const solo = asteroidsFor(w, 1);
+    // Two players get the solver's field for the wave's own target, untouched.
+    expect(duo).toEqual(solveWave(w.required, leakAllowancePerSec(w), w.topKind));
+    // Solo: the same rocks (count, kind, size, hp), each drifting at the pace.
+    const shape = (spec: (typeof duo)[number]) => ({ kind: spec.kind, radius: spec.radius, hp: maxHpOf(spec) });
+    expect(solo.map(shape)).toEqual(duo.map(shape));
+    solo.forEach((spec, i) => expect(spec.speed).toBeCloseTo(duo[i].speed * SOLO.pace, 10));
+    // A solo seat lands more than a co-op seat's share, but less than double.
+    expect(breakEvenAccuracy(w, 1)).toBeGreaterThan(breakEvenAccuracy(w, 2));
+    expect(breakEvenAccuracy(w, 1)).toBeLessThan(2 * breakEvenAccuracy(w, 2));
   }
+  // Pacing durations (boss charge, escort regen, ship shots…) stretch only in solo.
+  expect(pacedMs(5000, 2)).toBe(5000);
+  expect(pacedMs(5000, 1)).toBeCloseTo(5000 / SOLO.pace, 10);
 });
 
 test('break-even accuracy is over both ammo pools (#22)', () => {

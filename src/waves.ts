@@ -12,7 +12,7 @@
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN } from './layout';
+import { AMMO_REGEN_MS, FLEET, GAME_WIDTH, SPECIAL, SPLITTER_CHILDREN, type ChildMotion } from './layout';
 import type { SpecialKind } from './objects/specials';
 
 export interface AsteroidSpec {
@@ -211,22 +211,39 @@ export function startWaveFromQuery(search: string): number {
 }
 
 /**
- * Solo (one seat joined, #6/#20) difficulty dial. A solo run fields the
- * same field waves with each target scaled: `required × requiredScale`. Shipped at
- * 1.0 (no change) — the playtest finds the real value. Ammo regen is per seat,
- * so one player already has half the team's firepower; the dev boot log's
- * break-even % accounts for that. Boss timing is NOT scaled (out of this slice).
+ * Solo (one seat joined, #6/#20): the same run at a slower pace. A solo run
+ * fields exactly the enemies a two-player run does (counts, kinds, hp, quota);
+ * only what sets the pace slows, by `pace`:
+ *   - field waves' rocks (and a splitter's children) drift at speed × pace
+ *     (asteroidsFor, splitterMotionFor), so the solver's composition, the
+ *     wave's two-hit rocks or splitters included, is the two-player one;
+ *   - every pacing duration — the command ship's beam charge and a downed
+ *     escort's regen, a ship wave's time between shots (shipsFor) — is
+ *     ms ÷ pace (pacedMs). Route any pace-dependent interval through it.
+ * Solo leaves alone: the fleet's shield regen, enemy bolt speed and the
+ * giant asteroid (its solo rule is already per-seat even:
+ * any charged hit is a point; its drift isn't slowed).
+ *
+ * Tuning: 0.7 plays solo at 70% of the co-op pace (Michael, #6 D2). Shield
+ * regen forgives misses at the same rate either way, so a field wave's solo
+ * required damage/s comes out at ~60–70% of the team's. Lower is gentler;
+ * 1.0 is the two-player pace. The dev boot log prints each field wave's solo
+ * required damage/s and break-even beside its two-player ones. The phone
+ * playtest that calibrates it is #45.
  */
 export const SOLO = {
-  requiredScale: 1.0,
+  pace: 0.7,
 } as const;
 
-/** The target damage/s the solver realizes for this wave at this player count.
- *  `soloScale` exists only so a test can catch the solo wiring (scale applied
- *  in solo, never in two-player) while the shipped SOLO.requiredScale is 1.0;
- *  callers leave it at its default. */
-export function waveTarget(wave: WaveConfig, players: 1 | 2, soloScale: number = SOLO.requiredScale): number {
-  return players === 1 ? wave.required * soloScale : wave.required;
+/** The pace this seat count plays at: 1 with two seats, SOLO.pace solo. */
+export function paceFor(players: 1 | 2): number {
+  return players === 1 ? SOLO.pace : 1;
+}
+
+/** A pacing duration (time between enemy actions, a charge, a heal) at this
+ *  seat count: solo stretches it by 1 ÷ SOLO.pace; two seats keep it. */
+export function pacedMs(ms: number, players: 1 | 2): number {
+  return ms / paceFor(players);
 }
 
 /** Breather between waves: celebration beat + fleet restore + banner. */
@@ -334,9 +351,23 @@ export function solveWave(required: number, leak: number, topKind: AsteroidKind 
   return build();
 }
 
-/** The asteroid field a wave fields — solved from its (player-count) target. */
+/** The asteroid field a wave fields: solved from its target, the same at any
+ *  seat count; solo drifts it at SOLO.pace. */
 export function asteroidsFor(wave: WaveConfig, players: 1 | 2): AsteroidSpec[] {
-  return solveWave(waveTarget(wave, players), leakAllowancePerSec(wave), wave.topKind);
+  const pace = paceFor(players);
+  return solveWave(wave.required, leakAllowancePerSec(wave), wave.topKind).map((spec) => ({ ...spec, speed: spec.speed * pace }));
+}
+
+/** A splitter's children's motion at this seat count: solo cruises them at
+ *  SOLO.pace, and stretches their lifetime cap to match (pacedMs), so a slower
+ *  child still reaches the fleet before it's retired. The scatter burst is the
+ *  pop's flourish and stays as it is. */
+export function splitterMotionFor(players: 1 | 2): ChildMotion {
+  return {
+    ...SPLITTER_CHILDREN,
+    childSpeed: SPLITTER_CHILDREN.childSpeed * paceFor(players),
+    lifetimeMs: pacedMs(SPLITTER_CHILDREN.lifetimeMs, players),
+  };
 }
 
 /** Accurate damage/s a wave actually demands (post-solve). */
@@ -372,9 +403,16 @@ export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
 // asteroid waves the kids have already learned: the rate their rocks would
 // reach the fleet if nobody shot any.
 
-/** Bolts/s reaching the fleet if nobody shoots: each ship in play fires one per fireEveryMs. */
-export function shipFleetHitsPerSec(ships: ShipWaveConfig): number {
-  return (ships.onScreen * 1000) / ships.fireEveryMs;
+/** The ship wave a seat count plays: the same ships and quota; solo stretches
+ *  each ship's move (fireEveryMs) by pacedMs. */
+export function shipsFor(ships: ShipWaveConfig, players: 1 | 2): ShipWaveConfig {
+  return { ...ships, fireEveryMs: pacedMs(ships.fireEveryMs, players) };
+}
+
+/** Bolts/s reaching the fleet if nobody shoots: each ship in play fires one
+ *  per fireEveryMs at this seat count (shipsFor). */
+export function shipFleetHitsPerSec(ships: ShipWaveConfig, players: 1 | 2): number {
+  return (ships.onScreen * 1000) / shipsFor(ships, players).fireEveryMs;
 }
 
 /** Rocks/s reaching the fleet if nobody shoots: each stream fields a rock per

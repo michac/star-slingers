@@ -6,8 +6,10 @@
  * A ship wave (ShipWaveConfig in waves.ts) fields `onScreen` ships at once
  * from a `quota`; each ship destroyed is replaced from what's left of the
  * quota, entering from the right edge. Every `shieldedEvery`th ship fielded
- * wears a bubble. The wave is clear (isClear) once the quota is spent and the
- * last ship has popped; any bolts still flying then fizzle out.
+ * wears a bubble. Each ship's whole move (glide + hold) lasts fireEveryMs
+ * (the director hands over the seat count's wave, shipsFor: slower in solo,
+ * #6). The wave is clear (isClear) once the quota is spent and the last ship
+ * has popped; any bolts still flying then fizzle out.
  *
  * Each ship aims at the NEAREST live fleet ship (#19: the target it steers
  * by, re-picked if that one is lost). A bolt that reaches its fleet ship hits

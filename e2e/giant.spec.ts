@@ -5,7 +5,7 @@
  * popping it bursts it into one-hit rocks, and the wave clears (then the boss
  * drop runs) once they're gone. Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, stepUntil, healthBars, fleetStates, failVisible, clearField, SOLO_BOTTOM, type Page } from './helpers';
 import { FLEET, GAME_WIDTH, GIANT_LAYOUT, LANE, SUBLANE_H } from '../src/layout';
 import { ASTEROID_KIND, BOSS_DROPS, GIANT, RUN } from '../src/waves';
 import type { Lineup } from '../src/lineup';
@@ -40,7 +40,7 @@ const shootGiant = (page: Page, player: 'p1' | 'p2', opts: string, afterFire = '
     })()`
   ) as Promise<number>;
 
-test('wave 3 is the giant alone: far bigger than any rock, entering at the right edge and reaching the fleet in ~30 s', async ({ page }) => {
+test('wave 3 is the giant alone: far bigger than any rock, entering at the right edge and reaching the fleet in ~30 s, solo too', async ({ page }) => {
   expect(RUN[2]).toEqual({ act: 1, kind: 'boss', boss: 'giantAsteroid' });
   await gotoGame(page, '?wave=3');
   expect(await state(page)).toBe('boss');
@@ -53,13 +53,18 @@ test('wave 3 is the giant alone: far bigger than any rock, entering at the right
   // Full health: no bar.
   await stepGame(page, 16, 1);
   expect(await healthBars(page)).toEqual([]);
-  // Its drift speed covers the trip to the bubble fronts in GIANT.travelMs.
-  const before = (await giant(page)).x;
-  await stepGame(page, 16, 125); // 2 s
-  const pxPerSec = (before - (await giant(page)).x) / 2;
-  const tripSec = (GAME_WIDTH - FLEET.bubbleFrontX) / pxPerSec;
-  expect(tripSec).toBeGreaterThan(GIANT.travelMs / 1000 - 1);
-  expect(tripSec).toBeLessThan(GIANT.travelMs / 1000 + 1);
+  // Its drift speed covers the trip to the bubble fronts in GIANT.travelMs,
+  // with two players and solo alike (#6 D3: solo doesn't slow it).
+  const tripSec = async () => {
+    const before = (await giant(page)).x;
+    await stepGame(page, 16, 125); // 2 s
+    return (GAME_WIDTH - FLEET.bubbleFrontX) / ((before - (await giant(page)).x) / 2);
+  };
+  const duo = await tripSec();
+  expect(duo).toBeGreaterThan(GIANT.travelMs / 1000 - 1);
+  expect(duo).toBeLessThan(GIANT.travelMs / 1000 + 1);
+  await gotoGame(page, '?wave=3', SOLO_BOTTOM);
+  expect(await tripSec()).toBeCloseTo(duo, 6);
 });
 
 test('solo: every charged round takes a point; plain rounds and missiles spark off', async ({ page }) => {

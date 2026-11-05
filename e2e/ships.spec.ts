@@ -4,13 +4,14 @@
  * fleet (shield, then ship), re-targeting after a loss, a bolt whose ship was
  * lost passing harmlessly, and bolts being unshootable; the wave-5 bubble rule
  * (plain/missile pop it, charged and the detonator's blast kill); missiles and
- * the triple taking ships; the wave's quota flow, the fail card and Try again.
+ * the triple taking ships; the wave's quota flow, the fail card and Try again; solo's slower
+ * shot cycle (#6).
  * The boss beam's crosshair and the command-ship drop are in boss.spec.ts.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, clearField, tryAgain, countShots, fired, touchscreen, v2Layout, type Page } from './helpers';
+import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, clearField, tryAgain, countShots, fired, touchscreen, v2Layout, DUO, SOLO_BOTTOM, type Page } from './helpers';
 import { BOMB, ENEMY_SHIP, GAME_WIDTH, MISSILE, SCORE, SLING, sublaneCenterY } from '../src/layout';
-import { RUN } from '../src/waves';
+import { RUN, SOLO } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -21,7 +22,8 @@ const bolts = (page: Page) => debug<Bolt[]>(page, 'bolts()');
 const inPlay = (list: Ship[]) => list.filter((s) => s.phase === 'gliding' || s.phase === 'holding');
 const W4 = RUN[3].ships!;
 const W5 = RUN[4].ships!;
-const glideMs = (w: typeof W4) => w.fireEveryMs - ENEMY_SHIP.holdMs;
+/** A ship's glide: its move less the hold (solo: the move is fireEveryMs ÷ pace). */
+const glideMs = (w: typeof W4, pace = 1) => w.fireEveryMs / pace - ENEMY_SHIP.holdMs;
 
 /** An empty field to place ships on: wave 1 with its rocks taken off (they
  *  don't come back: a vanished rock is parked, not respawned). */
@@ -380,4 +382,38 @@ test("a bolt that takes the fleet's last ship shows the fail card, and Try again
   expect(await debug(page, 'wave()')).toBe(4); // act 2's first wave
   expect(await debug(page, 'waveKind()')).toBe('ship');
   expect(inPlay(await ships(page))).toHaveLength(W4.onScreen);
+});
+
+test('solo: each ship fires once per fireEveryMs ÷ SOLO.pace; two players keep fireEveryMs (#6)', async ({ page }) => {
+  /** Wave 4 unattended for `frames` steps: the ms of each ship's first two
+   *  shots (both ships). A ship's shot is its own warning ending in its hold,
+   *  so two ships side by side can't be mistaken for each other. */
+  const shotTimes = (frames: number) =>
+    page.evaluate((frames) => {
+      const w = window as any;
+      const sq = w.__game.scene.keys['Sandbox'].squadron;
+      const byShip: number[][] = sq.ships.map(() => []);
+      const warned: boolean[] = sq.ships.map(() => false);
+      let ms = 0;
+      for (let n = 0; n < frames; n++) {
+        w.__step();
+        ms += 16;
+        sq.ships.forEach((sh: any, k: number) => {
+          if (warned[k] && !sh.warning && sh.phase === 'holding') byShip[k].push(ms);
+          warned[k] = sh.warning;
+        });
+      }
+      return byShip.filter((t) => t.length >= 2);
+    }, frames);
+  for (const [lineup, players, pace] of [[DUO, 2, 1], [SOLO_BOTTOM, 1, SOLO.pace]] as const) {
+    await gotoGame(page, '?wave=4', lineup);
+    const cycle = W4.fireEveryMs / pace;
+    const ships = await shotTimes(Math.ceil((2 * cycle + 500) / 16));
+    expect(ships.length, `${players}p`).toBe(W4.onScreen);
+    for (const [first, second] of ships) {
+      // The entry glide is a full glide, so the first shot comes a cycle less the beat after the shot.
+      expect(Math.abs(first - (glideMs(W4, pace) + ENEMY_SHIP.telegraphMs)), `${players}p first`).toBeLessThanOrEqual(32);
+      expect(Math.abs(second - first - cycle), `${players}p cycle`).toBeLessThanOrEqual(32);
+    }
+  }
 });
