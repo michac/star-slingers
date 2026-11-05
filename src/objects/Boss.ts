@@ -11,9 +11,11 @@
  */
 import Phaser from 'phaser';
 import { COLORS } from '../tokens';
-import { BOSS_LAYOUT, FLEET } from '../layout';
+import { BOSS_LAYOUT, FLEET, HAPTICS } from '../layout';
 import { BOSS } from '../waves';
 import { TEX } from './textures';
+import { buzz } from '../haptics';
+import { sfx } from '../sfx';
 
 export class Boss {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -47,6 +49,7 @@ export class Boss {
 
   /** Slide in from the right; the encounter starts charging once entered. */
   activate(): void {
+    sfx.play('bossEnter');
     this.active = true;
     this.entering = true;
     this.hp = BOSS.hp;
@@ -84,7 +87,13 @@ export class Boss {
   takeHit(charged: boolean): void {
     // B34: the web, not a boss ring/state gate, protects the command ship.
     // A charged round that reaches it through a missing link always chips 1 HP.
-    if (!charged || !this.isEntered) return;
+    // A plain round, or one during the slide-in, only tinks; a hit that counts clangs and buzzes (#3 D6).
+    if (!charged || !this.isEntered) {
+      sfx.play('refused');
+      return;
+    }
+    sfx.play('bossHit');
+    buzz(HAPTICS.bossHitMs);
     this.hp -= 1;
     if (this.hp > 0) return;
     this.active = false;

@@ -24,7 +24,9 @@ This repo is the game and its design record — nothing else.
 - `layout.ts` — geometry/positions/sizes · `waves.ts` — wave & difficulty tuning (the dials).
 - `objects/` — one class per game thing (Fleet, Asteroid, TwoThumbControl, …) · `scenes/` — the
   orchestrating scene · `main.ts` — Phaser bootstrap.
-- Art is **code-drawn** (procedural textures in `objects/textures.ts`), not loaded asset files.
+- Art is **code-drawn** (procedural textures in `objects/textures.ts`), not loaded asset files. Sound
+  is **code-synthesized** the same way: `sfx.ts` plays the Web Audio recipes in `sfxRecipes.ts`, and
+  game code calls `sfx.play('<name>')`, one line per site.
 
 ## Dependencies — where to look before deciding how to use an API
 
@@ -119,7 +121,8 @@ textures, tokens).
   `fleet.spec.ts` (the colony fleet: sublane contact, harmless pass, all-four-lost fail, shield regen + rebuild,
   sublane spawn spread, splitter children in the lane, the starfield), `solo.spec.ts` (one joined seat), `controls-v2.spec.ts` (two-thumb buttons + drag aim, the two ammo pools),
   `upgrades.spec.ts` (boss upgrade pods, the SPECIAL swipe between modes, triple missile, detonator, Try again's kept
-  specials) and `haptics.spec.ts`. The shared harness is `e2e/helpers.ts`: `gotoGame` (by default it skips the
+  specials), `haptics.spec.ts` and `sfx.spec.ts` (each game event requests its sound, read from `window.__sfx.log`;
+  the join screen's speaker toggle; no AudioContext before the first tap). The shared harness is `e2e/helpers.ts`: `gotoGame` (by default it skips the
   join screen with both seats Normal; pass a lineup, or `'join'` to stop on it), `stepGame`/`stepUntil`, `fieldRock`, `enterBoss`,
   `loseRun`/`tryAgain`/`winToFreshRun`, `debug`, `clearGiantField`,
   the `__debug` wrappers (e.g. `shieldLinks`), `mirrored` for the top seat and the CDP `touchscreen`.
@@ -138,8 +141,8 @@ textures, tokens).
   one CDP round-trip, not one per frame). This sidesteps the ~10× headless game-time skew that made
   the old wall-clock waits flaky (B36); the suite is green on `--repeat-each=5`. NB Phaser's
   TweenManager is **wall-clock driven** and does *not* advance under stepping, so the boss slide-in is
-  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~57s for the
-  104 cases, ~1.2 min at `--repeat-each=3`): headless swiftshader makes rendering pathologically slow,
+  skipped with the `__debug.snapBossIn()` hook, which `enterBoss()` wraps. **Speed** (~1.2–2 min for the
+  122 cases): headless swiftshader makes rendering pathologically slow,
   so (a) the `smoke-*.png`
   eyeball frames are **opt-in** (`SMOKE_SHOTS=1 npm test`) — a screenshot is a ~7s ReadPixels render —
   and (b) `gotoGame()` **parks the RAF loop right after boot**, because any `page.evaluate` that runs

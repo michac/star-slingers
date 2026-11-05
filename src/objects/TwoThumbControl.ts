@@ -43,6 +43,7 @@ import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
 import { CHARGE, CONTROLS_V2, GAME_HEIGHT, GAME_WIDTH, HAPTICS, seatPoint, SLING, SPECIAL_SWIPE, type SeatEdge } from '../layout';
 import { buzz } from '../haptics';
+import { sfx } from '../sfx';
 import { drawDashedArc, drawDashedLine, drawLockRing, drawSolidArc } from './draw';
 import { DEFAULT_SPECIAL, drawDetonateIcon, SPECIALS, type SpecialKind } from './specials';
 
@@ -465,7 +466,10 @@ export class TwoThumbControl {
     this.specialSpent = true;
     this.lockGfx.clear(); // nothing will fire: drop the target ring
     this.dirty = true;
-    if (this.modes.length >= 2) this.rotate();
+    if (this.modes.length >= 2) {
+      this.rotate();
+      sfx.play('modeSwipe');
+    }
   }
 
   /** The aim zone: the player's side of their band away from the buttons. */

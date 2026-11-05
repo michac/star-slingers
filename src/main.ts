@@ -4,6 +4,7 @@ import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RU
 import { COLORS } from './tokens';
 import { JoinScene } from './scenes/JoinScene';
 import { SandboxScene } from './scenes/SandboxScene';
+import { sfx } from './sfx';
 
 // Difficulty readout — the tuning loop is: change a RUN target, reload,
 // read these. Shows target vs achieved (the solver lands at-or-above target,
@@ -70,13 +71,26 @@ function boot(): void {
     // so four thumbs + two spares (a resting palm, a stray finger). Phaser's
     // default is 1, which drops every simultaneous touch after the first.
     input: { activePointers: 6 },
+    // No Phaser sound: the game's sound is src/sfx.ts (#3). Phaser's manager
+    // would make its own AudioContext at boot, before any tap.
+    audio: { noAudio: true },
     // The join screen (#20) runs first; it starts Sandbox with the lineup.
     scene: [JoinScene, SandboxScene],
   });
 
-  // Debug handle for the headless e2e suite (e2e/) and console poking.
+  // Debug handles for the headless e2e suite (e2e/) and console poking.
   (window as unknown as { __game: Phaser.Game }).__game = game;
+  (window as unknown as { __sfx: typeof sfx }).__sfx = sfx;
 }
+
+// Sound unlocks on the first tap (#3). A mouse press counts as a user gesture
+// but a touch only counts on its release, so both events try; unlock() acts
+// only inside a real gesture. Capture phase: before Phaser's handlers run the
+// tap, so the tap's own sound can play. A hidden page suspends sound.
+for (const type of ['pointerdown', 'pointerup'] as const) {
+  window.addEventListener(type, () => sfx.unlock(), { capture: true, passive: true });
+}
+document.addEventListener('visibilitychange', () => sfx.setHidden(document.hidden));
 
 // Wait for the neon font (Audiowide) so the first HUD text paints in it, not
 // the fallback. Boot anyway if the Font Loading API is missing or the fetch

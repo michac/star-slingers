@@ -52,6 +52,7 @@ import { Asteroid } from './Asteroid';
 import { Fleet } from './Fleet';
 import { PlayerHud } from './PlayerHud';
 import { WaveBanner } from './WaveBanner';
+import { sfx } from '../sfx';
 
 type WaveState = 'live' | 'boss' | 'between' | 'won';
 
@@ -348,6 +349,7 @@ export class WaveDirector {
     this.state = 'between';
     this.fleet.restoreAll(); // celebration: lost ships rebuilt, shields back, one by one
     this.celebrate(); // B7: star-shower across the field on every wave clear
+    sfx.play('waveClear');
     const ended = this.wave;
     const next = this.waveIndex + 1;
     if (next >= RUN.length) {

@@ -13,6 +13,7 @@ import { BOSS } from '../waves';
 import { rejectSpark } from './draw';
 import { TEX } from './textures';
 import type { PlayerId } from './Rocket';
+import { sfx } from '../sfx';
 
 export class Escort {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -86,9 +87,11 @@ export class Escort {
     if (this.solo && this.contributions & bit) bit ^= 3; // credit the absent seat's lock
     if (this.contributions & bit) {
       rejectSpark(this.scene, this.sprite.x, this.sprite.y);
+      sfx.play('refused');
       return false;
     }
     this.contributions |= bit;
+    sfx.play('escortClunk'); // a lock, or the second lock that downs it
     if (this.contributions !== 3) {
       this.sprite.setTexture(player === 'p1' ? TEX.escortP2Lock : TEX.escortP1Lock);
       this.pulseRemainingLock(player === 'p1' ? COLORS.p2 : COLORS.p1);

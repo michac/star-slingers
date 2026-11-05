@@ -129,7 +129,7 @@ per-event — same discipline as the asteroid burst), `Explosions.starShower()` 
 batch at a spread of X positions; fired via a `celebrate()` callback threaded
 `SandboxScene → WaveDirector` (the `boom` callback's template). Fires on **every**
 wave clear, including the wave-4→boss hand-off. Tuning in `STAR_SHOWER` (`layout.ts`);
-tints from `tokens.ts`. Final density/fall tuning wants a Pixel 6 pass. (Haptics shipped with #3; the **audio** half of the wave-clear juice is still open in #3.)
+tints from `tokens.ts`. Final density/fall tuning wants a Pixel 6 pass. (Haptics and the wave-clear fanfare both shipped with #3.)
 
 ---
 

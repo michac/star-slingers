@@ -27,6 +27,7 @@ import { SEAT_DEFS } from '../lineup';
 import type { PlayerId } from './Rocket';
 import { SPECIALS, type SpecialKind } from './specials';
 import { TEX } from './textures';
+import { sfx } from '../sfx';
 
 type DropPhase = 'idle' | 'live' | 'fading';
 
@@ -95,6 +96,7 @@ export class UpgradeDrop {
     }
     this.place();
     this.draw();
+    sfx.play('podsAppear');
   }
 
   /** Can a FIRE round from `player` take pod `i` now? (First pick per seat
@@ -108,6 +110,7 @@ export class UpgradeDrop {
   pick(player: PlayerId, i: number): SpecialKind | null {
     if (!this.canPick(player, i)) return null;
     this.picks[player] = i;
+    sfx.play('podPickup');
     if (this.seats.every((seat) => this.picks[seat] !== undefined)) this.leave();
     this.draw();
     return this.kinds[i];
@@ -124,6 +127,7 @@ export class UpgradeDrop {
     }
     this.elapsed += deltaMs;
     if (this.elapsed >= PODS.timeoutMs) {
+      sfx.play('podTimeout'); // a seat didn't pick: the pods fade away
       this.leave();
       return;
     }

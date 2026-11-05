@@ -30,6 +30,7 @@ import { ENEMY_SHIP, SCORE } from '../layout';
 import { COLORS } from '../tokens';
 import { TEX } from './textures';
 import type { HomingTarget } from './HomingTarget';
+import { sfx } from '../sfx';
 
 export type ShipPhase = 'parked' | 'gliding' | 'holding' | 'popping';
 
@@ -178,9 +179,11 @@ export class EnemyShip implements HomingTarget {
       this.orders.boom(this.x, this.y, ENEMY_SHIP.shield.r * 0.4);
     }
     if (left <= 0) {
+      sfx.play('toughDent'); // the bubble's gone, the ship flies on: hit, not down
       this.draw();
       return 0;
     }
+    sfx.play('rockBreak');
     this.pop();
     return this.woreShield ? SCORE.shieldedShip : SCORE.ship;
   }

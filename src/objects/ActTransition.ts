@@ -21,6 +21,7 @@ import { ACT_TRANSITION, STARFIELD } from '../layout';
 import type { Act } from '../waves';
 import type { Fleet } from './Fleet';
 import type { Starfield } from './Starfield';
+import { sfx } from '../sfx';
 
 export type TransitionPhase = 'idle' | 'leadIn' | 'out' | 'in';
 
@@ -61,7 +62,10 @@ export class ActTransition {
     const T = ACT_TRANSITION;
     switch (this.phaseState) {
       case 'leadIn':
-        if (this.elapsed >= T.leadInMs && !this.fleet.restoring) this.enter('out');
+        if (this.elapsed >= T.leadInMs && !this.fleet.restoring) {
+          this.enter('out');
+          sfx.play('flyby'); // its engine swell spans the out and in legs (#3)
+        }
         return;
       case 'out': {
         const p = Math.min(1, this.elapsed / T.outMs);

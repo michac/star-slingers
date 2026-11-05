@@ -22,8 +22,9 @@
  * recreated body (same discipline as the asteroid wrappers).
  */
 import Phaser from 'phaser';
-import { BOSS_LAYOUT, FLEET } from '../layout';
+import { BOSS_LAYOUT, FLEET, SFX } from '../layout';
 import { COLORS } from '../tokens';
+import { sfx } from '../sfx';
 import { BOSS } from '../waves';
 import { Boss } from './Boss';
 import { BossBars } from './BossBars';
@@ -110,7 +111,10 @@ export class BossEncounter {
     // B34: a live gap pauses the danger clock. Each kill resets it as the
     // defensive payoff; it resumes only once all four nodes have regenerated.
     if (this.boss.isEntered && this.aliveEscorts === BOSS.escortCount) {
+      const before = this.timer;
       this.timer += deltaMs;
+      // The beam whine (#3) starts when SFX.beamWhineMs of the charge is left.
+      if (before < this.whineAtMs && this.timer >= this.whineAtMs) sfx.play('beamCharge');
       if (this.timer >= BOSS.chargeMs) this.bossFires();
     }
     this.drawBars();
@@ -242,6 +246,7 @@ export class BossEncounter {
   private bossFires(): void {
     const target = this.fleet.topMostLive();
     this.boss.fireBeam(this.fleet.shipPoint(target));
+    sfx.play('beamZap');
     if (this.fleet.onEnemyReached(target) === 'fleetLost') {
       this.phaseState = 'lost';
       this.drawBars(); // hides them
@@ -267,10 +272,22 @@ export class BossEncounter {
   private onEscortDestroyed(): void {
     // A kill opens two adjacent web links and resets the charge; the update
     // loop keeps it paused until the node regenerates (BOSS.escortRegenMs).
+    this.cutWhine();
     this.timer = 0;
   }
 
+  /** Charge time (ms) at which the beam whine starts: SFX.beamWhineMs before it fires. */
+  private get whineAtMs(): number {
+    return BOSS.chargeMs - SFX.beamWhineMs;
+  }
+
+  /** The charge is reset before firing: cut its whine if it had started. */
+  private cutWhine(): void {
+    if (this.timer >= this.whineAtMs) sfx.stop('beamCharge');
+  }
+
   private defeated(): void {
+    sfx.play('bossDefeated');
     this.phaseState = 'won';
     this.clearField();
     this.onDefeated();
@@ -282,6 +299,7 @@ export class BossEncounter {
     this.boss.park();
     for (const e of this.escorts) e.park();
     this.web.update(0, this.escorts); // no live nodes → no links drawn
+    this.cutWhine();
     this.timer = 0;
     this.drawBars();
   }

@@ -3,6 +3,8 @@
  * (plans/mockups/style-wireframe.html, viewBox 360x740).
  */
 
+import type { SoundName } from './sfxRecipes';
+
 export const GAME_WIDTH = 360;
 export const GAME_HEIGHT = 740;
 
@@ -593,10 +595,44 @@ export const CONTROLS_V2 = {
  *  Android motors. See src/haptics.ts. */
 export const HAPTICS = {
   blastMs: 40, // a detonator's blast (#26)
+  bossHitMs: 30, // a hit that counts on the command ship or the giant asteroid (#3 D6)
   shotMs: 20,
   missileMs: 25,
   chargedMs: 40,
   armedMs: 20,
+} as const;
+
+/** Sound (#3): the mix dials for src/sfx.ts. The sounds themselves are the
+ *  recipes in src/sfxRecipes.ts. Every voice runs through one master gain, a
+ *  limiter (so stacked booms can't spike) and a lowpass that takes the harsh
+ *  top off: a moderate, kid-friendly level. */
+export const SFX = {
+  masterVolume: 0.6,
+  limiter: { thresholdDb: -18, ratio: 6 },
+  lowpassHz: 8000,
+  /** ± fraction of random pitch per play, so repeats don't sound robotic. */
+  pitchJitter: 0.04,
+  /** Fade when a sound is cut short (stop()), in seconds. */
+  stopFadeS: 0.05,
+  /** Muting waits this long (s), so the speaker's click before it is heard. */
+  muteTailS: 0.15,
+  /** Voices of one sound at once, and the minimum gap between its starts:
+   *  two seats' rapid fire can't stack into a wall of noise. */
+  caps: {
+    default: { max: 4, gapMs: 20 },
+    thwip: { max: 3, gapMs: 35 },
+    charged: { max: 2, gapMs: 60 },
+    rockBreak: { max: 3, gapMs: 40 },
+    toughDent: { max: 2, gapMs: 40 },
+    refused: { max: 2, gapMs: 60 },
+    flyby: { max: 1, gapMs: 0 },
+    bossEnter: { max: 1, gapMs: 0 },
+    beamCharge: { max: 1, gapMs: 0 },
+    shipShot: { max: 2, gapMs: 80 },
+  } satisfies Partial<Record<SoundName | 'default', { readonly max: number; readonly gapMs: number }>>,
+  /** The command ship's beam whine starts when this much of its charge is
+   *  left; the beamCharge recipe lasts exactly this long. */
+  beamWhineMs: 1800,
 } as const;
 
 /** Mock HUD group row offsets (local y): WAVE 0, SCORE 20, AMMO 40, plus the
@@ -700,4 +736,7 @@ export const JOIN = {
   countdownMs: 3000,
   countdownAt: { x: 180, y: 520 },
   countdownFontPx: 56,
+  /** The sound on/off button (#3): on the centre line, between the two seat
+   *  halves, so it's in neither player's region. */
+  speaker: { x: 180, y: 370, r: 22 },
 } as const;
