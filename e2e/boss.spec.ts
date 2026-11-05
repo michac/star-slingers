@@ -1,8 +1,11 @@
 /**
- * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge, ?boss.
+ * boss.spec.ts — the boss fight: co-op escort locks, shield-web gaps + regen, the web's drawn edge,
+ * the beam's top-most target and its crosshair (#27), the command ship's drop, ?boss.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, healthBars, fleetStates, loseShips, failVisible, type Page } from './helpers';
+import { test, expect, SCENE, debug, gotoGame, shot, stepGame, stepUntil, fire, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, healthBars, fleetStates, loseShips, failVisible, type Page } from './helpers';
+
+import { BOSS_DROPS } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -89,6 +92,38 @@ test('the boss beam hits the top-most live ship, and the beam that takes the las
   expect(await fleetStates(page)).toEqual(['lost', 'lost', 'lost', 'lost']);
   expect(await bossPhase(page)).toBe('lost');
   expect(await failVisible(page)).toBe(true);
+});
+
+test('a pulsing crosshair marks the ship the beam will hit while the charge fills; the boss drops its pods (#27)', async ({ page }) => {
+  await gotoGame(page);
+  const mark = () => page.evaluate(`${SCENE}.bossEncounter.beamTarget`) as Promise<number>;
+  // The mark's stroke alpha, from its drawn lineStyle command: [LINE_STYLE, width, color, alpha, …].
+  const alpha = () => page.evaluate(`${SCENE}.bossEncounter.targetMark.commandBuffer[3]`) as Promise<number>;
+  expect(await mark()).toBe(-1); // no boss, no mark
+  await debug(page, 'jumpToWave(6)');
+  await stepGame(page, 16, 1);
+  expect(await mark()).toBe(-1); // still sliding in: no gauges, no mark
+  await debug(page, 'snapBossIn()');
+  await stepGame(page, 16, 1);
+  expect(await mark()).toBe(0); // the top-most live ship
+  // It pulses: its stroke brightens and fades over BOSS_LAYOUT.targetMark.pulseMs.
+  const seen = new Set<number>();
+  for (let n = 0; n < 6; n++) {
+    seen.add(Math.round((await alpha()) * 100));
+    await stepGame(page, 16, 6);
+  }
+  expect(seen.size).toBeGreaterThan(2);
+  // The beam hits the marked ship, and the mark moves down when that ship is lost.
+  await page.evaluate(`${SCENE}.bossEncounter.bossFires()`);
+  expect((await fleetStates(page))[0]).toBe('exposed');
+  await loseShips(page, 0);
+  await stepGame(page, 16, 1);
+  expect(await mark()).toBe(1);
+  // Defeated: the mark goes, and the command ship drops its pods (#26's stand-in pair until #42).
+  await debug(page, 'defeatBoss()');
+  await stepGame(page, 16, 2);
+  expect(await mark()).toBe(-1);
+  expect(await debug(page, 'pods()')).toMatchObject({ phase: 'live', kinds: [...BOSS_DROPS.commandShip] });
 });
 
 test('the boss takes 1 HP from a charged round only: plain rounds and missiles do nothing', async ({ page }) => {

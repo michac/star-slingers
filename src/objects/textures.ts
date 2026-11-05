@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { COLORS, STROKES } from '../tokens';
-import { BOSS_LAYOUT, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, PODS, STARFIELD } from '../layout';
+import { BOSS_LAYOUT, ENEMY_BOLT, ENEMY_SHIP, FLEET, GAME_HEIGHT, GAME_WIDTH, GIANT_LAYOUT, PODS, STARFIELD } from '../layout';
 import { drawDashedLine } from './draw';
 import { ASTEROID_KIND, type AsteroidKind } from '../waves';
 
@@ -18,6 +18,8 @@ export const TEX = {
   escort: 'escort-both-locks', // B33 escort ship with both player locks
   escortP1Lock: 'escort-p1-lock', // cyan lock remains
   escortP2Lock: 'escort-p2-lock', // amber lock remains
+  enemyShip: 'enemy-ship', // #27 act 2's ship: the escort's dart, solid magenta, no fins
+  enemyBolt: 'enemy-bolt', // #27 its slow glowing shot
   heart: 'icon-heart', // B5 health-bar cap (white, tinted at use)
   bolt: 'icon-bolt', // B5 charge-bar cap (white, tinted at use)
   spark: 'px-spark', // B29 explosion: white dot → additive white-hot sparks
@@ -70,6 +72,8 @@ export function generateTextures(scene: Phaser.Scene): void {
   makeGiantAsteroid(scene);
   makeBoss(scene);
   makeEscort(scene);
+  makeEnemyShip(scene);
+  makeEnemyBolt(scene);
   makeHeart(scene);
   makeBolt(scene);
   makeSpark(scene);
@@ -264,14 +268,20 @@ function makeBoss(scene: Phaser.Scene): void {
   g.destroy();
 }
 
+/** The dart hull the escort and the enemy ship share (#27: one navy), nose
+ *  up, in a 2R × 2R canvas. */
+function dartHull(R: number): Phaser.Geom.Point[] {
+  return [
+    new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
+    new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
+  ];
+}
+
 /** B33 escort ship: directional hull with a cyan and amber lock-fin. All three
  * state textures share the same canvas/body so lock changes never shift orbit. */
 function makeEscort(scene: Phaser.Scene): void {
   const R = BOSS_LAYOUT.escort.radius;
-  const hull = [
-    new Phaser.Geom.Point(R, R * 0.14), new Phaser.Geom.Point(R * 1.64, R * 1.52),
-    new Phaser.Geom.Point(R, R * 1.78), new Phaser.Geom.Point(R * 0.36, R * 1.52),
-  ];
+  const hull = dartHull(R);
   const drawShip = (g: Phaser.GameObjects.Graphics, p1: boolean, p2: boolean) => {
     // Nose points up; Escort.place rotates it toward the fleet.
     g.fillStyle(COLORS.rockFill, 1);
@@ -302,6 +312,46 @@ function makeEscort(scene: Phaser.Scene): void {
   make(TEX.escort, true, true);
   make(TEX.escortP1Lock, true, false);
   make(TEX.escortP2Lock, false, true);
+}
+
+/** #27 enemy ship: the escort's directional hull (same proportions, so the
+ *  two read as one navy), but smaller and filled SOLID magenta with a pale
+ *  cockpit and a short exhaust, and no lock fins: "shoot this one", not
+ *  "lock this one". Nose up; EnemyShip rotates it to its heading. */
+function makeEnemyShip(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.enemyShip)) return;
+  const R = ENEMY_SHIP.radius;
+  const hull = dartHull(R);
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(COLORS.accent, 0.7); // exhaust, under the tail notch
+  g.fillTriangle(R * 0.78, R * 1.66, R * 1.22, R * 1.66, R, R * 1.98);
+  g.fillStyle(COLORS.danger, 1);
+  g.fillPoints(hull, true);
+  g.lineStyle(1.5, COLORS.white, 0.6);
+  g.strokePoints(hull, true);
+  g.fillStyle(COLORS.ink, 1);
+  g.fillCircle(R, R * 0.9, R * 0.17); // cockpit
+  g.generateTexture(TEX.enemyShip, R * 2, R * 2);
+  g.destroy();
+}
+
+/** #27 enemy bolt: a magenta ball with a white-hot core and a soft halo,
+ *  bigger than a rocket so it's easy to watch coming. */
+function makeEnemyBolt(scene: Phaser.Scene): void {
+  if (scene.textures.exists(TEX.enemyBolt)) return;
+  const r = ENEMY_BOLT.radius;
+  const c = r * 2; // room for the halo
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(COLORS.danger, 0.18);
+  g.fillCircle(c, c, r * 2);
+  g.fillStyle(COLORS.danger, 0.35);
+  g.fillCircle(c, c, r * 1.45);
+  g.fillStyle(COLORS.danger, 1);
+  g.fillCircle(c, c, r);
+  g.fillStyle(COLORS.white, 0.9);
+  g.fillCircle(c, c, r * 0.45);
+  g.generateTexture(TEX.enemyBolt, c * 2, c * 2);
+  g.destroy();
 }
 
 /** Heart icon (B5 health-bar cap): two lobes + a point, drawn white to tint. */

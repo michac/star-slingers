@@ -111,15 +111,34 @@ export type WaveKind = 'asteroid' | 'ship' | 'monster' | 'boss' | 'finale';
  *  ship (BOSS below, docs/design.md §9) ends act 2, the monster boss act 3. */
 export type BossId = 'giantAsteroid' | 'commandShip' | 'monsterBoss';
 
+/** A ship wave (#27, act 2): enemy ships roam the lane and shoot bolts at
+ *  the fleet (ShipSquadron). Ships don't fit the asteroid solver's threat
+ *  model, so a ship wave has its own dials. The "if nobody shoots" fleet-hit
+ *  rate is shipFleetHitsPerSec below; the e2e suite checks it against the
+ *  asteroid waves'. */
+export interface ShipWaveConfig {
+  onScreen: number; // ships in play at once; a destroyed ship's place is refilled from the quota
+  quota: number; // total ships this wave fields (the initial ones included)
+  /** Every Nth ship fielded wears a one-hit shield bubble; 0 = none. */
+  shieldedEvery: number;
+  /** One ship's whole move: glide to a new spot, then hold there (the
+   *  ENEMY_SHIP.telegraphMs warning, the shot, a beat). So each ship fires one
+   *  bolt per fireEveryMs. */
+  fireEveryMs: number;
+  shieldRegenMs: number; // a fleet ship's shield regrows after this long unhit
+}
+
 /** One wave of the run. A wave with a `field` is played by the difficulty
- *  solver (an asteroid field today); a boss with none is played by its own
- *  encounter (the giant asteroid by GiantAsteroid with the GIANT dials, the
- *  command ship by the BossEncounter with the BOSS dials). */
+ *  solver (an asteroid field today), a wave with `ships` by the ShipSquadron;
+ *  a boss with neither is played by its own encounter (the giant asteroid by
+ *  GiantAsteroid with the GIANT dials, the command ship by the BossEncounter
+ *  with the BOSS dials). */
 export interface RunWave {
   act: Act;
   kind: WaveKind;
   boss?: BossId;
   field?: WaveConfig;
+  ships?: ShipWaveConfig;
   /** Plays as an asteroid field until its act's issue builds the real content. */
   placeholder?: true;
 }
@@ -133,8 +152,12 @@ export interface RunWave {
  * calibrated 0.30 target saturates at four standards ×0.85, ≈0.29), W2 adds
  * two-hit rocks (no splitters), W3 is the giant asteroid (GIANT below). The
  * 5yo's cushion is homing, not speed: if W1 plays too steep, soften its target
- * toward ~0.25. The rest are placeholders, revisable in playtest. Tune by the
- * dev boot log (target vs achieved + tier).
+ * toward ~0.25. Act 2 (#27) plays its first two waves as enemy ships (their
+ * own dials, ShipWaveConfig): W4 two at a time, W5 three with every second
+ * one shielded. Each eases its unattended fleet-hit rate below the matching
+ * act-1 wave's (W4 under W1, W5 under W2). Act 3's waves are placeholders.
+ * All revisable in playtest. Tune by the dev boot log (target vs achieved +
+ * tier; a ship wave logs its bolts/s).
  *
  * The finale is a long, dense, forgiving wave to blast with every upgrade:
  * its target solves to all four streams as splitters at max speed, with a big
@@ -144,8 +167,8 @@ export const RUN: readonly RunWave[] = [
   { act: 1, kind: 'asteroid', field: { required: 0.3, quota: 8, shieldRegenMs: 10000, topKind: 'standard' } },
   { act: 1, kind: 'asteroid', field: { required: 0.45, quota: 10, shieldRegenMs: 11000, topKind: 'tough' } },
   { act: 1, kind: 'boss', boss: 'giantAsteroid' },
-  { act: 2, kind: 'ship', placeholder: true, field: { required: 0.45, quota: 10, shieldRegenMs: 11000 } },
-  { act: 2, kind: 'ship', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
+  { act: 2, kind: 'ship', ships: { onScreen: 2, quota: 6, shieldedEvery: 0, fireEveryMs: 8000, shieldRegenMs: 11000 } },
+  { act: 2, kind: 'ship', ships: { onScreen: 3, quota: 8, shieldedEvery: 2, fireEveryMs: 8000, shieldRegenMs: 13000 } },
   { act: 2, kind: 'boss', boss: 'commandShip' },
   { act: 3, kind: 'monster', placeholder: true, field: { required: 0.6, quota: 12, shieldRegenMs: 13000 } },
   { act: 3, kind: 'monster', placeholder: true, field: { required: 0.75, quota: 14, shieldRegenMs: 15000 } },
@@ -154,8 +177,9 @@ export const RUN: readonly RunWave[] = [
 ];
 
 /** What each boss drops when it's popped (#26): the two upgrade pods' specials,
- *  in pod order (left, right). The command ship and the monster boss drop the
- *  giant asteroid's pair until #27 and #28 pick theirs; each edits its row. */
+ *  in pod order (left, right). The command ship drops the giant asteroid's
+ *  pair until its laser + helper drone are built (#42), and the monster boss
+ *  until #28 picks its own; each edits its row. */
 export const BOSS_DROPS: Record<BossId, readonly [SpecialKind, SpecialKind]> = {
   giantAsteroid: ['triple', 'detonator'],
   commandShip: ['triple', 'detonator'],
@@ -236,7 +260,7 @@ export const GIANT = {
  *     ├ a downed escort (one hit from EACH seat) opens two links for
  *     │ escortRegenMs and resets + pauses the charge
  *     └ charge fills only with all nodes live → boss FIRES its beam at the
- *       top-most live fleet ship (a placeholder rule; #27 decides the final one)
+ *       top-most live fleet ship (#27), marked by a pulsing crosshair
  *   win: boss HP 0 (railguns through web gaps) · lose: the beam takes the last ship
  *
  * Urgency = the charge bar racing you; co-op = needing both players to down an
@@ -340,4 +364,22 @@ function seatDamagePerSec(): number {
  *  must land. */
 export function breakEvenAccuracy(wave: WaveConfig, players: 1 | 2): number {
   return requiredDamagePerSec(wave, players) / (players * seatDamagePerSec());
+}
+
+// ---- ship waves (#27): the "if nobody shoots" check ----
+// Every enemy bolt is unstoppable (#27 D10), so a ship wave's danger is how
+// fast its bolts reach the fleet. The sanity check compares that against the
+// asteroid waves the kids have already learned: the rate their rocks would
+// reach the fleet if nobody shot any.
+
+/** Bolts/s reaching the fleet if nobody shoots: each ship in play fires one per fireEveryMs. */
+export function shipFleetHitsPerSec(ships: ShipWaveConfig): number {
+  return (ships.onScreen * 1000) / ships.fireEveryMs;
+}
+
+/** Rocks/s reaching the fleet if nobody shoots: each stream fields a rock per
+ *  trip (its speed over the spawn→bubble distance); a rock is one fleet hit
+ *  whatever its hp. */
+export function fieldFleetHitsPerSec(wave: WaveConfig, players: 1 | 2): number {
+  return asteroidsFor(wave, players).reduce((sum, a) => sum + a.speed / TRAVEL_DIST, 0);
 }
