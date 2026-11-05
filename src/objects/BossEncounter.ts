@@ -8,9 +8,12 @@
  *   and the next wave; lost shows the fail card.
  *
  *   CHARGING: live adjacent escorts make a physical shield web. Destroying a
- *   node opens two gaps for BOSS.escortRegenMs and resets + pauses the charge;
+ *   node opens two gaps for its regen time and resets + pauses the charge;
  *   charged FIRE rounds can hit the boss only if they physically pass through a gap.
  *   won: boss HP 0 · lost: a fired charge takes the fleet's last ship.
+ *
+ *   Solo (#6) paces both clocks: the charge is BOSS.chargeMs and a node's regen
+ *   BOSS.escortRegenMs, each ÷ SOLO.pace (pacedMs). The boss's hp doesn't change.
  *
  * Boss + escort sprites are created ONCE here (parked) so the scene's
  * rocket↔boss overlap collider — built once over `sprites` — never points at a
@@ -18,7 +21,7 @@
  */
 import Phaser from 'phaser';
 import { BOSS_LAYOUT, FLEET } from '../layout';
-import { BOSS } from '../waves';
+import { BOSS, pacedMs } from '../waves';
 import { Boss } from './Boss';
 import { BossBars } from './BossBars';
 import { Escort } from './Escort';
@@ -38,7 +41,9 @@ export class BossEncounter {
   private readonly escorts: Escort[];
   private readonly web: ShieldWeb;
   private phaseState: BossPhase = 'idle';
-  private timer = 0; // ms of charge accrued toward BOSS.chargeMs
+  private timer = 0; // ms of charge accrued toward chargeMs
+  /** BOSS.chargeMs at this seat count (solo: slower, pacedMs). */
+  private readonly chargeMs: number;
   private orbitAngle = 0;
 
   constructor(
@@ -47,14 +52,17 @@ export class BossEncounter {
     private readonly failOverlay: Overlay,
     /** The boss is down and the field is clear: the run continues. */
     private readonly onDefeated: () => void,
-    /** Live seats (the join screen's lineup): solo relaxes the escort co-op lock (Escort.takeHit). */
+    /** Live seats (the join screen's lineup): solo relaxes the escort co-op lock
+     *  (Escort.takeHit) and paces the charge and the escorts' regen (pacedMs). */
     players: 1 | 2
   ) {
+    this.chargeMs = pacedMs(BOSS.chargeMs, players);
+    const escortRegenMs = pacedMs(BOSS.escortRegenMs, players);
     this.boss = new Boss(scene, () => this.defeated());
     this.bars = new BossBars(scene);
     this.escorts = Array.from(
       { length: BOSS.escortCount },
-      () => new Escort(scene, () => this.onEscortDestroyed(), players === 1)
+      () => new Escort(scene, () => this.onEscortDestroyed(), players === 1, escortRegenMs)
     );
     this.web = new ShieldWeb(scene, BOSS_LAYOUT.escort.webWidth);
   }
@@ -96,7 +104,7 @@ export class BossEncounter {
     // defensive payoff; it resumes only once all four nodes have regenerated.
     if (this.boss.isEntered && this.aliveEscorts === BOSS.escortCount) {
       this.timer += deltaMs;
-      if (this.timer >= BOSS.chargeMs) this.bossFires();
+      if (this.timer >= this.chargeMs) this.bossFires();
     }
     this.drawBars();
   }
@@ -109,7 +117,7 @@ export class BossEncounter {
     this.bars.update({
       hp: this.boss.currentHp,
       maxHp: BOSS.hp,
-      chargeFrac: visible ? this.timer / BOSS.chargeMs : 0,
+      chargeFrac: visible ? this.timer / this.chargeMs : 0,
       visible,
     });
   }
@@ -153,7 +161,7 @@ export class BossEncounter {
   }
 
   get chargeFraction(): number {
-    return Math.min(1, this.timer / BOSS.chargeMs);
+    return Math.min(1, this.timer / this.chargeMs);
   }
 
   /** True when the rocket's sweep crosses a live web link. Checked every frame
@@ -229,7 +237,7 @@ export class BossEncounter {
 
   private onEscortDestroyed(): void {
     // A kill opens two adjacent web links and resets the charge; the update
-    // loop keeps it paused until the node regenerates (BOSS.escortRegenMs).
+    // loop keeps it paused until the node regenerates (its regenMs).
     this.timer = 0;
   }
 

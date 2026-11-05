@@ -1,9 +1,21 @@
 /**
- * solo.spec.ts — one joined seat (#6, #20): one-seat escort rule, the empty top seat hidden and ignored.
+ * solo.spec.ts — one joined seat (#6, #20): one-seat escort rule, the empty top seat hidden and ignored,
+ * and the solo pace (the same field and boss at SOLO.pace; the pure model is in waves.spec.ts).
  * Joining through the join screen itself is join.spec.ts.
  * Shared harness and the console gate: ./helpers.ts.
  */
-import { test, expect, SCENE, gotoGame, stepGame, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, seats, type Page } from './helpers';
+import { test, expect, SCENE, gotoGame, stepGame, stepUntil, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, seats, clearField, fieldRock, fire, debug, type Page } from './helpers';
+import { SPLITTER_CHILDREN } from '../src/layout';
+import { BOSS, SOLO } from '../src/waves';
+import type { Lineup } from '../src/lineup';
+
+const DUO: Partial<Lineup> = { p1: 'normal', p2: 'normal' };
+const SOLO_SEAT: Partial<Lineup> = { p2: 'normal' };
+/** The stream rocks in play: kind, spec speed and the body's real drift. */
+const fieldedRocks = (page: Page) =>
+  page.evaluate(
+    `${SCENE}.asteroids.filter((a) => a.isActive && !a.isChild).map((a) => ({ kind: a.spec.kind, speed: a.spec.speed, vx: a.sprite.body.velocity.x }))`
+  ) as Promise<{ kind: string; speed: number; vx: number }[]>;
 
 const hudCount = (page: Page) => page.evaluate(`${SCENE}.scoreKeeper.huds.length`) as Promise<number>;
 /** Per-seat copies of the wave banner's numeral / an end card's text. */
@@ -71,4 +83,46 @@ test('solo (only the bottom seat joined) keeps only the bottom seat and ignores 
   expect(await hudCount(page)).toBe(2);
   expect(await bannerCopies(page)).toBe(2);
   expect(await overlayCopies(page, 'failOverlay')).toBe(2);
+});
+
+test('solo fields the two-player rocks of a wave, drifting at SOLO.pace (#6)', async ({ page }) => {
+  await gotoGame(page, '?wave=2', DUO);
+  const duo = await fieldedRocks(page);
+  await gotoGame(page, '?wave=2', SOLO_SEAT);
+  const solo = await fieldedRocks(page);
+  expect(duo.some((r) => r.kind === 'tough')).toBe(true); // wave 2's two-hit rocks stay in solo
+  expect(solo.map((r) => r.kind)).toEqual(duo.map((r) => r.kind));
+  solo.forEach((r, i) => {
+    expect(r.speed).toBeCloseTo(duo[i].speed * SOLO.pace, 6);
+    expect(r.vx).toBeCloseTo(-r.speed, 6);
+  });
+});
+
+test("solo: a splitter's children cruise at SOLO.pace (#6)", async ({ page }) => {
+  await gotoGame(page, '', SOLO_SEAT);
+  await clearField(page);
+  await fieldRock(page, { x: 250, y: 300, kind: 'splitter' });
+  await fire(page, 170, 300, 400, 0, '{}', 'p2');
+  expect((await stepUntil(page, 's.__debug.childrenAlive() === 2', 60)).done).toBe(true);
+  await stepGame(page, 16, Math.ceil((SPLITTER_CHILDREN.scatterMs + 200) / 16));
+  const vx = (await page.evaluate(`${SCENE}.asteroids.filter((a) => a.isChild && a.isActive).map((a) => a.sprite.body.velocity.x)`)) as number[];
+  expect(vx).toHaveLength(2);
+  for (const v of vx) expect(v).toBeCloseTo(-SPLITTER_CHILDREN.childSpeed * SOLO.pace, 6);
+});
+
+test('the command ship charges and regrows escorts at SOLO.pace in solo, and on the BOSS timings with two players (#6)', async ({ page }) => {
+  for (const [lineup, pace] of [[DUO, 1], [SOLO_SEAT, SOLO.pace]] as const) {
+    await gotoGame(page, '', lineup);
+    await enterBoss(page);
+    // The beam: all four escorts up from the start, so the charge runs until it fires.
+    const beam = await stepUntil(page, "s.__debug.fleet().some((ship) => ship !== 'shielded')", 600);
+    expect(beam.done).toBe(true);
+    expect(Math.abs(beam.steps * 16 - BOSS.chargeMs / pace)).toBeLessThanOrEqual(32);
+    // A downed escort's regen.
+    await debug(page, 'killEscort(0)');
+    expect(await escortsAlive(page)).toBe(3);
+    const back = await stepUntil(page, 's.__debug.escortsAlive() === 4', 700);
+    expect(back.done).toBe(true);
+    expect(Math.abs(back.steps * 16 - BOSS.escortRegenMs / pace)).toBeLessThanOrEqual(32);
+  }
 });

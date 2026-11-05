@@ -37,6 +37,7 @@ import {
   DIFFICULTY_MODEL,
   GIANT,
   isWaveNumber,
+  paceFor,
   ROCK_STREAMS,
   ASTEROID_KIND,
   RUN,
@@ -91,6 +92,8 @@ export class WaveDirector {
   /** The child pool — the tail of `asteroids` (indices ≥ stream count): a
    *  splitter's children and the giant asteroid's burst rocks. */
   private readonly childPool: Asteroid[];
+  /** A splitter's children's motion at this seat count: solo cruises them at SOLO.pace. */
+  private readonly splitterMotion: ChildMotion;
 
   private waveIndex = 0;
   private quotaRemaining = 0;
@@ -116,9 +119,11 @@ export class WaveDirector {
     private readonly boom: (x: number, y: number, radius: number) => void,
     /** Wave-clear celebration (B7) — fires the star-shower on every clear. */
     private readonly celebrate: () => void,
-    /** Live seats (the join screen's lineup): solo scales each wave's target (SOLO in waves.ts). */
+    /** Live seats (the join screen's lineup): solo drifts each field and its
+     *  splitters' children at SOLO.pace (asteroidsFor, splitterMotion). */
     private readonly players: 1 | 2
   ) {
+    this.splitterMotion = { ...SPLITTER_CHILDREN, childSpeed: SPLITTER_CHILDREN.childSpeed * paceFor(players) };
     // One wrapper per rock stream, alive for the whole run, built parked with
     // a weak default; each field wave reconfigures the streams it fields
     // (startWave), and the rest stay parked.
@@ -218,7 +223,7 @@ export class WaveDirector {
     const { x, y } = origin.sprite;
     const half = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterConeDeg) / 2;
     const center = Phaser.Math.DegToRad(SPLITTER_CHILDREN.scatterCenterDeg);
-    const fielded = this.fieldChildren(x, y, SPLITTER_CHILDREN.count, SPLITTER_CHILDREN, (t) => {
+    const fielded = this.fieldChildren(x, y, SPLITTER_CHILDREN.count, this.splitterMotion, (t) => {
       const angle = center - half + 2 * half * t; // evenly across the leftward cone
       return [Math.cos(angle) * SPLITTER_CHILDREN.launchSpeed, Math.sin(angle) * SPLITTER_CHILDREN.launchSpeed];
     });
