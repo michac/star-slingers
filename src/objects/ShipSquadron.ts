@@ -15,7 +15,7 @@
  * (the scene's fail card).
  */
 import Phaser from 'phaser';
-import { ENEMY_BOLT, ENEMY_SHIP, LANE } from '../layout';
+import { ENEMY_BOLT, ENEMY_SHIP } from '../layout';
 import type { ShipWaveConfig } from '../waves';
 import { EnemyBolt } from './EnemyBolt';
 import { EnemyShip, type ShipOrders } from './EnemyShip';
@@ -37,7 +37,7 @@ export class ShipSquadron {
     private readonly onFleetLost: () => void
   ) {
     const orders: ShipOrders = {
-      pickTarget: (x, y) => this.nearestLiveShip(x, y),
+      pickTarget: (_x, y) => this.fleet.nearestLive(y),
       targetPoint: (i) => this.fleet.shipPoint(i),
       fire: (x, y, i) => this.fire(x, y, i),
       onGone: () => this.onShipGone(),
@@ -82,22 +82,6 @@ export class ShipSquadron {
   /** DEV/test: the bolts in flight (position + the fleet ship each is at). */
   get debugBolts(): { x: number; y: number; target: number }[] {
     return this.bolts.filter((b) => b.isActive).map((b) => ({ x: b.x, y: b.y, target: b.target }));
-  }
-
-  /** The live fleet ship nearest (x, y), or -1 if the fleet is lost. */
-  private nearestLiveShip(x: number, y: number): number {
-    let best = -1;
-    let bestD = Infinity;
-    for (let i = 0; i < LANE.sublanes; i++) {
-      if (!this.fleet.isLive(i)) continue;
-      const p = this.fleet.shipPoint(i);
-      const d = Phaser.Math.Distance.Squared(x, y, p.x, p.y);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    return best;
   }
 
   private fire(x: number, y: number, i: number): void {

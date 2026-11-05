@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout';
-import { asteroidsFor, breakEvenAccuracy, requiredDamagePerSec, ROCK_STREAMS, RUN, shipFleetHitsPerSec, waveTarget } from './waves';
+import { asteroidsFor, babyWipeMs, breakEvenAccuracy, motherFocusKillMs, requiredDamagePerSec, ROCK_STREAMS, RUN, shipFleetHitsPerSec, waveTarget } from './waves';
 import { COLORS } from './tokens';
 import { JoinScene } from './scenes/JoinScene';
 import { SandboxScene } from './scenes/SandboxScene';
@@ -10,10 +10,27 @@ import { SandboxScene } from './scenes/SandboxScene';
 // or below if saturated) and the tier the solver settled on (see docs/design.md §7).
 // Logged for solo and co-op: the join screen picks the seat count later. A
 // ship wave (#27) logs its dials and the bolts/s that would reach the fleet if
-// nobody shot (the same for any seat count).
+// nobody shot (the same for any seat count); a monster wave (#28) its dials;
+// the mother jelly her fastest focus kill against an ignored brood's wipe.
 if (import.meta.env.DEV) {
-  for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, ships, placeholder }] of RUN.entries()) {
-    const label = `wave ${i + 1} (act ${act}, ${boss ?? kind}${placeholder ? ' placeholder' : ''})`;
+  for (const players of [1, 2] as const) for (const [i, { act, kind, boss, field: w, ships, monsters }] of RUN.entries()) {
+    const label = `wave ${i + 1} (act ${act}, ${boss ?? kind})`;
+    if (monsters) {
+      if (players === 2) {
+        console.log(
+          `${label}: ${monsters.onScreen} jellies at once, quota ${monsters.quota}, ` +
+            `heal ${monsters.healPauseMs}ms after a hit, empty -> full in ${monsters.healFullMs}ms`
+        );
+      }
+      continue;
+    }
+    if (boss === 'monsterBoss') {
+      console.log(
+        `${label} (${players}p): MOTHER dials, fastest focus kill ${(motherFocusKillMs(players) / 1000).toFixed(1)}s ` +
+          `vs ignored babies wipe the fleet in ${(babyWipeMs() / 1000).toFixed(1)}s`
+      );
+      continue;
+    }
     if (ships) {
       if (players === 2) {
         console.log(

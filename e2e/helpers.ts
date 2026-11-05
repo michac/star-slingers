@@ -267,6 +267,16 @@ export const failVisible = (page: Page) => page.evaluate(`${SCENE}.failOverlay.v
 /** Take every rock off the field at once (no score), so a case owns the field. */
 export const clearField = (page: Page) =>
   page.evaluate(`for (const a of ${SCENE}.asteroids) if (a.isActive) a.vanish()`);
+/** An empty field to place enemies on: wave 1 with its rocks taken off (they
+ *  don't come back: a vanished rock is parked, not respawned). */
+export async function emptyField(page: Page): Promise<void> {
+  await gotoGame(page);
+  await clearField(page);
+  await stepGame(page, 16, 1);
+}
+/** A seat's detonator bomb blown up right at (x, y), through the scene's real detonate path (#26). */
+export const blastAt = (page: Page, x: number, y: number, player: PlayerId = 'p2') =>
+  page.evaluate(`${SCENE}.detonate(${SCENE}.rockets.fire('rocket-${player}', ${x}, ${y}, 0, 0, '${player}', { bomb: true }))`);
 /** How many shield-web links are up (4 = the intact diamond). */
 export const shieldLinks = (page: Page) => page.evaluate(`${SCENE}.__debug.shieldLinks()`) as Promise<number>;
 /** Raw boss start: the boss is left mid slide-in (the tween never advances under

@@ -1,9 +1,10 @@
 /**
  * HomingTarget — the minimal shape the SPECIAL homing missile (#22) needs from
  * anything it can take: a physics sprite, live/popping flags, and a radius for
- * the aim-preview ring. Asteroid, EnemyShip (#27) and Escort satisfy it, so
- * the missile keeps working through the wave run AND the boss fight (the boss itself takes only
- * charged FIRE rounds).
+ * the aim-preview ring. Asteroid, EnemyShip (#27), Jelly and MotherJelly
+ * (#28) and Escort satisfy it, so the missile keeps working through the wave
+ * run AND the boss fights (the command ship itself takes only charged FIRE
+ * rounds).
  */
 import Phaser from 'phaser';
 import { GAME_WIDTH } from '../layout';
