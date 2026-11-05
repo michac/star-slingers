@@ -430,6 +430,53 @@ export type ChildMotion = {
 };
 
 /**
+ * Enemy ships (#27, act 2's waves 4–5) GEOMETRY + MOTION. A ship is the
+ * escort's dart silhouette, smaller (radius 12 vs the escort's 17) and filled
+ * solid magenta (an escort is dark-filled with a magenta rim and cyan/amber
+ * lock fins), nose pointing where it flies. It enters just off the right edge
+ * and then repeats: glide to a new spot inside `roam` (most of the lane's
+ * width: from the right edge to well short of the fleet's bubbles), hold
+ * there, warn (its nose glows for telegraphMs), fire one bolt at the nearest
+ * live fleet ship, and glide on. Each glide eases in and out (slow, then
+ * slower), lasting the wave's fireEveryMs minus holdMs; a new spot is drawn
+ * inside the roam box, hopMin to hopMax away, so they drift rather than dart. Balance dials (how many, how
+ * often) are per wave in waves.ts (ShipWaveConfig).
+ */
+export const ENEMY_SHIP = {
+  radius: 12,
+  roam: {
+    minX: FLEET.bubbleFrontX + 55, // never closer to the fleet than this (its bubbles end at bubbleFrontX)
+    maxX: GAME_WIDTH - 20,
+    minY: LANE.top + 16,
+    maxY: LANE.bottom - 16,
+  },
+  entryX: GAME_WIDTH + 16, // fielded just off the right edge
+  hopMin: 60, // a glide's nearest destination from where it starts (a real move, never a twitch)
+  hopMax: 150, // a glide's furthest destination from where it starts
+  holdMs: 1500, // the stop: telegraphMs of warning, the shot, then a short beat
+  telegraphMs: 1000, // the nose glows brighter for this long, then it fires
+  turnRateDeg: 240, // how fast the nose swings round (deg/s)
+  popMs: 160, // the kill's pop (scale up + fade), counted on update's delta
+  shield: { r: 18, width: 2, alpha: 0.85 }, // the wave-5 bubble: a thin magenta ring, and the ship's hit circle while it's up
+  glow: { r: 7, alpha: 0.95 }, // the telegraph glow at the nose, at full warning
+  poolSize: 4, // most ships any wave fields at once
+} as const;
+
+/**
+ * Enemy bolts (#27): a big, slow, glowing magenta ball fired at one fleet
+ * ship. Nothing can shoot it down (#27 D10). It crosses the field in about
+ * 4 s: speed = (roam.maxX − FLEET.bubbleFrontX) / 4 s. Reaching its ship acts
+ * like a rock (pops the shield, or loses the ship); if that ship was lost in
+ * flight it passes harmlessly off the left edge.
+ */
+export const ENEMY_BOLT = {
+  radius: 8,
+  speed: (ENEMY_SHIP.roam.maxX - FLEET.bubbleFrontX) / 4,
+  fizzleMs: 250, // leftover bolts fade out this fast once a ship wave is won
+  poolSize: 8,
+} as const;
+
+/**
  * Final boss (B5) GEOMETRY. The boss slides in from the right and parks at
  * center — fully on screen, equidistant from both seats — and is stationary
  * while battling. 4 escorts slowly orbit it at a radius kept OUTSIDE the boss
@@ -442,6 +489,9 @@ export const BOSS_LAYOUT = {
   radius: 32, // big but fully on screen (orbit extent stays < field edges)
   enterFromX: GAME_WIDTH + 70, // starts off the right edge, slides to park.x
   enterMs: 1900, // slower, more menacing entrance (was 1100 — too fast on the phone)
+  /** The crosshair marking the fleet ship the beam will hit (#27), while the
+   *  charge fills: a ring with four ticks, pulsing. */
+  targetMark: { r: 26, tick: 8, width: 2.5, pulseMs: 600, minAlpha: 0.35 },
   escort: {
     radius: 17, // collision + orbit size
     formationRadius: 92, // fixed clearance: the rotating shield web never clips the boss
@@ -593,7 +643,7 @@ export const HUD_ROWS = {
 
 /**
  * Scoring presentation — standards score 10, two-hit rocks 20, and splitters
- * 20 immediately; a splitter's two children (and the giant asteroid's burst
+ * 20 immediately; an enemy ship 10, a shielded one 20 (#27); a splitter's two children (and the giant asteroid's burst
  * rocks) score 10 each. The giant itself is unscored, like the command ship. The popup grows-and-fades in place (orientation-neutral so it
  * reads the same from both seats); the HUD number is the canonical read.
  */
@@ -601,6 +651,8 @@ export const SCORE = {
   standard: 10,
   tough: 20,
   splitter: 20,
+  ship: 10, // an enemy ship (#27)
+  shieldedShip: 20, // a wave-5 ship that wore a bubble
   popup: { riseScale: 1.4, durationMs: 650, fontPx: 18 }, // floating "+N"
 } as const;
 

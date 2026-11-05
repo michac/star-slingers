@@ -150,8 +150,8 @@ export class Fleet {
     return this.ships[i]?.state !== 'lost';
   }
 
-  /** The top-most live ship's index (the boss beam's placeholder target until
-   *  #27 decides the rule), or -1 if the whole fleet is lost. */
+  /** The top-most live ship's index (the boss beam's target, #27), or -1 if
+   *  the whole fleet is lost. */
   topMostLive(): number {
     return this.ships.findIndex((ship) => ship.state !== 'lost');
   }
