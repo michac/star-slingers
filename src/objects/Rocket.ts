@@ -113,13 +113,18 @@ export class RocketPool {
   }
 
   /** End (end()) every live rocket the predicate selects (e.g. ones the
-   *  boss's shield web blocks this frame). */
-  endWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): void {
+   *  boss's shield web blocks this frame). Returns how many it ended. */
+  endWhere(pred: (rocket: Phaser.Physics.Arcade.Sprite) => boolean): number {
+    let ended = 0;
     this.group.children.iterate((child) => {
       const rocket = child as Phaser.Physics.Arcade.Sprite;
-      if (rocket.active && pred(rocket)) this.end(rocket);
+      if (rocket.active && pred(rocket)) {
+        this.end(rocket);
+        ended += 1;
+      }
       return true;
     });
+    return ended;
   }
 
   /** Arm a missile: steer() reads these keys. The straight arming run is

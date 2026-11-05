@@ -14,21 +14,26 @@ import { COLORS, CSS, FONTS, STROKES } from '../tokens';
 import { DEPTHS, GAME_HEIGHT, GAME_WIDTH, OVERLAY, VICTORY_ICON } from '../layout';
 import type { PlayerId } from './Rocket';
 import { starPoints } from './draw';
+import { sfx, type SoundName } from '../sfx';
 
 export interface OverlayConfig {
   /** Decorative text, shown once per live seat (P1's copy rotated 180°). */
   text: string;
   /** Draws the central icon at (cx, cy); must read either way up. */
   drawIcon: (scene: Phaser.Scene, cx: number, cy: number) => Phaser.GameObjects.GameObject;
+  /** Played when the card shows (#3). */
+  sound: SoundName;
 }
 
 export class Overlay {
   private readonly container: Phaser.GameObjects.Container;
   private readonly tapZone: Phaser.GameObjects.Zone;
+  private readonly sound: SoundName;
 
   /** `seats`: the live seats (the lineup); each gets a text copy facing it.
    *  `onTap`: what a tap on the shown card does. */
   constructor(scene: Phaser.Scene, cfg: OverlayConfig, seats: readonly PlayerId[], onTap: () => void) {
+    this.sound = cfg.sound;
     const { x: cx, y: cy } = OVERLAY.center;
     const textGap = OVERLAY.iconR + 34;
 
@@ -74,6 +79,7 @@ export class Overlay {
   }
 
   show(): void {
+    sfx.play(this.sound);
     this.container.setVisible(true);
     this.tapZone.setInteractive();
   }
@@ -84,11 +90,13 @@ export class Overlay {
 export const FAIL_CONFIG: OverlayConfig = {
   text: 'Try again?',
   drawIcon: drawReplayIcon,
+  sound: 'tryAgain', // soft and cute, never scary
 };
 
 export const VICTORY_CONFIG: OverlayConfig = {
   text: 'You did it!',
   drawIcon: drawVictoryIcon,
+  sound: 'runWon',
 };
 
 /** Circular arrow: a ~270° arc with a tangential arrowhead at its end. */

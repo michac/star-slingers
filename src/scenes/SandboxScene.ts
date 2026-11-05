@@ -43,6 +43,7 @@ import type { SpecialKind } from '../objects/specials';
 import { UpgradeDrop } from '../objects/UpgradeDrop';
 import { actStartWave, BOSS_DROPS, COMMAND_SHIP_WAVE, DAMAGE, startWaveFromQuery } from '../waves';
 import { buzz, shotBuzz } from '../haptics';
+import { sfx, type SoundName } from '../sfx';
 
 /** Sort an overlap pair into rocket + other: Phaser does NOT guarantee arg
  *  order for group-vs-array overlaps, so go by the rocket flag. */
@@ -187,6 +188,7 @@ export class SandboxScene extends Phaser.Scene {
       () => this.showFail(),
       (x, y) => {
         this.explosions.boom(x, y, this.giant.radius);
+        sfx.play('giantBurst');
         this.waveDirector.burstBoss(x, y);
       }
     );
@@ -425,7 +427,7 @@ export class SandboxScene extends Phaser.Scene {
     this.bossEncounter.update(delta); // boss fight (no-op outside wave 6)
     // Global web line collision (B34): a shot crossing a live link is spent
     // (a bomb blows up there, #26: RocketPool.end).
-    this.rockets.endWhere((rocket) => this.bossEncounter.blocksRocket(rocket));
+    if (this.rockets.endWhere((rocket) => this.bossEncounter.blocksRocket(rocket)) > 0) sfx.play('refused');
     this.checkFleetContacts();
   }
 
@@ -469,12 +471,14 @@ export class SandboxScene extends Phaser.Scene {
   private fireShot(tex: string, player: PlayerId, x: number, y: number, dirx: number, diry: number, kind: ShotKind): void {
     const charged = kind.charged;
     let sent = false;
+    let sound: SoundName = charged ? 'charged' : 'thwip'; // the shot's sound (#3), by kind
     if (kind.button === 'fire') {
       sent = !!this.rockets.fire(tex, x, y, dirx * SLING.maxSpeed, diry * SLING.maxSpeed, player, { charged });
     } else {
       const special = this.seatControls[player]?.special ?? 'missile';
       if (special === 'detonator') {
         const bomb = this.rockets.fire(tex, x, y, dirx * BOMB.speed, diry * BOMB.speed, player, { bomb: true });
+        sound = 'bombLaunch';
         if (bomb) {
           this.bombs[player] = bomb;
           this.seatControls[player]?.setBombInFlight(true);
@@ -482,6 +486,7 @@ export class SandboxScene extends Phaser.Scene {
         sent = !!bomb;
       } else {
         const fan = special === 'triple' ? [0, -TRIPLE.fanDeg, TRIPLE.fanDeg] : [0];
+        sound = 'missile'; // one fwoosh for the triple's three
         const taken = new Set<HomingTarget>();
         for (const deg of fan) {
           const a = Phaser.Math.DegToRad(deg);
@@ -493,8 +498,10 @@ export class SandboxScene extends Phaser.Scene {
         }
       }
     }
-    // Every seat's shot lands here, so this one buzz (#3) covers them all.
-    if (sent) shotBuzz({ charged, special: kind.button === 'special' });
+    // Every seat's shot lands here, so this one buzz and sound (#3) cover them all.
+    if (!sent) return;
+    shotBuzz({ charged, special: kind.button === 'special' });
+    sfx.play(sound);
   }
 
   /** Blow up a seat's detonator bomb where it is (#26): its next SPECIAL
@@ -514,6 +521,7 @@ export class SandboxScene extends Phaser.Scene {
     const r = BOMB.blastRadius;
     this.explosions.boom(x, y, r);
     buzz(HAPTICS.blastMs);
+    sfx.play('detonate');
     for (const asteroid of this.asteroids) {
       const s = asteroid.sprite;
       // A rock still waiting off the right edge isn't in play yet (the
@@ -650,7 +658,11 @@ export class SandboxScene extends Phaser.Scene {
     const player = rocket.getData('player') as PlayerId;
     if (ref instanceof Boss) {
       this.rockets.recycle(rocket);
-      ref.takeHit(charged);
+      // A hit that counts clangs and buzzes (#3 D6); a plain round, or one during the slide-in, only tinks.
+      if (ref.takeHit(charged)) {
+        sfx.play('bossHit');
+        buzz(HAPTICS.bossHitMs);
+      } else sfx.play('refused');
       return;
     }
     this.spendShot(rocket, charged, ref.takeHit(player));
@@ -668,7 +680,14 @@ export class SandboxScene extends Phaser.Scene {
     if (rocket.getData('bomb')) return this.detonate(rocket);
     const charged = rocket.getData('charged') === true;
     const result = this.giant.takeHit(rocket.getData('player') as PlayerId, charged);
-    if (result === 'refused') rejectSpark(this, rocket.x, rocket.y);
+    if (result === 'refused') {
+      rejectSpark(this, rocket.x, rocket.y);
+      sfx.play('refused');
+    } else {
+      // A hit that counts (#3 D6): a thump while it holds, the burst's boom when it pops (onPopped).
+      if (result !== 'popped') sfx.play('giantThump');
+      buzz(HAPTICS.bossHitMs);
+    }
     this.spendShot(rocket, charged, result === 'popped');
   };
 
@@ -688,6 +707,7 @@ export class SandboxScene extends Phaser.Scene {
     if (!pair) return false;
     if (!this.bossEncounter.blocksRocket(pair.rocket)) return true;
     this.rockets.end(pair.rocket);
+    sfx.play('refused');
     return false;
   };
 

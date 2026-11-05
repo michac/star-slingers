@@ -7,6 +7,8 @@
  * Once every joined seat is ready, a numeral countdown starts the run with
  * just those seats (lineup.ts). A seat that joins mid-countdown cancels it
  * until that seat picks too; a seat that leaves restarts it from the top. No reading anywhere: icons and numerals only.
+ * On the centre line, in neither seat's half, a speaker button turns the
+ * game's sound on and off (#3; sfx.ts remembers it). It mutes sound only.
  *
  * All timing runs off update(delta), not tweens, so the e2e suite's fixed
  * timestep drives it (TweenManager is wall-clock driven).
@@ -18,6 +20,7 @@ import { generateTextures } from '../objects/textures';
 import { Starfield } from '../objects/Starfield';
 import type { PlayerId } from '../objects/Rocket';
 import { SEAT_DEFS, toLineup, type Lineup, type SeatDef } from '../lineup';
+import { sfx } from '../sfx';
 
 type Pt = { x: number; y: number };
 
@@ -45,6 +48,7 @@ export class JoinScene extends Phaser.Scene {
    *  JOIN.leaveGraceMs, so a double-tap or a two-finger slap stays joined. */
   private joinedAt: Partial<Record<PlayerId, number>> = {};
   private starfield!: Starfield;
+  private speaker!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super('Join');
@@ -58,6 +62,8 @@ export class JoinScene extends Phaser.Scene {
     generateTextures(this); // the ring's rocket glyph + the star tiles (idempotent across scenes)
     this.starfield = new Starfield(this); // first, so it sits under the panels
     this.panels = SEAT_DEFS.map((def) => this.buildPanel(def));
+    this.speaker = this.add.graphics({ x: JOIN.speaker.x, y: JOIN.speaker.y });
+    this.drawSpeaker();
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.onDown(p));
     this.refresh();
 
@@ -78,6 +84,8 @@ export class JoinScene extends Phaser.Scene {
             countdown: panel.countdown.visible ? panel.countdown.text : null,
           };
         },
+        // The sound button (#3): where it is, and whether sound is muted.
+        speaker: () => ({ ...JOIN.speaker, muted: sfx.muted }),
         // Skip the screen: start the run with this lineup straight away.
         startRun: (l: Partial<Lineup>) => this.startRun(l),
       };
@@ -104,11 +112,15 @@ export class JoinScene extends Phaser.Scene {
     const shown = this.countdownSeconds();
     this.countdownLeft = this.countdownLeft === null ? JOIN.countdownMs : this.countdownLeft - delta;
     if (this.countdownLeft <= 0) {
+      sfx.play('countGo');
       this.startRun(this.picks);
       return;
     }
-    // Redraw only when the numeral changes (once a second), not every frame.
-    if (this.countdownSeconds() !== shown) this.refresh();
+    // Redraw (and beep, #3) only when the numeral changes (once a second), not every frame.
+    if (this.countdownSeconds() !== shown) {
+      sfx.play('countBeep');
+      this.refresh();
+    }
   }
 
   private countdownSeconds(): number | null {
@@ -127,6 +139,13 @@ export class JoinScene extends Phaser.Scene {
    *  anything else does nothing. A join or a leave changes who plays, so it
    *  restarts the countdown; a changed pick doesn't. */
   private onDown(pointer: Phaser.Input.Pointer): void {
+    // The speaker sits on the centre line, so it's tested before the halves.
+    if (within(pointer, JOIN.speaker)) {
+      sfx.muted = !sfx.muted;
+      this.drawSpeaker();
+      sfx.play('joinBlip'); // heard only when it just turned sound on
+      return;
+    }
     const edge: SeatEdge = pointer.y >= JOIN.halfY ? 'bottom' : 'top';
     const { player } = this.panels.find((p) => p.edge === edge)!;
     const at = seatPoint(edge, pointer);
@@ -135,6 +154,7 @@ export class JoinScene extends Phaser.Scene {
       this.picks[player] = null;
       this.joinedAt[player] = this.clockMs;
       this.countdownLeft = null;
+      sfx.play('joinBlip');
     } else if (within(at, JOIN.ring)) {
       if (this.clockMs - (this.joinedAt[player] ?? 0) < JOIN.leaveGraceMs) return;
       delete this.picks[player];
@@ -147,6 +167,27 @@ export class JoinScene extends Phaser.Scene {
       return;
     }
     this.refresh();
+  }
+
+  /** The sound button: a speaker in a ring, with sound waves when on and a
+   *  cross when muted. Symmetric enough to read from either seat. */
+  private drawSpeaker(): void {
+    const { r } = JOIN.speaker;
+    const g = this.speaker.clear();
+    g.lineStyle(STROKES.replay.width - 1, COLORS.chromeMuted, 1);
+    g.strokeCircle(0, 0, r);
+    g.fillStyle(COLORS.chromeMuted, 1);
+    const u = r / 22; // glyph unit: drawn for r = 22
+    g.fillRect(-11 * u, -4 * u, 6 * u, 8 * u); // the magnet
+    g.fillTriangle(-5 * u, -4 * u, 2 * u, -10 * u, 2 * u, 10 * u); // the cone
+    g.fillRect(-5 * u, -4 * u, 7 * u, 8 * u);
+    if (sfx.muted) {
+      g.lineBetween(6 * u, -5 * u, 14 * u, 5 * u);
+      g.lineBetween(6 * u, 5 * u, 14 * u, -5 * u);
+    } else {
+      g.beginPath().arc(2 * u, 0, 6 * u, -0.9, 0.9).strokePath();
+      g.beginPath().arc(2 * u, 0, 11 * u, -0.9, 0.9).strokePath();
+    }
   }
 
   /** Redraw every panel's state: buttons shown once joined, the pick lit, the

@@ -6,6 +6,7 @@
  * the mix dials (volume, limiter, caps) are SFX in layout.ts. Audition them
  * all in the Sound Lab (prototype/sound-lab.html).
  */
+import { ACT_TRANSITION } from './layout';
 
 export type SoundName =
   | 'thwip' | 'charged' | 'missile' | 'bombLaunch' | 'detonate'
@@ -235,12 +236,20 @@ export const RECIPES: Record<SoundName, (v: V) => number> = {
     return 0.05;
   },
   flyby: (v) => {
-    // The colony ship crossing left → right: an engine swell that pans with it.
-    const pan: Pan = [-0.9, 0.9];
-    noise(v, { dur: 2.6, gain: 0.25, attack: 1.3 }, { type: 'bandpass', f0: 300, f1: 180, q: 1.5 }, pan);
-    tone(v, 'sawtooth', 110, 85, { dur: 2.6, gain: 0.1, attack: 1.3 }, { type: 'lowpass', f0: 600 }, { pan });
-    tone(v, 'sine', 55, 45, { dur: 2.6, gain: 0.3, attack: 1.3 }, undefined, { pan });
-    return 2.65;
+    // The colony ship's act flyby (ActTransition): an engine swell that
+    // pans with it, rising as it speeds off the right edge and falling as it
+    // comes back in from the left, loudest at the wrap.
+    const out = ACT_TRANSITION.outMs / 1000;
+    const back = ACT_TRANSITION.inMs / 1000;
+    const leg = (w: V, dur: number, pan: Pan, rising: boolean) => {
+      const env = (gain: number): Env => ({ dur, gain, attack: rising ? dur * 0.95 : 0.01 });
+      noise(w, env(0.25), { type: 'bandpass', f0: rising ? 300 : 240, f1: rising ? 240 : 180, q: 1.5 }, pan);
+      tone(w, 'sawtooth', rising ? 110 : 97, rising ? 97 : 85, env(0.1), { type: 'lowpass', f0: 600 }, { pan });
+      tone(w, 'sine', rising ? 55 : 50, rising ? 50 : 45, env(0.3), undefined, { pan });
+    };
+    leg(v, out, [0, 0.9], true);
+    leg(later(v, out), back, [-0.9, 0], false);
+    return out + back + 0.05;
   },
   bossEnter: (v) => {
     noise(v, { dur: 2.2, gain: 0.4, attack: 0.8 }, { type: 'lowpass', f0: 200 });

@@ -14,6 +14,7 @@ import { COLORS } from '../tokens';
 import { BOSS_LAYOUT, FLEET } from '../layout';
 import { BOSS } from '../waves';
 import { TEX } from './textures';
+import { sfx } from '../sfx';
 
 export class Boss {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -47,6 +48,7 @@ export class Boss {
 
   /** Slide in from the right; the encounter starts charging once entered. */
   activate(): void {
+    sfx.play('bossEnter');
     this.active = true;
     this.entering = true;
     this.hp = BOSS.hp;
@@ -81,12 +83,13 @@ export class Boss {
     this.entering = false;
   }
 
-  takeHit(charged: boolean): void {
+  /** Returns whether the hit counted (took a point). */
+  takeHit(charged: boolean): boolean {
     // B34: the web, not a boss ring/state gate, protects the command ship.
     // A charged round that reaches it through a missing link always chips 1 HP.
-    if (!charged || !this.isEntered) return;
+    if (!charged || !this.isEntered) return false;
     this.hp -= 1;
-    if (this.hp > 0) return;
+    if (this.hp > 0) return true;
     this.active = false;
     (this.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
     this.scene.tweens.add({
@@ -96,6 +99,7 @@ export class Boss {
       duration: 280,
       onComplete: () => this.defeated(),
     });
+    return true;
   }
 
   /** A bright beam flashes from the boss to the ship it hits when a charge fires. */

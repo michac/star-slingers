@@ -23,6 +23,7 @@ import { COLORS, STROKES } from '../tokens';
 import { DEPTHS, FLEET, LANE, REGROW, SHAKE, SHIELD_FX, sublaneCenterY } from '../layout';
 import { BREATHER } from '../waves';
 import { FLEET_TEX, TEX } from './textures';
+import { sfx } from '../sfx';
 
 export type ShipState = 'shielded' | 'exposed' | 'lost';
 /** What an enemy reaching a ship did: popped its shield, lost the ship, or
@@ -178,6 +179,7 @@ export class Fleet {
       ship.msSinceHit = 0; // a hit restarts this ship's regen clock
       this.popBubble(ship);
       this.worriedShake(ship);
+      sfx.play('shieldPop');
       return 'shieldPopped';
     }
     if (ship.state === 'exposed') {
@@ -187,6 +189,7 @@ export class Fleet {
       ship.image.setY(ship.cy).setVisible(false); // put the hull back for its rebuild
       ship.lostImage.setVisible(true);
       this.boom(FLEET.shield.cx, ship.cy, FLEET.lostBoomR);
+      sfx.play('shipLost');
     }
     return this.ships.every((s) => s.state === 'lost') ? 'fleetLost' : 'shipLost';
   }
@@ -210,7 +213,10 @@ export class Fleet {
   update(deltaMs: number): void {
     this.elapsed += deltaMs;
     for (const ship of this.ships) {
-      if (ship.revealAtMs !== null && this.elapsed >= ship.revealAtMs) this.reveal(ship);
+      if (ship.revealAtMs !== null && this.elapsed >= ship.revealAtMs) {
+        this.reveal(ship);
+        sfx.play('shieldRebuild'); // here, not in reveal(): a hit's early reveal is the pop's sound
+      }
     }
     this.drawBubbles();
     this.drawAmbientGlow();
@@ -223,6 +229,7 @@ export class Fleet {
       ship.state = 'shielded';
       ship.msSinceHit = 0;
       this.regrowBubble(ship);
+      sfx.play('shieldRebuild');
     }
   }
 

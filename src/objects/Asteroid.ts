@@ -20,6 +20,7 @@ import { GAME_WIDTH, LANE, SCORE, SPLITTER_CHILDREN, type ChildMotion } from '..
 import { COLORS } from '../tokens';
 import { ASTEROID_KIND, maxHpOf, type AsteroidSpec } from '../waves';
 import { ensureAsteroidTexture, TEX } from './textures';
+import { sfx } from '../sfx';
 
 /** A non-lethal hit flashes the rock white this long, so a shot that chips a
  *  tough rock never reads as "my shot didn't work". Counted on update()'s delta
@@ -223,9 +224,11 @@ export class Asteroid {
     this._hp -= damage;
     if (this._hp > 0) {
       this.showDamage();
+      sfx.play('toughDent');
       return 0;
     }
     this.pop();
+    sfx.play('rockBreak'); // here, not in pop(): a rock the fleet consumes is the shield pop's sound
     return SCORE[this._spec.kind];
   }
 
