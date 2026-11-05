@@ -5,7 +5,7 @@
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, gotoGame, stepGame, stepUntil, escortsAlive, hitEscort, escortLocks, enterBoss, shieldLinks, touchscreen, v2Layout, liveShots, mirrored, seats, clearField, fieldRock, fire, debug, DUO, SOLO_BOTTOM, type Page } from './helpers';
-import { SPLITTER_CHILDREN } from '../src/layout';
+import { FLEET, SPLITTER_CHILDREN } from '../src/layout';
 import { BOSS, SOLO } from '../src/waves';
 
 /** The stream rocks in play: kind, spec speed and the body's real drift. */
@@ -105,6 +105,25 @@ test("solo: a splitter's children cruise at SOLO.pace (#6)", async ({ page }) =>
   const vx = (await page.evaluate(`${SCENE}.asteroids.filter((a) => a.isChild && a.isActive).map((a) => a.sprite.body.velocity.x)`)) as number[];
   expect(vx).toHaveLength(2);
   for (const v of vx) expect(v).toBeCloseTo(-SPLITTER_CHILDREN.childSpeed * SOLO.pace, 6);
+});
+
+test("solo: a splitter's slower children outlast the two-player lifetime cap, so they still reach the fleet (#6)", async ({ page }) => {
+  // Popped near the right edge, a solo child needs longer than the two-player
+  // cap (SPLITTER_CHILDREN.lifetimeMs) to cross the lane at its slower cruise.
+  await gotoGame(page, '', SOLO_BOTTOM);
+  await clearField(page);
+  await fieldRock(page, { x: 320, y: 300, kind: 'splitter' });
+  await fire(page, 240, 300, 400, 0, '{}', 'p2');
+  expect((await stepUntil(page, 's.__debug.childrenAlive() === 2', 60)).done).toBe(true);
+  await stepGame(page, 16, Math.ceil((SPLITTER_CHILDREN.lifetimeMs + 300) / 16));
+  const kids = (await page.evaluate(
+    `${SCENE}.asteroids.filter((a) => a.isChild && a.isActive).map((a) => ({ x: a.sprite.x, vx: a.sprite.body.velocity.x }))`
+  )) as { x: number; vx: number }[];
+  expect(kids).toHaveLength(2); // still in play past the two-player cap…
+  for (const { x, vx } of kids) {
+    expect(vx).toBeCloseTo(-SPLITTER_CHILDREN.childSpeed * SOLO.pace, 6); // …still cruising at the solo pace…
+    expect(x).toBeGreaterThan(FLEET.bubbleFrontX); // …and still short of the fleet
+  }
 });
 
 test('the command ship charges and regrows escorts at SOLO.pace in solo, and on the BOSS timings with two players (#6)', async ({ page }) => {

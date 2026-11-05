@@ -357,9 +357,16 @@ export function asteroidsFor(wave: WaveConfig, players: 1 | 2): AsteroidSpec[] {
   return solveWave(wave.required, leakAllowancePerSec(wave), wave.topKind).map((spec) => ({ ...spec, speed: spec.speed * pace }));
 }
 
-/** A splitter's children's motion at this seat count: solo cruises them at SOLO.pace. */
+/** A splitter's children's motion at this seat count: solo cruises them at
+ *  SOLO.pace, and stretches their lifetime cap to match (pacedMs), so a slower
+ *  child still reaches the fleet before it's retired. The scatter burst is the
+ *  pop's flourish and stays as it is. */
 export function splitterMotionFor(players: 1 | 2): ChildMotion {
-  return { ...SPLITTER_CHILDREN, childSpeed: SPLITTER_CHILDREN.childSpeed * paceFor(players) };
+  return {
+    ...SPLITTER_CHILDREN,
+    childSpeed: SPLITTER_CHILDREN.childSpeed * paceFor(players),
+    lifetimeMs: pacedMs(SPLITTER_CHILDREN.lifetimeMs, players),
+  };
 }
 
 /** Accurate damage/s a wave actually demands (post-solve). */
