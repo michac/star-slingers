@@ -48,8 +48,8 @@ export class MotherJelly implements HomingTarget {
   constructor(
     scene: Phaser.Scene,
     private readonly fleet: Fleet,
-    /** Release n babies from (x, y): the JellySwarm's releaseBabies. */
-    private readonly release: (x: number, y: number, n: number) => void,
+    /** Release n babies from (x, y): the JellySwarm's releaseBabies. Returns how many it fielded. */
+    private readonly release: (x: number, y: number, n: number) => number,
     /** Her last hp went at (x, y). */
     private readonly onPopped: (x: number, y: number) => void
   ) {
@@ -138,8 +138,7 @@ export class MotherJelly implements HomingTarget {
       this.releaseInMs -= deltaMs;
       if (this.releaseInMs <= 0) {
         this.releaseInMs += MOTHER.releaseEveryMs;
-        this.released += MOTHER.babiesPerRelease;
-        this.release(this.sprite.x - this.radius - JELLY_LAYOUT.babyRadius, this.sprite.y, MOTHER.babiesPerRelease);
+        this.released += this.release(this.sprite.x - this.radius - JELLY_LAYOUT.babyRadius, this.sprite.y, MOTHER.babiesPerRelease);
       }
     }
     this.drawHalo();

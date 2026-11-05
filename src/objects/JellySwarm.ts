@@ -106,8 +106,9 @@ export class JellySwarm {
     this.drawHalos();
   }
 
-  /** The mother jelly releases n babies from (x, y), fanned up and down. */
-  releaseBabies(x: number, y: number, n: number): void {
+  /** The mother jelly releases n babies from (x, y), fanned up and down.
+   *  Returns how many it fielded (fewer if the pool is full). */
+  releaseBabies(x: number, y: number, n: number): number {
     const free = this.jellies.filter((j) => j.phase === 'parked');
     const count = Math.min(n, free.length); // a full pool skips the rest
     for (let i = 0; i < count; i++) {
@@ -115,6 +116,7 @@ export class JellySwarm {
       const by = Phaser.Math.Clamp(y + (2 * t - 1) * MOTHER_LAYOUT.releaseSpreadY, LANE.top + BABY_JELLY.radius, LANE.bottom - BABY_JELLY.radius);
       free[i].field(x, by, BABY_JELLY);
     }
+    return count;
   }
 
   /** Pop every jelly in play as a kill (the mother's pop): `onKill` gets each

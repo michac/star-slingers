@@ -11,8 +11,8 @@
  * Shared harness and the console gate: ./helpers.ts.
  */
 import { test, expect, SCENE, debug, gotoGame, stepGame, stepUntil, fire, fleetStates, loseShips, score, failVisible, emptyField, blastAt, healthBars, type Page } from './helpers';
-import { AMMO_REGEN_MS, BOMB, GAME_WIDTH, JELLY_LAYOUT, LANE, MOTHER_LAYOUT, SCORE, SLING, SUBLANE_H, sublaneCenterY } from '../src/layout';
-import { BOSS_DROPS, JELLY, MOTHER, RUN, babyWipeMs, motherFocusKillMs } from '../src/waves';
+import { AMMO_REGEN_MS, BOMB, FLEET, GAME_WIDTH, JELLY_LAYOUT, LANE, MOTHER_LAYOUT, SCORE, SLING, SUBLANE_H, sublaneCenterY, sublaneOf } from '../src/layout';
+import { BOSS_DROPS, JELLY, MOTHER, RUN, babyWipeMs, babyWipeSpanMs, motherFocusKillMs } from '../src/waves';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -114,6 +114,25 @@ test('a jelly steers at the nearest live ship, crosses sublanes when that ship i
   expect(Math.abs(r.last.y - sublaneCenterY(1))).toBeLessThan(SUBLANE_H / 2);
   expect(await fleetStates(page)).toEqual(['shielded', 'exposed', 'lost', 'lost']);
   expect(await score(page)).toBe(0); // reaching the fleet never scores
+});
+
+test('a jelly that turns for another ship right at the fleet hits it only from inside its sublane', async ({ page }) => {
+  await emptyField(page);
+  await loseShips(page, 3);
+  // In lost ship 3's sublane, its front already past ship 2's bubble front.
+  await placeJelly(page, 0, FLEET.noseX + JELLY_LAYOUT.radius + 3, sublaneCenterY(3), { held: false });
+  await stepGame(page, FRAME, 1);
+  expect((await jelly(page, 0)).target).toBe(2);
+  expect(await fleetStates(page)).toEqual(['shielded', 'shielded', 'shielded', 'lost']); // no hit across sublanes
+  // From here it either crosses into ship 2's sublane and hits it there, or leaves off the left edge.
+  const r = await page.evaluate(() => {
+    const w = window as any;
+    const d = w.__game.scene.keys['Sandbox'].__debug;
+    for (let n = 0; n < 300 && d.jellies()[0].phase === 'swimming'; n++) w.__step();
+    return { y: d.jellies()[0].y, fleet: d.fleet() }; // a popping jelly holds where it hit
+  });
+  if (r.fleet[2] !== 'shielded') expect(sublaneOf(r.y)).toBe(2);
+  expect(r.fleet.slice(0, 2)).toEqual(['shielded', 'shielded']);
 });
 
 test("a jelly reaching the fleet's last ship shows the fail card", async ({ page }) => {
@@ -287,6 +306,8 @@ test('the MOTHER dials outlast an ignored brood, and steady fire holds her heal'
   for (const players of [1, 2] as const) {
     expect(motherFocusKillMs(players), `${players}p`).toBeGreaterThan(babyWipeMs());
   }
+  // That wipe holds only if no shield regrows between the first baby's arrival and the last's.
+  expect(MOTHER.shieldRegenMs).toBeGreaterThan(babyWipeSpanMs());
   // One seat firing as fast as its rounds come back keeps her heal stopped.
   expect(MOTHER.healPauseMs).toBeGreaterThan(AMMO_REGEN_MS);
   // More than one baby every few seconds (D6).

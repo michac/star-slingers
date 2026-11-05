@@ -12,7 +12,7 @@
  * Geometry/paint live in layout.ts; this file only imports the few constants
  * the budget math needs.
  */
-import { AMMO, AMMO_REGEN_MS, FLEET, GAME_WIDTH, JELLY_LAYOUT, LANE, MOTHER_LAYOUT, SPECIAL, SPLITTER_CHILDREN } from './layout';
+import { AMMO, AMMO_REGEN_MS, FLEET, GAME_WIDTH, JELLY_LAYOUT, LANE, MOTHER_LAYOUT, SPECIAL, SPLITTER_CHILDREN, SUBLANE_H } from './layout';
 import type { SpecialKind } from './objects/specials';
 
 export interface AsteroidSpec {
@@ -431,24 +431,34 @@ export function fieldFleetHitsPerSec(wave: WaveConfig, players: 1 | 2): number {
 // ---- the mother jelly (#28): does it outlive an ignored brood? ----
 // The design (#28 D6): the fight is shooting the mother while still
 // intercepting her babies, so she must survive long enough that babies left
-// alone would wipe the fleet. Both sides here are deliberately generous to the
-// players: the fastest focus kill, and the slowest baby wipe.
+// alone would wipe the fleet. The kill side is the players' best case (the
+// fastest focus kill); the wipe side is the brood's straight-line worst case
+// (the longest an unhindered wipe takes), so kill > wipe holds with margin.
 
-/** Fleet hits that lose every ship (each ship: shield, then hull). */
+/** Fleet hits that lose every ship (each ship: shield, then hull). Every baby
+ *  that arrives is one: babies swim at a LIVE ship, re-picked every frame. */
 const FLEET_HITS_TO_WIPE = 2 * LANE.sublanes;
 
-/** A baby's trip from the mother's front to the fleet's bubble fronts, at its
- *  cruise speed (the straight-line part; it also climbs to its ship's row). */
+/** The longest a baby's trip can take: from where she releases it (her front)
+ *  until its leading edge reaches a bubble front, straight at its nearest
+ *  ship, which is at most half a sublane above or below it, at baby speed. */
 function babyTravelMs(): number {
-  return ((MOTHER_LAYOUT.x - MOTHER_LAYOUT.radius - FLEET.bubbleFrontX) / JELLY_LAYOUT.babySpeed) * 1000;
+  const dx = MOTHER_LAYOUT.x - MOTHER_LAYOUT.radius - 2 * JELLY_LAYOUT.babyRadius - FLEET.bubbleFrontX;
+  return (Math.hypot(dx, SUBLANE_H / 2) / JELLY_LAYOUT.babySpeed) * 1000;
+}
+
+/** The time from her first baby's arrival to the FLEET_HITS_TO_WIPE-th's:
+ *  the releases in between. No shield may regrow inside it (the e2e suite
+ *  checks MOTHER.shieldRegenMs is longer), or the wipe would need more. */
+export function babyWipeSpanMs(): number {
+  return (Math.ceil(FLEET_HITS_TO_WIPE / MOTHER.babiesPerRelease) - 1) * MOTHER.releaseEveryMs;
 }
 
 /** How long the mother's babies take to wipe the fleet if nobody shoots any:
- *  her entry, the releases until FLEET_HITS_TO_WIPE babies are out, and the
- *  last one's trip. */
+ *  her entry, her first release, the releases until FLEET_HITS_TO_WIPE babies
+ *  are out, and the last one's trip. */
 export function babyWipeMs(): number {
-  const releases = Math.ceil(FLEET_HITS_TO_WIPE / MOTHER.babiesPerRelease);
-  return MOTHER_LAYOUT.enterMs + MOTHER.firstReleaseMs + (releases - 1) * MOTHER.releaseEveryMs + babyTravelMs();
+  return MOTHER_LAYOUT.enterMs + MOTHER.firstReleaseMs + babyWipeSpanMs() + babyTravelMs();
 }
 
 /** The fastest the seats could kill her shooting nothing else: every round

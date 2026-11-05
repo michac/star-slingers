@@ -8,9 +8,11 @@
  * long glide; JELLY_LAYOUT) at the NEAREST live fleet ship, re-picked every
  * frame, so it turns for another ship the moment its own is lost. It crosses
  * sublanes to get there and stays inside the lane. Its leading edge reaching
- * that ship's contact line (the bubble's front, or the bare hull's nose) hits
- * it like a rock: the fleet pops the shield or loses the ship, and the jelly
- * pops without scoring.
+ * that ship's contact line (the bubble's front, or the bare hull's nose) while
+ * it's in that ship's sublane hits it like a rock: the fleet pops the shield
+ * or loses the ship, and the jelly pops without scoring. (One that turns for
+ * another ship when already that close only hits it after crossing into its
+ * sublane, or leaves off the left edge.)
  *
  * Health and healing (#28 D2): every hit counts as its damage (plain 1,
  * charged 2, missile 1, blast 2). After a hit it waits healPauseMs, then its
@@ -28,7 +30,7 @@
  * resizing the body.
  */
 import Phaser from 'phaser';
-import { GAME_WIDTH, JELLY_LAYOUT, LANE } from '../layout';
+import { GAME_WIDTH, JELLY_LAYOUT, LANE, sublaneOf } from '../layout';
 import { COLORS } from '../tokens';
 import type { FleetHit } from './Fleet';
 import { HealingHp } from './HealingHp';
@@ -197,7 +199,7 @@ export class Jelly implements HomingTarget {
     const stretch = squash * ((raw - glideMul) / (surgeMul - glideMul));
     this.image.setScale(1 - 0.7 * stretch, 1 + stretch);
     const i = this.targetIndex;
-    if (i >= 0 && x - r <= this.orders.contactX(i)) {
+    if (i >= 0 && sublaneOf(y) === i && x - r <= this.orders.contactX(i)) {
       const hit = this.orders.reached(i);
       this.pop();
       return hit;
