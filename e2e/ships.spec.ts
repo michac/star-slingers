@@ -385,22 +385,23 @@ test("a bolt that takes the fleet's last ship shows the fail card, and Try again
 });
 
 test('solo: each ship fires once per fireEveryMs ÷ SOLO.pace; two players keep fireEveryMs (#6)', async ({ page }) => {
-  /** Wave 4 unattended for `frames` steps: the ms of each ship's first two shots (both ships). */
+  /** Wave 4 unattended for `frames` steps: the ms of each ship's first two
+   *  shots (both ships). A ship's shot is its own warning ending in its hold,
+   *  so two ships side by side can't be mistaken for each other. */
   const shotTimes = (frames: number) =>
     page.evaluate((frames) => {
       const w = window as any;
       const sq = w.__game.scene.keys['Sandbox'].squadron;
       const byShip: number[][] = sq.ships.map(() => []);
-      const fire = sq.fire.bind(sq);
+      const warned: boolean[] = sq.ships.map(() => false);
       let ms = 0;
-      sq.fire = (x: number, y: number, i: number) => {
-        const k = sq.ships.findIndex((sh: any) => Math.hypot(sh.sprite.x - x, sh.sprite.y - y) <= sh.radius + 0.5);
-        byShip[k]?.push(ms);
-        fire(x, y, i);
-      };
       for (let n = 0; n < frames; n++) {
         w.__step();
         ms += 16;
+        sq.ships.forEach((sh: any, k: number) => {
+          if (warned[k] && !sh.warning && sh.phase === 'holding') byShip[k].push(ms);
+          warned[k] = sh.warning;
+        });
       }
       return byShip.filter((t) => t.length >= 2);
     }, frames);
